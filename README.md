@@ -168,3 +168,13 @@ To run the desktop application, simply run `npm run tauri dev -- --release` insi
 Currently, there are few unnecessary warning messages in the output when running or building the frontend with vite.
 These are because we include an offline version of the monaco editor for easily writing CEL scripts.
 Optionally, an online version of the editor can be used instead (by removing or updating `initEditorLoader` in `editor-loader.ts`), however then an internet connection is required for using the editor.
+
+
+### Backend Context
+
+As the tool supports multiple different backends (i.e., web server and tauri application), the exposed backend functionality is abstracted as a `BackendProvider`.
+The typescript type `BackendProvider` in `frontend/src/BackendProviderContext.ts` specifies which functionality is available, and which parameters and return types are expected.
+There are two implementations of that type: One for the web server backend (see `getAPIServerBackendProvider` in `frontend/src/BackendProviderContext.ts`), which makes fetch calls to the appropriate routes defined in `backend/web-server/src/main.rs` and another one for the tauri application backend (see `tauriBackend` in `tauri/src/main.tsx`), which calls the appropriate functions defined in `tauri/src-tauri/src/main.rs` via the invoke-method.
+Throughout the frontend, the backend can be used via an backend context instance (which can be acquired using `const backend = useContext(BackendProviderContext);`) and then be used for calling functionality (e.g., `backend['function_name'](parameters,...)`).
+
+To add new functionality, first define a new backend call fields in the `BackendProvider` type. Next, create the actual, shared implementation of the feature in the shared backend files (e.g., in `backend/shared/src/lib.rs`). Next, define the appropriate functions to call this shared functionality in the two backends (web server and tauri), and finally add the new backend call field to the two `BackendProvider` implementations (see above for where they are located.)
