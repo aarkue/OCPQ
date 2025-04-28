@@ -23,5 +23,5 @@ const router = createBrowserRouter([
 
 export const MainRouterProvider = () => <>
   <Toaster position="bottom-left" />
-  <RouterProvider router={router} />;
+  <RouterProvider router={router} />
 </>

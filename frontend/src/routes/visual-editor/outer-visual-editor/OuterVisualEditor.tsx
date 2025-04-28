@@ -354,7 +354,7 @@ export default function VisualEditorOuter() {
                         "grid w-full px-4 text-center",
                         activeIndex !== undefined &&
                           constraints[activeIndex] !== undefined &&
-                          "grid-cols-3",
+                          "grid-cols-[1fr,1fr,1fr]",
                         (activeIndex === undefined ||
                           constraints[activeIndex] === undefined) &&
                           "grid-cols-1 max-w-sm mx-auto h-full",
@@ -409,10 +409,6 @@ export default function VisualEditorOuter() {
                           </DialogContent>
                         </Dialog>
                         <div
-                          className={clsx(
-                            "mb-1",
-                            activeIndex !== undefined && "-mt-[1rem]",
-                          )}
                         >
                           <div className="flex justify-center gap-x-2 items-center w-full mb-2">
                             <AlertHelper
@@ -421,10 +417,12 @@ export default function VisualEditorOuter() {
                                   title={"Delete All"}
                                   variant="destructive"
                                   size="icon"
+
+                              className="min-w-7"
                                   // className="h-12 w-12"
                                   disabled={constraints.length === 0}
                                 >
-                                  <CgTrash size={"24"} />
+                                  <CgTrash size={"20"} />
                                 </Button>
                               }
                               title={"Delete All Constraints"}
@@ -446,7 +444,7 @@ export default function VisualEditorOuter() {
                             {activeIndex !== undefined && (
                               <Button
                                 disabled={constraints.length === 0}
-                                onClick={() => setShowConstraintSelection(true)}
+                                onClick={() => setShowConstraintSelection(true)} 
                               >
                                 {constraints.length} Queries...
                               </Button>
@@ -484,7 +482,7 @@ export default function VisualEditorOuter() {
                               title="Save"
                               variant="outline"
                               size="icon"
-                              // className="h-12 w-12"
+                              className="min-w-7"
                               onClick={() => {
                                 saveData();
                                 toast.success("Saved Data");

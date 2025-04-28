@@ -54,7 +54,7 @@ export default function AutoDiscoveryButton({
       trigger={
         <Button
           size="icon"
-          // className="text-xl py-6 px-4"
+          className="min-w-7"
           title="Automatically Discover Constraints"
           variant="outline"
         >

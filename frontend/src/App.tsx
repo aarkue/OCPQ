@@ -408,7 +408,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
             {children}
           </div>
         </div>
-        <div className="px-4 overflow-y-auto overflow-x-hidden py-4">
+        <div className="px-4 overflow-auto">
           {isAtRoot && (
             <h2 className="text-3xl font-semibold mb-4">Load OCEL</h2>
           )}
@@ -548,13 +548,11 @@ function InnerApp({ children }: { children?: ReactNode }) {
               </div>
             </div>
           )}
-          <div className="w-full h-full">
             <Outlet />
-          </div>
         </div>
       </div>
     </OcelInfoContext.Provider>
-  );
+  )
 }
 
 export default App;

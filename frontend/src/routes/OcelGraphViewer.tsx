@@ -122,8 +122,8 @@ export default function OcelGraphViewer({
     return <div>No Info!</div>;
   }
   return (
-    <div className="my-4 text-lg text-left w-full h-full flex flex-col">
-      <h2 className="text-4xl font-semibold mb-4">OCEL Graph</h2>
+    <div className="text-lg text-left w-full h-full flex flex-col">
+      <h2 className="text-4xl font-semibold my-4">OCEL Graph</h2>
       <GraphOptions
         initialGrapOptions={initialGrapOptions}
         setGraphData={(gd) => {

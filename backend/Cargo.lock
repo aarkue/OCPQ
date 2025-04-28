@@ -2539,8 +2539,8 @@ dependencies = [
 
 [[package]]
 name = "rust_slurm"
-version = "0.1.0"
-source = "git+https://github.com/aarkue/rust-slurm#3e69ef9b47cae461d488167edb7087f3c1b02087"
+version = "0.1.1"
+source = "git+https://github.com/aarkue/rust-slurm#aabb27b288b4cb4f3dd6687ef72d82a9b511fe28"
 dependencies = [
  "anyhow",
  "async-ssh2-tokio",
@@ -3384,7 +3384,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
