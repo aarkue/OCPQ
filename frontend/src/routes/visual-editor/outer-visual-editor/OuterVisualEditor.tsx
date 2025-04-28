@@ -236,7 +236,7 @@ export default function VisualEditorOuter() {
       </div>
     );
   }
-  if(!ocelInfo){
+  if (!ocelInfo) {
     return null;
   }
 
@@ -408,8 +408,7 @@ export default function VisualEditorOuter() {
                             </div>
                           </DialogContent>
                         </Dialog>
-                        <div
-                        >
+                        <div>
                           <div className="flex justify-center gap-x-2 items-center w-full mb-2">
                             <AlertHelper
                               trigger={
@@ -417,8 +416,7 @@ export default function VisualEditorOuter() {
                                   title={"Delete All"}
                                   variant="destructive"
                                   size="icon"
-
-                              className="min-w-7"
+                                  className="min-w-7"
                                   // className="h-12 w-12"
                                   disabled={constraints.length === 0}
                                 >
@@ -444,7 +442,7 @@ export default function VisualEditorOuter() {
                             {activeIndex !== undefined && (
                               <Button
                                 disabled={constraints.length === 0}
-                                onClick={() => setShowConstraintSelection(true)} 
+                                onClick={() => setShowConstraintSelection(true)}
                               >
                                 {constraints.length} Queries...
                               </Button>

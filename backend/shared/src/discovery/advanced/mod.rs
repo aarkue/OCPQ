@@ -111,7 +111,7 @@ pub fn get_labeled_instances(
     let violated_instances = bindings
         .iter()
         .flat_map(|b| {
-            let ((_x, y),_skipped) = subtree.nodes[0].evaluate(0, (*b).clone(), &subtree, ocel);
+            let ((_x, y), _skipped) = subtree.nodes[0].evaluate(0, (*b).clone(), &subtree, ocel);
             let is_violated = y.iter().any(|(_, v)| v.is_some());
             b.get_any_index(&variable)
                 .map(|instance| (instance, !is_violated))
@@ -138,7 +138,8 @@ pub fn test_tree_combinations(
             subtrees
                 .iter()
                 .map(|t| {
-                    let ((_overall_res, root_res),_skipped) = t.nodes[0].evaluate(0, b.clone(), t, ocel);
+                    let ((_overall_res, root_res), _skipped) =
+                        t.nodes[0].evaluate(0, b.clone(), t, ocel);
                     root_res.iter().any(|(_, v)| v.is_some())
                 })
                 .collect_vec()
@@ -254,7 +255,7 @@ pub fn discover_or_constraints_old(
         let violated_instances = bindings
             .iter()
             .filter(|b| {
-                let ((_x, y),_skipped) = st.nodes[0].evaluate(0, (*b).clone(), st, ocel);
+                let ((_x, y), _skipped) = st.nodes[0].evaluate(0, (*b).clone(), st, ocel);
                 y.iter().any(|(_, v)| v.is_some())
             })
             .filter_map(|b| b.get_any_index(&input_variable))

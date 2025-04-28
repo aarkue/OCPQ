@@ -139,7 +139,10 @@ pub fn evaluate_cel<'a>(
                             (ob_var_to_name(ob_v).into(), ob_index_to_name(ob_i).into())
                         }));
                         b_map.extend(b.label_map.iter().map(|(label, value)| {
-                            (label.clone().into(), Into::<cel_interpreter::Value>::into(value.clone()))
+                            (
+                                label.clone().into(),
+                                Into::<cel_interpreter::Value>::into(value.clone()),
+                            )
                         }));
                         b_map.insert("satisfied".into(), violated.is_none().into());
                         Value::Map(Map {

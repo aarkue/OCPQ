@@ -28,7 +28,7 @@ fn check_next_filters(
 }
 
 impl BindingBox {
-    pub fn expand_empty(&self, ocel: &IndexLinkedOCEL) -> (Vec<Binding>,bool) {
+    pub fn expand_empty(&self, ocel: &IndexLinkedOCEL) -> (Vec<Binding>, bool) {
         self.expand(Binding::default(), ocel)
     }
 

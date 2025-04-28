@@ -5,20 +5,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import toast from "react-hot-toast";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
-import { BackendProvider, BackendProviderContext, ErrorBackendContext, getAPIServerBackendProvider } from "./BackendProviderContext";
+import {
+  BackendProvider,
+  BackendProviderContext,
+  ErrorBackendContext,
+  getAPIServerBackendProvider,
+} from "./BackendProviderContext";
 import MenuLink from "./components/MenuLink";
 import Spinner from "./components/Spinner";
 import { Button } from "./components/ui/button";
 import { type OCELInfo } from "./types/ocel";
 import AlertHelper from "./components/AlertHelper";
 import ConnectionConfigForm from "./components/hpc/HPCConnectionConfigForm";
-import { ConnectionConfig, connectionFormSchema, JobStatus } from "./types/hpc-backend";
+import {
+  ConnectionConfig,
+  connectionFormSchema,
+  JobStatus,
+} from "./types/hpc-backend";
 import { z } from "zod";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./components/ui/alert-dialog";
 import { CheckCircledIcon, CheckIcon } from "@radix-ui/react-icons";
 import { BsCheckCircleFill } from "react-icons/bs";
 import { Label } from "./components/ui/label";
@@ -26,7 +52,12 @@ import { Input } from "./components/ui/input";
 import { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 import clsx from "clsx";
 import { Combobox } from "./components/ui/combobox";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./components/ui/accordion";
 const VALID_OCEL_MIME_TYPES = [
   "application/json",
   "text/json",
@@ -39,7 +70,10 @@ export const OcelInfoContext = createContext<OCELInfo | undefined>(undefined);
 
 function App() {
   const [backendMode, setBackendMode] = useState<"local" | "hpc">("local");
-  const [jobStatus, setJobStatus] = useState<{ id: string, status?: JobStatus }>();
+  const [jobStatus, setJobStatus] = useState<{
+    id: string;
+    status?: JobStatus;
+  }>();
   const numberOfSteps = 3;
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<number>();
@@ -49,21 +83,24 @@ function App() {
     cpus: 4,
     hours: 0.5,
     port: "3300",
-    binaryPath: "/home/aarkue/doc/projects/OCPQ/backend/target/x86_64-unknown-linux-gnu/release/ocpq-web-server",
-    relayAddr: "login23-1.hpc.itc.rwth-aachen.de"
-  })
+    binaryPath:
+      "/home/aarkue/doc/projects/OCPQ/backend/target/x86_64-unknown-linux-gnu/release/ocpq-web-server",
+    relayAddr: "login23-1.hpc.itc.rwth-aachen.de",
+  });
   useEffect(() => {
     setStep(undefined);
-  }, [])
+  }, []);
 
   useEffect(() => {
-    if (jobStatus?.id && (jobStatus.status?.status !== "ENDED")) {
+    if (jobStatus?.id && jobStatus.status?.status !== "ENDED") {
       const t = setInterval(() => {
-        ownBackend["hpc/job-status"](jobStatus.id).then((status) => setJobStatus(j => ({ id: jobStatus.id, status: status })))
+        ownBackend["hpc/job-status"](jobStatus.id).then((status) =>
+          setJobStatus((j) => ({ id: jobStatus.id, status: status })),
+        );
       }, 3000);
       return () => {
         clearInterval(t);
-      }
+      };
     }
   }, [jobStatus?.id, jobStatus?.status]);
   const innerBackend = useMemo<BackendProvider>(() => {
@@ -76,165 +113,314 @@ function App() {
         ["hpc/start"]: ownBackend["hpc/start"],
         ["hpc/job-status"]: ownBackend["hpc/job-status"],
         ["download-blob"]: ownBackend["download-blob"],
-
-      } satisfies BackendProvider
+      } satisfies BackendProvider;
     }
-  }, [backendMode])
-  return <BackendProviderContext.Provider value={innerBackend}>
-    <InnerApp>
-      <AlertDialog
-        open={step !== undefined}
-        onOpenChange={(o) => {
-          if (!o) {
-            setStep(undefined);
-          } else {
-            setStep(0);
-          }
-        }}
-      >
-        <AlertDialogTrigger asChild><Button className="mt-8">Backend Mode: <span className="font-bold ml-1">{backendMode === "local" ? "local" : "HPC"}</span></Button></AlertDialogTrigger>
-        {step !== undefined &&
-          <AlertDialogContent className="flex flex-col max-h-full justify-between">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Backend Mode</AlertDialogTitle>
-            </AlertDialogHeader>
-            <div className="text-sm text-gray-700 max-h-full overflow-auto px-2">
-              <div>
-                {backendMode === "local" &&
-                  <>
-                    {step === 0 &&
-                      <p>Currently, all queries and constraints are executed on a locally provided backend (most likely the device you are reading this on).
-                        <br />
-                        <br />
-                        You can also run the backend on an HPC (High-performance computing) cluster, if you have the appropriate access credentials for such a cluster (i.e., student or employee at a larger university).</p>
-                        }
+  }, [backendMode]);
+  return (
+    <BackendProviderContext.Provider value={innerBackend}>
+      <InnerApp>
+        <AlertDialog
+          open={step !== undefined}
+          onOpenChange={(o) => {
+            if (!o) {
+              setStep(undefined);
+            } else {
+              setStep(0);
+            }
+          }}
+        >
+          <AlertDialogTrigger asChild>
+            <Button className="mt-8">
+              Backend Mode:{" "}
+              <span className="font-bold ml-1">
+                {backendMode === "local" ? "local" : "HPC"}
+              </span>
+            </Button>
+          </AlertDialogTrigger>
+          {step !== undefined && (
+            <AlertDialogContent className="flex flex-col max-h-full justify-between">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Backend Mode</AlertDialogTitle>
+              </AlertDialogHeader>
+              <div className="text-sm text-gray-700 max-h-full overflow-auto px-2">
+                <div>
+                  {backendMode === "local" && (
+                    <>
+                      {step === 0 && (
+                        <p>
+                          Currently, all queries and constraints are executed on
+                          a locally provided backend (most likely the device you
+                          are reading this on).
+                          <br />
+                          <br />
+                          You can also run the backend on an HPC
+                          (High-performance computing) cluster, if you have the
+                          appropriate access credentials for such a cluster
+                          (i.e., student or employee at a larger university).
+                        </p>
+                      )}
 
-                {step === 0 &&
-                <div><Accordion type="single" collapsible>
-                <AccordionItem value="item-1">
-                  <AccordionTrigger>Overwrite</AccordionTrigger>
-                  <AccordionContent>
-                    If you already have a backend running on another port, you can use this option to manually overwrite the used backend port.
-                  {backendMode === "local" && <Input type="text" value={hpcOptions.port} onChange={(ev) => {
-                    setHpcOptions({...hpcOptions, port: ev.currentTarget.value});
-                  }}/>}
-                  <Button onClick={(e) => setBackendMode(m => m === "local" ? "hpc" : "local")}>Overwrite</Button>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-                  </div>
-                }
-                    {step === 1 && <>
-                      <ConnectionConfigForm ref={connectionFormRef} onSubmit={(e) => {
-                        console.log(e);
-                      }} />
-                    </>}
-                    {step === 2 && <>
-                      <div className="bg-green-200 p-2 rounded font-semibold text-base w-fit flex items-center mb-2">
-                        <BsCheckCircleFill className="inline-block mr-1 size-4 " />
-                        Logged in successfully!
-                      </div>
-                      <div className="grid grid-cols-[7rem,1fr] gap-1 items-center">
-                        <Label>CPUs</Label>
-                        <Input type="number" value={hpcOptions.cpus} step={1} min={1} onChange={(ev) => setHpcOptions({ ...hpcOptions, cpus: ev.currentTarget.valueAsNumber ?? 1 })} />
-                        <Label>Time (hours)</Label>
-                        <Input type="number" value={hpcOptions.hours} step={0.25} min={0.1} max={3} onChange={(ev) => setHpcOptions({ ...hpcOptions, hours: ev.currentTarget.valueAsNumber ?? 1 })} />
-                        <Label>Port</Label>
-                        <Input value={hpcOptions.port} onChange={(ev) => setHpcOptions({ ...hpcOptions, port: ev.currentTarget.value ?? "3300" })} />
-                        <Label>Relay Address</Label>
-                        <Input value={hpcOptions.relayAddr} onChange={(ev) => setHpcOptions({ ...hpcOptions, relayAddr: ev.currentTarget.value ?? "" })} />
-                        <Label>Path to compatible Server Binary</Label>
-                        <Input value={hpcOptions.binaryPath} onChange={(ev) => setHpcOptions({ ...hpcOptions, binaryPath: ev.currentTarget.value ?? "" })} />
-                      </div>
-                    </>}
-                    {step === 3 && <>
-                      <div className="bg-green-200 p-2 rounded font-semibold text-base w-fit flex items-center mb-2">
-                        <BsCheckCircleFill className="inline-block mr-1 size-4 " />
-                        Submitted job with ID {jobStatus?.id ?? "-"}
-                      </div>
-                      {jobStatus?.status !== undefined && <div className={clsx("block w-fit mx-auto p-2 rounded", { "PENDING": "bg-gray-300/20", "RUNNING": "bg-green-400/20", "ENDED": "bg-fuchsia-400/20", "NOT_FOUND": "bg-gray-100/20" }[jobStatus.status.status])}>
-                        <div className={clsx("block w-fit mx-auto p-2 rounded font-extrabold text-xl ", { "PENDING": "text-gray-500", "RUNNING": "text-green-500", "ENDED": "text-fuchsia-500", "NOT_FOUND": "text-gray-500" }[jobStatus.status.status])}>
-                          {jobStatus.status.status}
+                      {step === 0 && (
+                        <div>
+                          <Accordion type="single" collapsible>
+                            <AccordionItem value="item-1">
+                              <AccordionTrigger>Overwrite</AccordionTrigger>
+                              <AccordionContent>
+                                If you already have a backend running on another
+                                port, you can use this option to manually
+                                overwrite the used backend port.
+                                {backendMode === "local" && (
+                                  <Input
+                                    type="text"
+                                    value={hpcOptions.port}
+                                    onChange={(ev) => {
+                                      setHpcOptions({
+                                        ...hpcOptions,
+                                        port: ev.currentTarget.value,
+                                      });
+                                    }}
+                                  />
+                                )}
+                                <Button
+                                  onClick={(e) =>
+                                    setBackendMode((m) =>
+                                      m === "local" ? "hpc" : "local",
+                                    )
+                                  }
+                                >
+                                  Overwrite
+                                </Button>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
                         </div>
-                        <div className="grid grid-cols-[auto,1fr] gap-x-1">
-                          {jobStatus.status.status === "RUNNING" && <>
-                            <span>Start:</span> <span>{jobStatus.status.start_time}</span>
-                            <span>End:</span> <span>{jobStatus.status.end_time}</span>
-                          </>}
-                          {jobStatus.status.status === "PENDING" && <>
-                            <span>Start:</span> <span>{jobStatus.status.start_time}</span>
-                          </>}
+                      )}
+                      {step === 1 && (
+                        <>
+                          <ConnectionConfigForm
+                            ref={connectionFormRef}
+                            onSubmit={(e) => {
+                              console.log(e);
+                            }}
+                          />
+                        </>
+                      )}
+                      {step === 2 && (
+                        <>
+                          <div className="bg-green-200 p-2 rounded font-semibold text-base w-fit flex items-center mb-2">
+                            <BsCheckCircleFill className="inline-block mr-1 size-4 " />
+                            Logged in successfully!
+                          </div>
+                          <div className="grid grid-cols-[7rem,1fr] gap-1 items-center">
+                            <Label>CPUs</Label>
+                            <Input
+                              type="number"
+                              value={hpcOptions.cpus}
+                              step={1}
+                              min={1}
+                              onChange={(ev) =>
+                                setHpcOptions({
+                                  ...hpcOptions,
+                                  cpus: ev.currentTarget.valueAsNumber ?? 1,
+                                })
+                              }
+                            />
+                            <Label>Time (hours)</Label>
+                            <Input
+                              type="number"
+                              value={hpcOptions.hours}
+                              step={0.25}
+                              min={0.1}
+                              max={3}
+                              onChange={(ev) =>
+                                setHpcOptions({
+                                  ...hpcOptions,
+                                  hours: ev.currentTarget.valueAsNumber ?? 1,
+                                })
+                              }
+                            />
+                            <Label>Port</Label>
+                            <Input
+                              value={hpcOptions.port}
+                              onChange={(ev) =>
+                                setHpcOptions({
+                                  ...hpcOptions,
+                                  port: ev.currentTarget.value ?? "3300",
+                                })
+                              }
+                            />
+                            <Label>Relay Address</Label>
+                            <Input
+                              value={hpcOptions.relayAddr}
+                              onChange={(ev) =>
+                                setHpcOptions({
+                                  ...hpcOptions,
+                                  relayAddr: ev.currentTarget.value ?? "",
+                                })
+                              }
+                            />
+                            <Label>Path to compatible Server Binary</Label>
+                            <Input
+                              value={hpcOptions.binaryPath}
+                              onChange={(ev) =>
+                                setHpcOptions({
+                                  ...hpcOptions,
+                                  binaryPath: ev.currentTarget.value ?? "",
+                                })
+                              }
+                            />
+                          </div>
+                        </>
+                      )}
+                      {step === 3 && (
+                        <>
+                          <div className="bg-green-200 p-2 rounded font-semibold text-base w-fit flex items-center mb-2">
+                            <BsCheckCircleFill className="inline-block mr-1 size-4 " />
+                            Submitted job with ID {jobStatus?.id ?? "-"}
+                          </div>
+                          {jobStatus?.status !== undefined && (
+                            <div
+                              className={clsx(
+                                "block w-fit mx-auto p-2 rounded",
+                                {
+                                  PENDING: "bg-gray-300/20",
+                                  RUNNING: "bg-green-400/20",
+                                  ENDED: "bg-fuchsia-400/20",
+                                  NOT_FOUND: "bg-gray-100/20",
+                                }[jobStatus.status.status],
+                              )}
+                            >
+                              <div
+                                className={clsx(
+                                  "block w-fit mx-auto p-2 rounded font-extrabold text-xl ",
+                                  {
+                                    PENDING: "text-gray-500",
+                                    RUNNING: "text-green-500",
+                                    ENDED: "text-fuchsia-500",
+                                    NOT_FOUND: "text-gray-500",
+                                  }[jobStatus.status.status],
+                                )}
+                              >
+                                {jobStatus.status.status}
+                              </div>
+                              <div className="grid grid-cols-[auto,1fr] gap-x-1">
+                                {jobStatus.status.status === "RUNNING" && (
+                                  <>
+                                    <span>Start:</span>{" "}
+                                    <span>{jobStatus.status.start_time}</span>
+                                    <span>End:</span>{" "}
+                                    <span>{jobStatus.status.end_time}</span>
+                                  </>
+                                )}
+                                {jobStatus.status.status === "PENDING" && (
+                                  <>
+                                    <span>Start:</span>{" "}
+                                    <span>{jobStatus.status.start_time}</span>
+                                  </>
+                                )}
 
-                          {jobStatus.status.status === "ENDED" && <>
-                            <span>State:</span> <span>{jobStatus.status.state}</span>
-                          </>}
-
-                        </div>
-                      </div>}
-                    </>}
-                  </>}
+                                {jobStatus.status.status === "ENDED" && (
+                                  <>
+                                    <span>State:</span>{" "}
+                                    <span>{jobStatus.status.state}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-            <AlertDialogFooter className="!justify-between">
-              <AlertDialogCancel disabled={loading} className="!mr-full !ml-0">Cancel</AlertDialogCancel>
-              <div className="flex gap-x-2">
-                {step > 0 && <AlertDialogAction variant="outline"
+              <AlertDialogFooter className="!justify-between">
+                <AlertDialogCancel
                   disabled={loading}
-                  onClick={(ev) => {
-                    ev.preventDefault();
-                    setStep(s => s === undefined || s <= 1 ? 0 : s - 1)
-                  }}>
-                  Back
-                </AlertDialogAction>}
-                <AlertDialogAction
-                  disabled={loading}
-                  onClick={(ev) => {
-                    if (step == undefined) {
-                      return;
-                    }
-                    if (backendMode !== "hpc" && step < numberOfSteps) {
-                      ev.preventDefault();
-                      if (step === 1) {
-                        setLoading(true);
-                        const cfg = connectionFormRef.current?.getConfig();
-                        console.log(cfg)
-                        if (!cfg) {
-                          toast.error("Invalid configuration!")
-                          return;
-                        }
-                        ownBackend["hpc/login"](cfg).then((res) => {
-                          setStep(2);
-                        }).catch(e => toast.error("Could not connect: " + String(e))).finally(() => setLoading(false))
-                      } else if (step === 2) {
-                        setLoading(true);
-                        ownBackend["hpc/start"](hpcOptions).then((res) => {
-                          console.log(res);
-                          toast.success("Submitted job with ID: " + res);
-                          setJobStatus({ id: res })
-                          setStep(3);
-                        }).catch(e => toast.error("Could not connect: " + String(e))).finally(() => setLoading(false))
-                      }
-                      else {
-                        setStep(s => (s ?? 0) + 1)
-                      }
-                    } else {
-                      setStep(0);
-                      setBackendMode((b) => b === "local" ? "hpc" : "local")
-                    }
-                  }}
+                  className="!mr-full !ml-0"
                 >
-                  {loading && <Spinner />}
-                  {backendMode === "local" && <>
-                    {step < numberOfSteps && <>Next {step + 1}/{numberOfSteps + 1}</>}
-                    {step >= numberOfSteps && <>Switch to HPC</>}
-                  </>}
-                  {backendMode === "hpc" && <>Switch to Local</>}
-                </AlertDialogAction></div>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        }
-      </AlertDialog>
-      {/* <AlertHelper mode="promise" title="Backend Mode" trigger={<Button className="mt-8">Backend Mode: <span className="font-bold ml-1">{backendMode === "local" ? "local" : "HPC"}</span></Button>}
+                  Cancel
+                </AlertDialogCancel>
+                <div className="flex gap-x-2">
+                  {step > 0 && (
+                    <AlertDialogAction
+                      variant="outline"
+                      disabled={loading}
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        setStep((s) => (s === undefined || s <= 1 ? 0 : s - 1));
+                      }}
+                    >
+                      Back
+                    </AlertDialogAction>
+                  )}
+                  <AlertDialogAction
+                    disabled={loading}
+                    onClick={(ev) => {
+                      if (step == undefined) {
+                        return;
+                      }
+                      if (backendMode !== "hpc" && step < numberOfSteps) {
+                        ev.preventDefault();
+                        if (step === 1) {
+                          setLoading(true);
+                          const cfg = connectionFormRef.current?.getConfig();
+                          console.log(cfg);
+                          if (!cfg) {
+                            toast.error("Invalid configuration!");
+                            return;
+                          }
+                          ownBackend["hpc/login"](cfg)
+                            .then((res) => {
+                              setStep(2);
+                            })
+                            .catch((e) =>
+                              toast.error("Could not connect: " + String(e)),
+                            )
+                            .finally(() => setLoading(false));
+                        } else if (step === 2) {
+                          setLoading(true);
+                          ownBackend["hpc/start"](hpcOptions)
+                            .then((res) => {
+                              console.log(res);
+                              toast.success("Submitted job with ID: " + res);
+                              setJobStatus({ id: res });
+                              setStep(3);
+                            })
+                            .catch((e) =>
+                              toast.error("Could not connect: " + String(e)),
+                            )
+                            .finally(() => setLoading(false));
+                        } else {
+                          setStep((s) => (s ?? 0) + 1);
+                        }
+                      } else {
+                        setStep(0);
+                        setBackendMode((b) =>
+                          b === "local" ? "hpc" : "local",
+                        );
+                      }
+                    }}
+                  >
+                    {loading && <Spinner />}
+                    {backendMode === "local" && (
+                      <>
+                        {step < numberOfSteps && (
+                          <>
+                            Next {step + 1}/{numberOfSteps + 1}
+                          </>
+                        )}
+                        {step >= numberOfSteps && <>Switch to HPC</>}
+                      </>
+                    )}
+                    {backendMode === "hpc" && <>Switch to Local</>}
+                  </AlertDialogAction>
+                </div>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          )}
+        </AlertDialog>
+        {/* <AlertHelper mode="promise" title="Backend Mode" trigger={<Button className="mt-8">Backend Mode: <span className="font-bold ml-1">{backendMode === "local" ? "local" : "HPC"}</span></Button>}
         initialData={{}}
         content={() => <div>
         {backendMode === "local" &&
@@ -266,9 +452,9 @@ function App() {
 
         }}
       /> */}
-
-    </InnerApp>
-  </BackendProviderContext.Provider>
+      </InnerApp>
+    </BackendProviderContext.Provider>
+  );
 }
 
 function InnerApp({ children }: { children?: ReactNode }) {
@@ -283,18 +469,20 @@ function InnerApp({ children }: { children?: ReactNode }) {
   const backend = useContext(BackendProviderContext);
   useEffect(() => {
     console.log({ backend });
-    void backend["ocel/info"]().then((info) => {
-      setBackendAvailable(true);
-      if (info !== undefined) {
-        setOcelInfo(info);
-      } else {
+    void backend["ocel/info"]()
+      .then((info) => {
+        setBackendAvailable(true);
+        if (info !== undefined) {
+          setOcelInfo(info);
+        } else {
+          setOcelInfo(undefined);
+        }
+      })
+      .catch((e) => {
+        console.error(e);
+        setBackendAvailable(false);
         setOcelInfo(undefined);
-      }
-    }).catch((e) => {
-      console.error(e);
-      setBackendAvailable(false);
-      setOcelInfo(undefined)
-    });
+      });
     if (backend["ocel/available"] !== undefined) {
       void toast
         .promise(backend["ocel/available"](), {
@@ -374,8 +562,16 @@ function InnerApp({ children }: { children?: ReactNode }) {
             OCPQ
           </h2>
           <div className="flex flex-col gap-2 mt-4">
-            {backendAvailable && <span className="text-green-700 font-semibold bg-green-200 w-fit mx-auto p-1 rounded">Backend online</span>}
-            {!backendAvailable && <span className="text-red-700 font-semibold bg-red-200 w-fit mx-auto p-1 rounded">Backend offline</span>}
+            {backendAvailable && (
+              <span className="text-green-700 font-semibold bg-green-200 w-fit mx-auto p-1 rounded">
+                Backend online
+              </span>
+            )}
+            {!backendAvailable && (
+              <span className="text-red-700 font-semibold bg-red-200 w-fit mx-auto p-1 rounded">
+                Backend offline
+              </span>
+            )}
             {ocelInfo != null && (
               <span className="flex flex-col items-center mx-auto text-xl">
                 <span className=" font-semibold text-green-700">
@@ -548,11 +744,11 @@ function InnerApp({ children }: { children?: ReactNode }) {
               </div>
             </div>
           )}
-            <Outlet />
+          <Outlet />
         </div>
       </div>
     </OcelInfoContext.Provider>
-  )
+  );
 }
 
 export default App;

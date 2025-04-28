@@ -178,10 +178,10 @@ export default function OcelGraphViewer({
               ev.currentTarget.parentElement?.querySelector("canvas");
             if (canvas != null) {
               const url = canvas.toBlob((blob) => {
-                if(blob !== null){
-                  backend["download-blob"](blob,"force-graph.png")
+                if (blob !== null) {
+                  backend["download-blob"](blob, "force-graph.png");
                 }
-              },"image/png");
+              }, "image/png");
             }
           }}
         >

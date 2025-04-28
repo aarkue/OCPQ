@@ -71,13 +71,9 @@ impl IntoExcelData for CellContent<'_> {
                     col,
                     format,
                 ),
-                s => IntoExcelData::write_with_format(
-                    format!("{}", s),
-                    worksheet,
-                    row,
-                    col,
-                    format,
-                ),
+                s => {
+                    IntoExcelData::write_with_format(format!("{}", s), worksheet, row, col, format)
+                }
             },
         }
     }

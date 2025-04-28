@@ -199,11 +199,11 @@ pub struct BindingBoxTree {
 }
 
 impl BindingBoxTree {
-    pub fn evaluate(&self, ocel: &IndexLinkedOCEL) -> (EvaluationResults,bool) {
+    pub fn evaluate(&self, ocel: &IndexLinkedOCEL) -> (EvaluationResults, bool) {
         if let Some(root) = self.nodes.first() {
-            let ((ret, _violation),skipped) = root.evaluate(0, Binding::default(), self, ocel);
+            let ((ret, _violation), skipped) = root.evaluate(0, Binding::default(), self, ocel);
             // ret.push((0, Binding::default(), violation));
-            (ret,skipped)
+            (ret, skipped)
         } else {
             (vec![], false)
         }
@@ -319,14 +319,18 @@ impl BindingBoxTreeNode {
         parent_binding: Binding,
         tree: &BindingBoxTree,
         ocel: &IndexLinkedOCEL,
-    ) -> ((EvaluationResults, Vec<(Binding, Option<ViolationReason>)>),bool) {
+    ) -> (
+        (EvaluationResults, Vec<(Binding, Option<ViolationReason>)>),
+        bool,
+    ) {
         let (bbox, children) = match self.clone() {
             BindingBoxTreeNode::Box(b, cs) => (b, cs),
             x => x.to_box(),
         };
         // match self {
         //     BindingBoxTreeNode::Box(bbox, children) => {
-        let (expanded, expanding_skipped_bindings): (Vec<Binding>,bool) = bbox.expand(parent_binding.clone(), ocel);
+        let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
+            bbox.expand(parent_binding.clone(), ocel);
         enum BindingResult {
             FilteredOutBySizeFilter(Binding, EvaluationResults),
             Sat(Binding, EvaluationResults),
@@ -479,34 +483,37 @@ impl BindingBoxTreeNode {
             })
             .collect();
         let recursive_calls_cancelled = x.is_cancelled();
-        (re.into_par_iter()
-            .fold(
-                || (EvaluationResults::new(), Vec::new()),
-                |(mut a, mut b), x| match x {
-                    BindingResult::FilteredOutBySizeFilter(_binding, r) => {
-                        a.extend(r);
+        (
+            re.into_par_iter()
+                .fold(
+                    || (EvaluationResults::new(), Vec::new()),
+                    |(mut a, mut b), x| match x {
+                        BindingResult::FilteredOutBySizeFilter(_binding, r) => {
+                            a.extend(r);
+                            (a, b)
+                        }
+                        BindingResult::Sat(binding, r) => {
+                            a.extend(r);
+                            b.push((binding, None));
+                            (a, b)
+                        }
+                        BindingResult::Viol(binding, v, r) => {
+                            a.extend(r);
+                            b.push((binding, Some(v)));
+                            (a, b)
+                        }
+                    },
+                )
+                .reduce(
+                    || (EvaluationResults::new(), Vec::new()),
+                    |(mut a, mut b), (x, y)| {
+                        a.extend(x);
+                        b.extend(y);
                         (a, b)
-                    }
-                    BindingResult::Sat(binding, r) => {
-                        a.extend(r);
-                        b.push((binding, None));
-                        (a, b)
-                    }
-                    BindingResult::Viol(binding, v, r) => {
-                        a.extend(r);
-                        b.push((binding, Some(v)));
-                        (a, b)
-                    }
-                },
-            )
-            .reduce(
-                || (EvaluationResults::new(), Vec::new()),
-                |(mut a, mut b), (x, y)| {
-                    a.extend(x);
-                    b.extend(y);
-                    (a, b)
-                },
-            ),expanding_skipped_bindings || recursive_calls_cancelled)
+                    },
+                ),
+            expanding_skipped_bindings || recursive_calls_cancelled,
+        )
 
         // let (passed_size_filter, sat, ret) = expanded
         //     .into_par_iter()

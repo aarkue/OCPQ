@@ -11,7 +11,9 @@ import { MainRouterProvider } from "./router.tsx";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BackendProviderContext.Provider value={getAPIServerBackendProvider(DEFAULT_BACKEND_URL)}>
+    <BackendProviderContext.Provider
+      value={getAPIServerBackendProvider(DEFAULT_BACKEND_URL)}
+    >
       <MainRouterProvider />
     </BackendProviderContext.Provider>
   </React.StrictMode>,

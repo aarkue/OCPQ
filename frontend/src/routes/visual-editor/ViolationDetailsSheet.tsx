@@ -45,16 +45,20 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
   const hasConstraints =
     "Box" in node ? node.Box[0].constraints.length > 0 : true;
 
-    const { showElementInfo, violationsPerNode } =
-      useContext(VisualEditorContext);
+  const { showElementInfo, violationsPerNode } =
+    useContext(VisualEditorContext);
   const labels = useMemo(() => {
     // If violation info is available (it should?!) determine labels based on the first binding
-    if(violationsPerNode?.evalRes[nodeID]?.situations &&  violationsPerNode?.evalRes[nodeID]?.situations.length > 0){
-      return Object.keys(violationsPerNode?.evalRes[nodeID]?.situations[0][0].labelMap)
+    if (
+      violationsPerNode?.evalRes[nodeID]?.situations &&
+      violationsPerNode?.evalRes[nodeID]?.situations.length > 0
+    ) {
+      return Object.keys(
+        violationsPerNode?.evalRes[nodeID]?.situations[0][0].labelMap,
+      );
     }
     return "Box" in node ? node.Box[0].labels?.map((l) => l.label) ?? [] : [];
-
-  },[nodeID,node,violationsPerNode])
+  }, [nodeID, node, violationsPerNode]);
   const [appliedCutoff, setAppliedCutoff] = useState<number | undefined>(
     DEFAULT_CUTOFF,
   );
@@ -149,15 +153,22 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
                         </p>
                         <div className="grid grid-cols-[auto,1fr] gap-x-2 gap-y-2 items-center">
                           <Label>Format</Label>
-                          <Combobox options={[{ label: "CSV (Basic)", value: "CSV" }, { label: "XLSX (Formatted)", value: "XLSX" }]}
+                          <Combobox
+                            options={[
+                              { label: "CSV (Basic)", value: "CSV" },
+                              { label: "XLSX (Formatted)", value: "XLSX" },
+                            ]}
                             name="Export Format"
                             value={data.format}
                             onChange={(f) => {
                               if (f == "CSV" || f == "XLSX") {
-                                setData({ ...data, format: f as "CSV" | "XLSX" })
+                                setData({
+                                  ...data,
+                                  format: f as "CSV" | "XLSX",
+                                });
                               }
-                            }
-                            } />
+                            }}
+                          />
                           <Label>Include IDs</Label>
                           <Switch
                             checked={data.includeIds}
@@ -209,37 +220,39 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
                     submitAction="Export"
                     onSubmit={async (data, ev) => {
                       try {
-                        const nodeIndex = violationsPerNode?.nodeIdtoIndex[nodeID];
-                        if(nodeIndex !== undefined){
-                        const res = await toast.promise(
-                          backend["ocel/export-bindings"](
-                            nodeIndex,
-                            data,
-                          ),
-                          {
-                            loading: "Exporting to CSV...",
-                            error: (e) => (
-                              <p>
-                                Failed to export to CSV!
-                                <br />
-                                {String(e)}
-                              </p>
-                            ),
-                            success: "Finished CSV Export!",
-                          },
-                        );
-                        if (res !== undefined) {
-                          backend["download-blob"](res, `situation-table.${data.format === "CSV" ? "csv" : "xlsx"}`);
-                        }else{
-                          console.log("CSV res was undefined", res);
+                        const nodeIndex =
+                          violationsPerNode?.nodeIdtoIndex[nodeID];
+                        if (nodeIndex !== undefined) {
+                          const res = await toast.promise(
+                            backend["ocel/export-bindings"](nodeIndex, data),
+                            {
+                              loading: "Exporting to CSV...",
+                              error: (e) => (
+                                <p>
+                                  Failed to export to CSV!
+                                  <br />
+                                  {String(e)}
+                                </p>
+                              ),
+                              success: "Finished CSV Export!",
+                            },
+                          );
+                          if (res !== undefined) {
+                            backend["download-blob"](
+                              res,
+                              `situation-table.${
+                                data.format === "CSV" ? "csv" : "xlsx"
+                              }`,
+                            );
+                          } else {
+                            console.log("CSV res was undefined", res);
+                          }
                         }
-                      }
                       } catch (e) {
                         toast.error(String(e));
                         throw e;
                       }
                     }}
-                          
                   />
                 </div>
                 {numBindings > DEFAULT_CUTOFF && (

@@ -98,11 +98,13 @@ AlertDialogDescription.displayName =
 
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>& {variant?: "outline"|"default"|"secondary"}
+  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action> & {
+    variant?: "outline" | "default" | "secondary";
+  }
 >(({ className, variant, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
-    className={cn(buttonVariants({variant: variant}), className)}
+    className={cn(buttonVariants({ variant: variant }), className)}
     {...props}
   />
 ));

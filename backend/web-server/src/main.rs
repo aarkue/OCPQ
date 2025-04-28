@@ -17,7 +17,8 @@ use std::{
 
 use ocpq_shared::{
     binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult, ExportFormat, FilterExportWithBoxTreeRequest,
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
+        ExportFormat, FilterExportWithBoxTreeRequest,
     },
     discovery::{
         auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
@@ -283,13 +284,13 @@ pub async fn export_bindings_table(
             if let Some(node_eval_res) = eval_res.evaluation_results.get(node_index) {
                 let inner = Vec::new();
                 let mut w: Cursor<Vec<u8>> = Cursor::new(inner);
-                export_bindings_to_writer(ocel, &node_eval_res, &mut w, &table_options).unwrap();
+                export_bindings_to_writer(ocel, node_eval_res, &mut w, &table_options).unwrap();
                 let b = Bytes::from(w.into_inner());
                 return (StatusCode::OK, b);
             }
         }
     }
-    return (StatusCode::NOT_FOUND, Bytes::default());
+    (StatusCode::NOT_FOUND, Bytes::default())
 }
 
 pub async fn get_event_info_req<'a>(

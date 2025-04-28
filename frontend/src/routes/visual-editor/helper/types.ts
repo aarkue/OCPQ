@@ -8,7 +8,7 @@ export type EvaluationResPerNodes = {
   objectIds: string[];
   eventIds: string[];
   evalNodes: Record<string, BindingBoxTreeNode>;
-  nodeIdtoIndex: Record<string,number>;
+  nodeIdtoIndex: Record<string, number>;
 };
 export type EvaluationRes = EvaluationResultWithCount;
 

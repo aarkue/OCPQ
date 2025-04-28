@@ -33,7 +33,8 @@ use process_mining::{
     import_ocel_json_from_path, import_ocel_sqlite_from_path, import_ocel_xml_file,
 };
 use tauri::{
-    async_runtime::{JoinHandle, RwLock}, AppHandle, State
+    async_runtime::{JoinHandle, RwLock},
+    AppHandle, State,
 };
 use tauri_plugin_dialog::DialogExt;
 
@@ -101,7 +102,7 @@ async fn check_with_box_tree(
             let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false));
             let res_to_ret: EvaluateBoxTreeResult = res.clone_first_few();
             *state.eval_res.write().await = Some(res);
-            return Ok(res_to_ret);
+            Ok(res_to_ret)
         }
         None => Err("No OCEL loaded".to_string()),
     }
@@ -111,7 +112,7 @@ async fn check_with_box_tree(
 async fn export_filter_box(
     req: FilterExportWithBoxTreeRequest,
     state: State<'_, AppState>,
-    app: AppHandle
+    app: AppHandle,
 ) -> Result<(), String> {
     let res = match state.ocel.read().await.as_ref() {
         Some(ocel) => {
@@ -122,7 +123,8 @@ async fn export_filter_box(
     }
     .unwrap();
 
-    app.dialog().file()
+    app.dialog()
+        .file()
         .set_title("Save Filtered OCEL")
         .add_filter(
             format!("OCEL {:?} Files", req.export_format),
@@ -131,9 +133,9 @@ async fn export_filter_box(
         .set_file_name(format!("filtered-export.{}", req.export_format.to_extension()).as_str())
         .save_file(move |f| {
             if let Some(path) = f {
-                if let Some(path) =  path.as_path() {
+                if let Some(path) = path.as_path() {
                     if let Ok(_file) = File::open(path) {
-                        let _ = std::fs::remove_file(&path);
+                        let _ = std::fs::remove_file(path);
                     }
                     match req.export_format {
                         ExportFormat::XML => {
@@ -176,8 +178,9 @@ async fn export_bindings_table(
             .as_ref()
             .and_then(|e_res| e_res.evaluation_results.get(node_index));
         if let Some(node_eval_res) = eval_res {
-            export_bindings_to_writer(ocel, &node_eval_res, &mut writer, &options).unwrap();
-            app.dialog().file()
+            export_bindings_to_writer(ocel, node_eval_res, &mut writer, &options).unwrap();
+            app.dialog()
+                .file()
                 .set_title("Save Filtered OCEL")
                 .add_filter(
                     "CSV/XLSX Files",
@@ -186,7 +189,7 @@ async fn export_bindings_table(
                         TableExportFormat::XLSX => "xlsx",
                     }],
                 )
-                .set_file_name(&format!(
+                .set_file_name(format!(
                     "situation-table.{}",
                     match options.format {
                         TableExportFormat::CSV => "csv",
@@ -196,8 +199,8 @@ async fn export_bindings_table(
                 .save_file(move |f| {
                     if let Some(path) = f {
                         if let Some(path) = path.as_path() {
-                            if let Ok(_file) = File::open(&path) {
-                                let _ = std::fs::remove_file(&path);
+                            if let Ok(_file) = File::open(path) {
+                                let _ = std::fs::remove_file(path);
                             }
                             let mut f = File::create(path).unwrap();
                             f.write_all(&writer.into_inner()).unwrap();
@@ -207,7 +210,7 @@ async fn export_bindings_table(
             return Ok(());
         }
     }
-    return Err("No OCEL loaded".to_string());
+    Err("No OCEL loaded".to_string())
 }
 
 #[tauri::command(async)]

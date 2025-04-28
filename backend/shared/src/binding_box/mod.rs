@@ -39,8 +39,7 @@ impl EvaluateBoxTreeResult {
                     situations: res_with_count
                         .situations
                         .iter()
-                        .take(10_000)
-                        .map(|s| s.clone())
+                        .take(10_000).cloned()
                         .collect(),
                     situation_count: res_with_count.situation_count,
                     situation_violated_count: res_with_count.situation_violated_count,
@@ -181,7 +180,7 @@ pub fn evaluate_box_tree(
         evaluation_results,
         object_ids: ocel.ocel.objects.iter().map(|o| o.id.clone()).collect(),
         event_ids: ocel.ocel.events.iter().map(|o| o.id.clone()).collect(),
-        bindings_skipped
+        bindings_skipped,
     }
 }
 

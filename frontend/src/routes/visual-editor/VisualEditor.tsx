@@ -39,7 +39,7 @@ import {
   LuClipboardCopy,
   LuClipboardPaste,
   LuFileSearch,
-  LuLayoutDashboard
+  LuLayoutDashboard,
 } from "react-icons/lu";
 import { PiPlayFill } from "react-icons/pi";
 import { RxReset } from "react-icons/rx";
@@ -341,9 +341,9 @@ export default function VisualEditor(props: VisualEditorProps) {
     const { x, y } = instance.screenToFlowPosition(mousePos.current);
     const firstNodeSize =
       NODE_TYPE_SIZE[
-      nodes[0].type === EVENT_TYPE_NODE_TYPE
-        ? EVENT_TYPE_NODE_TYPE
-        : GATE_NODE_TYPE
+        nodes[0].type === EVENT_TYPE_NODE_TYPE
+          ? EVENT_TYPE_NODE_TYPE
+          : GATE_NODE_TYPE
       ];
     const xOffset = x - nodeRect.x - firstNodeSize.width / 2;
     const yOffset = y - nodeRect.y - firstNodeSize.minHeight / 2;
@@ -529,9 +529,9 @@ export default function VisualEditor(props: VisualEditorProps) {
         const pos =
           x === undefined || y === undefined
             ? instance.screenToFlowPosition({
-              x: window.innerWidth / 2,
-              y: window.innerHeight / 1.5,
-            })
+                x: window.innerWidth / 2,
+                y: window.innerHeight / 1.5,
+              })
             : { x, y };
         return [
           ...nodes,
@@ -710,7 +710,7 @@ export default function VisualEditor(props: VisualEditorProps) {
           selectedRef.current = sel;
         }}
       >
-        <Controls onInteractiveChange={() => { }} />
+        <Controls onInteractiveChange={() => {}} />
         <Panel position="top-right" className="flex gap-x-2">
           <Button
             variant="outline"
@@ -744,11 +744,14 @@ export default function VisualEditor(props: VisualEditorProps) {
               })
                 .then(async (dataURLOrBlob) => {
                   let blob = dataURLOrBlob;
-                  if (typeof blob === 'string') {
-                    blob = await (await fetch(blob)).blob()
+                  if (typeof blob === "string") {
+                    blob = await (await fetch(blob)).blob();
                   }
                   if (blob) {
-                    backend["download-blob"](blob, `${props.constraintInfo.name}.${useSVG ? "svg" : "png"}`);
+                    backend["download-blob"](
+                      blob,
+                      `${props.constraintInfo.name}.${useSVG ? "svg" : "png"}`,
+                    );
                   }
                 })
                 .finally(() => {
@@ -767,7 +770,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                 variant="outline"
                 title="Add Gate"
                 className="bg-white relative"
-                onClick={() => { }}
+                onClick={() => {}}
               >
                 <TbLogicAnd size={20} />
                 <TbPlus
@@ -784,9 +787,9 @@ export default function VisualEditor(props: VisualEditorProps) {
                 const center =
                   instance != null
                     ? instance.screenToFlowPosition({
-                      x: window.innerWidth / 2,
-                      y: window.innerHeight / 2,
-                    })
+                        x: window.innerWidth / 2,
+                        y: window.innerHeight / 2,
+                      })
                     : { x: 0, y: 0 };
                 return [
                   ...nodes,
@@ -909,22 +912,35 @@ export default function VisualEditor(props: VisualEditorProps) {
                       },
                     );
                     if (res.bindingsSkipped) {
-                      toast.error((x) =>
-                        <>
-                          <div className="">
-                            <b className="text-red-600">Some bindings were skipped!</b><br />
-                            <p className="text-sm">
-
-                              The query yielded too many results and could not be fully computed.
-                              <br />The returned counts and results represent just a small sample.
+                      toast.error(
+                        (x) => (
+                          <>
+                            <div className="">
+                              <b className="text-red-600">
+                                Some bindings were skipped!
+                              </b>
                               <br />
-                            </p>
-                            <div className="text-right">
-                              <Button onClick={() => toast.dismiss(x.id)} variant="destructive">Understood</Button>
+                              <p className="text-sm">
+                                The query yielded too many results and could not
+                                be fully computed.
+                                <br />
+                                The returned counts and results represent just a
+                                small sample.
+                                <br />
+                              </p>
+                              <div className="text-right">
+                                <Button
+                                  onClick={() => toast.dismiss(x.id)}
+                                  variant="destructive"
+                                >
+                                  Understood
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        </>
-                        , { duration: Infinity, position: "top-center" });
+                          </>
+                        ),
+                        { duration: Infinity, position: "top-center" },
+                      );
                     }
                     res.evaluationResults.forEach((evRes, i) => {
                       evalRes[nodesOrder[i].id] = evRes;
@@ -942,7 +958,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                         objectIds: res.objectIds,
                         eventIds: res.eventIds,
                         evalNodes,
-                        nodeIdtoIndex
+                        nodeIdtoIndex,
                       },
                     }));
                   }),
@@ -954,7 +970,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                       objectIds: objectIDs,
                       eventIds: eventIDs,
                       evalNodes,
-                      nodeIdtoIndex
+                      nodeIdtoIndex,
                     },
                   });
                 });
@@ -1038,8 +1054,12 @@ export default function VisualEditor(props: VisualEditorProps) {
                         .then((res) => {
                           // Otherwise, it might be tauri export
                           if (res) {
-                            backend["download-blob"](res, `${props.constraintInfo.name
-                              }-export.${type.toLowerCase()}`);
+                            backend["download-blob"](
+                              res,
+                              `${
+                                props.constraintInfo.name
+                              }-export.${type.toLowerCase()}`,
+                            );
                           }
                         });
                     }),
