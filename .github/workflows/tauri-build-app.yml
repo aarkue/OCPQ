@@ -25,6 +25,7 @@ jobs:
           - platform: 'windows-latest'
             args: ''
     runs-on: ${{ matrix.platform }}
+    environment: Release Build
 
     steps:
       - name: Checkout repository
