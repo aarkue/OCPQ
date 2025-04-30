@@ -62,11 +62,11 @@ jobs:
         run: npm install && cd ../frontend && npm install # Change this to npm, yarn or pnpm.
 
       - name: Verify Certificate
-        if: matrix.platform == 'macos-latest'
-        run: |
-          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development")
-          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
-          echo "CERT_ID=$CERT_ID" >> $
+        # if: matrix.platform == 'macos-latest'
+        # run: |
+        #   CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development")
+        #   CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+        #   echo "CERT_ID=$CERT_ID" >> $
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
 
@@ -74,7 +74,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
