@@ -61,12 +61,12 @@ jobs:
         # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
         run: npm install && cd ../frontend && npm install # Change this to npm, yarn or pnpm.
 
-      - name: Verify Certificate
-        # if: matrix.platform == 'macos-latest'
-        # run: |
-        #   CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development")
-        #   CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
-        #   echo "CERT_ID=$CERT_ID" >> $
+      # - name: Verify Certificate
+      #   if: matrix.platform == 'macos-latest'
+      #   run: |
+      #     CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development")
+      #     CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+      #     echo "CERT_ID=$CERT_ID" >> $
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
 
