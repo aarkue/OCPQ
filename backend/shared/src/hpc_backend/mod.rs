@@ -42,7 +42,7 @@ pub async fn submit_hpc_job(
         .collect(),
         num_cpus: options.cpus,
         time: hour_float_to_slurm_time(options.hours),
-        command: "./ocpq-server".to_string(),
+        command: "chmod +x ./ocpq-server && ./ocpq-server".to_string(),
         local_forwarding: Some(JobLocalForwarding {
             local_port: 3000,
             relay_port: options.port.parse()?,
