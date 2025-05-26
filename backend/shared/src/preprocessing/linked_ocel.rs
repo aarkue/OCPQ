@@ -111,16 +111,15 @@ pub fn get_object_rels_per_type(
         .map(|t| (t.name.clone(), HashSet::new()))
         .collect();
     for o in &ocel.objects {
-        let rels_for_type = object_to_object_rels_per_type
-            .get_mut(&o.object_type)
-            .unwrap();
-        for rels in get_object_relationships(o) {
-            match object_map.get(&rels.object_id) {
-                Some(rel_obj) => {
-                    rels_for_type.insert((rels.qualifier, rel_obj.object_type.clone()));
-                }
-                None => {
-                    eprintln!("Malformed OCEL: Object {} has relationship to object ID {}, which does not belong to any object",o.id, rels.object_id);
+        if let Some(rels_for_type) = object_to_object_rels_per_type.get_mut(&o.object_type) {
+            for rels in get_object_relationships(o) {
+                match object_map.get(&rels.object_id) {
+                    Some(rel_obj) => {
+                        rels_for_type.insert((rels.qualifier, rel_obj.object_type.clone()));
+                    }
+                    None => {
+                        eprintln!("Malformed OCEL: Object {} has relationship to object ID {}, which does not belong to any object",o.id, rels.object_id);
+                    }
                 }
             }
         }
