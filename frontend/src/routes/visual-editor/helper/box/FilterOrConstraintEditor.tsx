@@ -353,7 +353,7 @@ const childVars = getAvailableChildNames(nodeID);
       return (
         <>
           {value.child_name_with_var_name.map(([c, variable], i) => (
-            <div key={i} className="flex gap-0.5 items-center justify-center relative">
+            <div key={i} className="flex gap-0.5 items-center justify-center relative pb-9">
               <ChildSetSelector
                 availableChildSets={availableChildSets}
                 value={c[0]}
