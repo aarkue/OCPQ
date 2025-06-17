@@ -73,6 +73,7 @@ import {
   type GateNodeData,
 } from "./helper/types";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from "@/components/ui/context-menu";
+import { getAvailableChildNamesWithEdges } from "./helper/child-names";
 
 function isEditorElementTarget(el: HTMLElement | EventTarget | null) {
   return (
@@ -166,9 +167,10 @@ export default function VisualEditor(props: VisualEditorProps) {
         return false;
       } else {
         const parents = getParentsNodeIDs(source, edges);
-        if (parents.includes(target)) {
-          toast("Invalid connection: Loops are forbidden!", {
+        if (source == target || parents.includes(target)) {
+          toast.error(<><span><b>Invalid connection</b><br />Loops are forbidden!</span></>, {
             position: "bottom-center",
+            id: "invalid-connection-toast"
           });
           console.warn("Loop connection attempted!");
           return false;
@@ -237,12 +239,7 @@ export default function VisualEditor(props: VisualEditorProps) {
   );
 
   const getAvailableChildNames = useCallback(
-    (nodeID: string): string[] => {
-      return (instance.getEdges() as Edge<EventTypeLinkData>[])
-        .filter((e) => e.source === nodeID)
-        .map((e) => e.data?.name)
-        .filter((e) => e) as string[];
-    },
+    (nodeID: string): string[] => getAvailableChildNamesWithEdges(instance.getEdges() as any, nodeID),
     [instance],
   );
 

@@ -265,6 +265,7 @@ export default function FilterChooser({
                       : []),
                   ]}
                   onChange={(val) => {
+                    const childVars = getAvailableChildNames(id);
                     if (val === "O2E") {
                       setAlertState({
                         ...alertState,
@@ -318,7 +319,7 @@ export default function FilterChooser({
                         ...alertState,
                         value: {
                           type: "NumChilds",
-                          child_name: "A",
+                          child_name: childVars[0] ?? "A",
                           min: null,
                           max: null,
                         },
@@ -328,7 +329,7 @@ export default function FilterChooser({
                         ...alertState,
                         value: {
                           type: "BindingSetEqual",
-                          child_names: ["A"],
+                          child_names: [childVars[0] ?? "A",childVars[1] ?? "B"],
                         },
                       });
                     } else if (val === "BindingSetProjectionEqual") {
@@ -336,7 +337,7 @@ export default function FilterChooser({
                         ...alertState,
                         value: {
                           type: "BindingSetProjectionEqual",
-                          child_name_with_var_name: [["A", { Object: 0 }]],
+                          child_name_with_var_name: [[childVars[0] ?? "A", { Object: 0 }]],
                         },
                       });
                     } else if (val === "NumChildsProj") {
@@ -344,7 +345,7 @@ export default function FilterChooser({
                         ...alertState,
                         value: {
                           type: "NumChildsProj",
-                          child_name: "A",
+                          child_name: childVars[0] ?? "A",
                           var_name: { Object: 0 },
                           min: 1,
                           max: 10,
@@ -364,7 +365,7 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "SAT", child_names: ["A"] },
+                        value: { type: "SAT", child_names: [childVars[0] ?? "A"] },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -372,7 +373,7 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "ANY", child_names: ["A"] },
+                        value: { type: "ANY", child_names: [childVars[0] ?? "A"] },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -380,7 +381,7 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "NOT", child_names: ["A"] },
+                        value: { type: "NOT", child_names: [childVars[0] ?? "A"] },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -388,7 +389,7 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "AND", child_names: ["A", "B"] },
+                        value: { type: "AND", child_names: [childVars[0] ?? "A", childVars[1] ?? "B"] },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -396,7 +397,7 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "OR", child_names: ["A", "B"] },
+                        value: { type: "OR", child_names: [childVars[0] ?? "A", childVars[1] ?? "B"]  },
                       });
                     } else if (val === "EventAttributeValueFilter") {
                       setAlertState({
