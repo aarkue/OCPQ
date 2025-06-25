@@ -671,12 +671,12 @@ const childVars = getAvailableChildNames(nodeID);
             }}
           />
           <AttributeNameSelector
-            availableAttributes={deDupe(
+            availableAttributes={["ocel:id","ocel:time",...deDupe(
               getTypesForVariable(nodeID, value.event, "event")
                 .map((t) => t.attributes)
                 .flat()
                 .map((at) => at.name),
-            )}
+            )]}
             value={value.attribute_name}
             onChange={(newV) => {
               const newAttrName = getTypesForVariable(
@@ -719,12 +719,12 @@ const childVars = getAvailableChildNames(nodeID);
             }}
           />
           <AttributeNameSelector
-            availableAttributes={deDupe(
+            availableAttributes={["ocel:id",...deDupe(
               getTypesForVariable(nodeID, value.object, "object")
                 .map((t) => t.attributes)
                 .flat()
                 .map((at) => at.name),
-            )}
+            )]}
             value={value.attribute_name}
             onChange={(newV) => {
               const newAttrName = getTypesForVariable(

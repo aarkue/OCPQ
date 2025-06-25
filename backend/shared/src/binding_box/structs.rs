@@ -725,6 +725,15 @@ impl Filter {
             } => {
                 let e_opt = b.get_ev(event, ocel);
                 if let Some(e) = e_opt {
+                    if attribute_name == "ocel:id" {
+                        if let ValueFilter::String { is_in } = value_filter {
+                            return is_in.contains(&e.id)
+                        }
+                        return false;
+                    }
+                    if attribute_name == "ocel:time" {
+                        return value_filter.check_value(&OCELAttributeValue::Time(e.time))
+                    }
                     if let Some(attr) = e.attributes.iter().find(|at| &at.name == attribute_name) {
                         value_filter.check_value(&attr.value)
                     } else {
@@ -742,6 +751,12 @@ impl Filter {
             } => {
                 let o_opt = b.get_ob(object, ocel);
                 if let Some(o) = o_opt {
+                    if attribute_name == "ocel:id" {
+                        if let ValueFilter::String { is_in } = value_filter {
+                            return is_in.contains(&o.id)
+                        }
+                        return false;
+                    }
                     match at_time {
                         ObjectValueFilterTimepoint::Always => o
                             .attributes
