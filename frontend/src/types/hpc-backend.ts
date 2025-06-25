@@ -32,11 +32,11 @@ export const connectionFormSchema = z.object({
 export type ConnectionConfig = z.infer<typeof connectionFormSchema>;
 
 export type JobStatus =
-  | { status: "PENDING"; start_time: String | undefined }
+  | { status: "PENDING"; start_time: string | undefined }
   | {
       status: "RUNNING";
-      start_time: String | undefined;
-      end_time: String | undefined;
+      start_time: string | undefined;
+      end_time: string | undefined;
     }
   | { status: "ENDED"; state: string }
   | { status: "NOT_FOUND" };

@@ -20,7 +20,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
-import { EdgeLabelRenderer, getBezierPath, useReactFlow, type EdgeProps } from "reactflow";
+import { EdgeLabelRenderer, getBezierPath, type EdgeProps } from "reactflow";
 import QuantifiedObjectEdge from "./QuantifiedObjectEdge";
 import { VisualEditorContext } from "./VisualEditorContext";
 import type { EventTypeLinkData } from "./types";
@@ -46,22 +46,26 @@ export default function EventTypeLink(props: EdgeProps<EventTypeLinkData>) {
     targetPosition,
   });
   const initial = useRef(true);
-  const { onEdgeDataChange, getAvailableChildNames } = useContext(VisualEditorContext);
+  const { onEdgeDataChange, getAvailableChildNames } =
+    useContext(VisualEditorContext);
   useEffect(() => {
     if (initial.current && data === undefined) {
-        const namesUsedAlready = getAvailableChildNames(props.source ?? "")
-        const baseCode = "A".charCodeAt(0);
-        let i = 0;
-        while (namesUsedAlready.includes(String.fromCharCode(baseCode+i)) && i < 25) {
-          i++;
-        }
-        console.log(namesUsedAlready,i)
+      const namesUsedAlready = getAvailableChildNames(props.source ?? "");
+      const baseCode = "A".charCodeAt(0);
+      let i = 0;
+      while (
+        namesUsedAlready.includes(String.fromCharCode(baseCode + i)) &&
+        i < 25
+      ) {
+        i++;
+      }
+      console.log(namesUsedAlready, i);
       onEdgeDataChange(id, {
         color: "#969696",
         maxCount: null,
         minCount: null,
-        name:  String.fromCharCode(baseCode+i),
-      },);
+        name: String.fromCharCode(baseCode + i),
+      });
     }
     initial.current = false;
   }, [data]);

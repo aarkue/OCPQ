@@ -11,7 +11,13 @@ import type { Filter } from "@/types/generated/Filter";
 import type { SizeFilter } from "@/types/generated/SizeFilter";
 import type { ValueFilter } from "@/types/generated/ValueFilter";
 import { lazy, type ReactNode, Suspense, useContext } from "react";
-import { LuArrowRight, LuDelete, LuEqual, LuLink, LuPlus, LuTrash } from "react-icons/lu";
+import {
+  LuArrowRight,
+  LuDelete,
+  LuEqual,
+  LuLink,
+  LuTrash,
+} from "react-icons/lu";
 import { VisualEditorContext } from "../VisualEditorContext";
 import {
   EventVarSelector,
@@ -44,9 +50,13 @@ export default function FilterOrConstraintEditor<
   availableLabels?: string[];
   nodeID: string;
 }) {
-  const { getAvailableVars, getNodeIDByName, getTypesForVariable, getAvailableChildNames } =
-    useContext(VisualEditorContext);
-const childVars = getAvailableChildNames(nodeID);
+  const {
+    getAvailableVars,
+    getNodeIDByName,
+    getTypesForVariable,
+    getAvailableChildNames,
+  } = useContext(VisualEditorContext);
+  const childVars = getAvailableChildNames(nodeID);
   switch (value.type) {
     case "O2E":
       return (
@@ -336,7 +346,7 @@ const childVars = getAvailableChildNames(nodeID);
               >
                 <LuTrash />
               </Button>
-              {(i < value.child_names.length - 1)  && <LuEqual  className="ml-1"/>}
+              {i < value.child_names.length - 1 && <LuEqual className="ml-1" />}
             </div>
           ))}
           <Button
@@ -353,7 +363,10 @@ const childVars = getAvailableChildNames(nodeID);
       return (
         <>
           {value.child_name_with_var_name.map(([c, variable], i) => (
-            <div key={i} className="flex gap-0.5 items-center justify-center relative pb-9">
+            <div
+              key={i}
+              className="flex gap-0.5 items-center justify-center relative pb-9"
+            >
               <ChildSetSelector
                 availableChildSets={availableChildSets}
                 value={c[0]}
@@ -385,7 +398,8 @@ const childVars = getAvailableChildNames(nodeID);
                   }
                 }}
               />
-              <Button className="absolute top-9 left-0"
+              <Button
+                className="absolute top-9 left-0"
                 size="icon"
                 variant="ghost"
                 onClick={() => {
@@ -396,13 +410,17 @@ const childVars = getAvailableChildNames(nodeID);
                 <LuTrash className="stroke-red-500" />
               </Button>
 
-
-              {(i < value.child_name_with_var_name.length - 1)  && <LuEqual  className="ml-1"/>}
+              {i < value.child_name_with_var_name.length - 1 && (
+                <LuEqual className="ml-1" />
+              )}
             </div>
           ))}
           <Button
             onClick={() => {
-              value.child_name_with_var_name.push([childVars[0] ?? "A", { Object: 0 }]);
+              value.child_name_with_var_name.push([
+                childVars[0] ?? "A",
+                { Object: 0 },
+              ]);
               updateValue({ ...value });
             }}
           >
@@ -671,12 +689,16 @@ const childVars = getAvailableChildNames(nodeID);
             }}
           />
           <AttributeNameSelector
-            availableAttributes={["ocel:id","ocel:time",...deDupe(
-              getTypesForVariable(nodeID, value.event, "event")
-                .map((t) => t.attributes)
-                .flat()
-                .map((at) => at.name),
-            )]}
+            availableAttributes={[
+              "ocel:id",
+              "ocel:time",
+              ...deDupe(
+                getTypesForVariable(nodeID, value.event, "event")
+                  .map((t) => t.attributes)
+                  .flat()
+                  .map((at) => at.name),
+              ),
+            ]}
             value={value.attribute_name}
             onChange={(newV) => {
               const newAttrName = getTypesForVariable(
@@ -719,12 +741,15 @@ const childVars = getAvailableChildNames(nodeID);
             }}
           />
           <AttributeNameSelector
-            availableAttributes={["ocel:id",...deDupe(
-              getTypesForVariable(nodeID, value.object, "object")
-                .map((t) => t.attributes)
-                .flat()
-                .map((at) => at.name),
-            )]}
+            availableAttributes={[
+              "ocel:id",
+              ...deDupe(
+                getTypesForVariable(nodeID, value.object, "object")
+                  .map((t) => t.attributes)
+                  .flat()
+                  .map((at) => at.name),
+              ),
+            ]}
             value={value.attribute_name}
             onChange={(newV) => {
               const newAttrName = getTypesForVariable(
@@ -753,9 +778,9 @@ const childVars = getAvailableChildNames(nodeID);
             name="At time"
             onChange={(ev) => {
               switch (
-              ev as (Filter & {
-                type: "ObjectAttributeValueFilter";
-              })["at_time"]["type"]
+                ev as (Filter & {
+                  type: "ObjectAttributeValueFilter";
+                })["at_time"]["type"]
               ) {
                 case "Always":
                   value.at_time = { type: "Always" };
@@ -1026,20 +1051,20 @@ function MinMaxDisplayWithSugar({
         (value.min !== value.max &&
           value.min !== null &&
           value.max !== null)) && (
-          <>
-            {rangeMode === true && (
-              <>
-                {value.min ?? 0} - {value.max ?? "∞"}
-              </>
-            )}
-            {rangeMode !== true && (
-              <>
-                {value.min ?? 0} ≤ {children} ≤ {value.max ?? "∞"}
-              </>
-            )}
-          </>
-        )}
-      { }
+        <>
+          {rangeMode === true && (
+            <>
+              {value.min ?? 0} - {value.max ?? "∞"}
+            </>
+          )}
+          {rangeMode !== true && (
+            <>
+              {value.min ?? 0} ≤ {children} ≤ {value.max ?? "∞"}
+            </>
+          )}
+        </>
+      )}
+      {}
     </>
   );
 }

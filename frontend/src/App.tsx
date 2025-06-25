@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/select";
 import {
   createContext,
-  ReactNode,
+  type ReactNode,
   useContext,
   useEffect,
   useMemo,
@@ -18,7 +18,7 @@ import toast from "react-hot-toast";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import {
-  BackendProvider,
+  type BackendProvider,
   BackendProviderContext,
   ErrorBackendContext,
   getAPIServerBackendProvider,
@@ -30,9 +30,9 @@ import { type OCELInfo } from "./types/ocel";
 import AlertHelper from "./components/AlertHelper";
 import ConnectionConfigForm from "./components/hpc/HPCConnectionConfigForm";
 import {
-  ConnectionConfig,
+  type ConnectionConfig,
   connectionFormSchema,
-  JobStatus,
+  type JobStatus,
 } from "./types/hpc-backend";
 import { z } from "zod";
 import {
@@ -49,7 +49,7 @@ import { CheckCircledIcon, CheckIcon } from "@radix-ui/react-icons";
 import { BsCheckCircleFill } from "react-icons/bs";
 import { Label } from "./components/ui/label";
 import { Input } from "./components/ui/input";
-import { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
+import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 import clsx from "clsx";
 import { Combobox } from "./components/ui/combobox";
 import {
@@ -95,7 +95,7 @@ function App() {
     if (jobStatus?.id && jobStatus.status?.status !== "ENDED") {
       const t = setInterval(() => {
         ownBackend["hpc/job-status"](jobStatus.id).then((status) =>
-          setJobStatus((j) => ({ id: jobStatus.id, status: status })),
+          setJobStatus((j) => ({ id: jobStatus.id, status })),
         );
       }, 3000);
       return () => {
@@ -109,10 +109,10 @@ function App() {
     } else {
       return {
         ...getAPIServerBackendProvider("http://localhost:" + hpcOptions.port),
-        ["hpc/login"]: ownBackend["hpc/login"],
-        ["hpc/start"]: ownBackend["hpc/start"],
-        ["hpc/job-status"]: ownBackend["hpc/job-status"],
-        ["download-blob"]: ownBackend["download-blob"],
+        "hpc/login": ownBackend["hpc/login"],
+        "hpc/start": ownBackend["hpc/start"],
+        "hpc/job-status": ownBackend["hpc/job-status"],
+        "download-blob": ownBackend["download-blob"],
       } satisfies BackendProvider;
     }
   }, [backendMode]);

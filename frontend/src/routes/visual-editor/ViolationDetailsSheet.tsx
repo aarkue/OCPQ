@@ -4,7 +4,9 @@ import { columnsForBinding } from "@/components/binding-table/columns";
 import type PaginatedBindingTable from "@/components/binding-table/PaginatedBindingTable";
 import Spinner from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import MultiSelect from "@/components/ui/multi-select";
 import {
   Sheet,
   SheetContent,
@@ -14,15 +16,13 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import type { BindingBoxTreeNode } from "@/types/generated/BindingBoxTreeNode";
-import { TableExportOptions } from "@/types/generated/TableExportOptions";
+import { type TableExportOptions } from "@/types/generated/TableExportOptions";
 import { Suspense, lazy, memo, useContext, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { TbTableExport } from "react-icons/tb";
-import type { EvaluationRes, EvaluationResPerNodes } from "./helper/types";
-import { VisualEditorContext } from "./helper/VisualEditorContext";
-import { Combobox } from "@/components/ui/combobox";
-import MultiSelect from "@/components/ui/multi-select";
 import { LabelLabel } from "./helper/box/LabelFunctionChooser";
+import type { EvaluationResPerNodes } from "./helper/types";
+import { VisualEditorContext } from "./helper/VisualEditorContext";
 const DataTablePaginationLazy = lazy(
   async () => await import("@/components/binding-table/PaginatedBindingTable"),
 ) as typeof PaginatedBindingTable;
@@ -131,7 +131,7 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
                         includeIds: true,
                         includeViolationStatus: hasConstraints,
                         omitHeader: false,
-                        labels: labels,
+                        labels,
                         format: "CSV",
                       } satisfies TableExportOptions as TableExportOptions
                     }

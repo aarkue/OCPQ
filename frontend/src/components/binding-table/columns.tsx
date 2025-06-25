@@ -9,7 +9,7 @@ import type { BindingBoxTreeNode } from "@/types/generated/BindingBoxTreeNode";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Link } from "react-router-dom";
 import { Checkbox } from "../ui/checkbox";
-import { LabelValue } from "@/types/generated/LabelValue";
+import { type LabelValue } from "@/types/generated/LabelValue";
 import { LabelLabel } from "@/routes/visual-editor/helper/box/LabelFunctionChooser";
 
 function getLabelValuePrimitive(l: LabelValue | null) {
@@ -45,7 +45,7 @@ export function columnsForBinding(
   addViolationStatus: boolean,
 ): ColumnDef<BindingInfo>[] {
   // Use labels if they are present in (sample) binding
-  let labels = Object.keys(binding.labelMap);
+  const labels = Object.keys(binding.labelMap);
 
   return [
     ...Object.entries(binding.objectMap).map(

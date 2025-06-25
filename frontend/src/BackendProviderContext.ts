@@ -14,10 +14,10 @@ import type {
   ObjectTypeQualifiers,
 } from "./types/ocel";
 import { EvaluationResultWithCount } from "./types/generated/EvaluationResultWithCount";
-import { TableExportOptions } from "./types/generated/TableExportOptions";
+import { type TableExportOptions } from "./types/generated/TableExportOptions";
 import { z } from "zod";
-import { ConnectionConfig, JobStatus } from "./types/hpc-backend";
-import { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
+import { type ConnectionConfig, type JobStatus } from "./types/hpc-backend";
+import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;

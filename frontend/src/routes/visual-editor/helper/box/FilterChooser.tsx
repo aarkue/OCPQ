@@ -24,7 +24,7 @@ import FilterOrConstraintEditor, {
 } from "./FilterOrConstraintEditor";
 import { getEvVarName, getObVarName } from "./variable-names";
 import FilterLabelIcon from "@/components/FilterLabelIcon";
-import { FilterLabel } from "@/types/generated/FilterLabel";
+import { type FilterLabel } from "@/types/generated/FilterLabel";
 
 export default function FilterChooser({
   id,
@@ -80,7 +80,7 @@ export default function FilterChooser({
                 filterMode === "shown" && (
                   <button
                     onClick={() => {
-                      let prevFilterLabel = fc.filterLabel ?? "IGNORED";
+                      const prevFilterLabel = fc.filterLabel ?? "IGNORED";
                       let newFilterLabel: FilterLabel = "IGNORED";
                       if (prevFilterLabel === "IGNORED") {
                         newFilterLabel = "INCLUDED";
@@ -329,7 +329,10 @@ export default function FilterChooser({
                         ...alertState,
                         value: {
                           type: "BindingSetEqual",
-                          child_names: [childVars[0] ?? "A",childVars[1] ?? "B"],
+                          child_names: [
+                            childVars[0] ?? "A",
+                            childVars[1] ?? "B",
+                          ],
                         },
                       });
                     } else if (val === "BindingSetProjectionEqual") {
@@ -337,7 +340,9 @@ export default function FilterChooser({
                         ...alertState,
                         value: {
                           type: "BindingSetProjectionEqual",
-                          child_name_with_var_name: [[childVars[0] ?? "A", { Object: 0 }]],
+                          child_name_with_var_name: [
+                            [childVars[0] ?? "A", { Object: 0 }],
+                          ],
                         },
                       });
                     } else if (val === "NumChildsProj") {
@@ -365,7 +370,10 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "SAT", child_names: [childVars[0] ?? "A"] },
+                        value: {
+                          type: "SAT",
+                          child_names: [childVars[0] ?? "A"],
+                        },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -373,7 +381,10 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "ANY", child_names: [childVars[0] ?? "A"] },
+                        value: {
+                          type: "ANY",
+                          child_names: [childVars[0] ?? "A"],
+                        },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -381,7 +392,10 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "NOT", child_names: [childVars[0] ?? "A"] },
+                        value: {
+                          type: "NOT",
+                          child_names: [childVars[0] ?? "A"],
+                        },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -389,7 +403,13 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "AND", child_names: [childVars[0] ?? "A", childVars[1] ?? "B"] },
+                        value: {
+                          type: "AND",
+                          child_names: [
+                            childVars[0] ?? "A",
+                            childVars[1] ?? "B",
+                          ],
+                        },
                       });
                     } else if (
                       alertState.type === "constraint" &&
@@ -397,7 +417,13 @@ export default function FilterChooser({
                     ) {
                       setAlertState({
                         ...alertState,
-                        value: { type: "OR", child_names: [childVars[0] ?? "A", childVars[1] ?? "B"]  },
+                        value: {
+                          type: "OR",
+                          child_names: [
+                            childVars[0] ?? "A",
+                            childVars[1] ?? "B",
+                          ],
+                        },
                       });
                     } else if (val === "EventAttributeValueFilter") {
                       setAlertState({

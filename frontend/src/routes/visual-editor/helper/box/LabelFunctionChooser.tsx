@@ -11,8 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BindingBox } from "@/types/generated/BindingBox";
-import { LabelFunction } from "@/types/generated/LabelFunction";
+import { type BindingBox } from "@/types/generated/BindingBox";
+import { type LabelFunction } from "@/types/generated/LabelFunction";
 import clsx from "clsx";
 import { lazy, Suspense, useContext, useState } from "react";
 import { IoPricetagOutline } from "react-icons/io5";
@@ -29,7 +29,7 @@ export default function FilterChooser({
   box: BindingBox;
   updateBox: (box: BindingBox) => unknown;
 }) {
-  const { getAvailableVars, getAvailableChildNames, filterMode } =
+  const { getAvailableVars, getAvailableChildNames } =
     useContext(VisualEditorContext);
   const availableObjectVars = getAvailableVars(id, "object");
   const availableEventVars = getAvailableVars(id, "event");
@@ -202,7 +202,7 @@ function LabelFunctionItem({
           className={clsx(
             " text-[0.5rem] overflow-ellipsis overflow-hidden leading-tight font-medium text-muted-foreground",
             !(compact ?? false) && " break-all whitespace-normal",
-            compact === true && "whitespace-nowrap max-w-[5rem]",
+            compact && "whitespace-nowrap max-w-[5rem]",
           )}
           title={labelFun.cel}
         >

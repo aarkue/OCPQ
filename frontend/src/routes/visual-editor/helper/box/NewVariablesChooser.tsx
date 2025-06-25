@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import MultiSelect from "@/components/ui/multi-select";
 import type { BindingBox } from "@/types/generated/BindingBox";
 import type { EventVariable } from "@/types/generated/EventVariable";
-import { FilterLabel } from "@/types/generated/FilterLabel";
+import { type FilterLabel } from "@/types/generated/FilterLabel";
 import type { ObjectVariable } from "@/types/generated/ObjectVariable";
 import { useContext, useState } from "react";
 import { LuAsterisk, LuPlus } from "react-icons/lu";

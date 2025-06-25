@@ -6,7 +6,6 @@ import { VisualEditorContext } from "../VisualEditorContext";
 
 export default function SituationIndicator({
   violationsPerNode,
-  hasNoConstraints,
   nodeID,
 }: {
   violationsPerNode: EvaluationRes;

@@ -21,13 +21,12 @@ import { LuTrash } from "react-icons/lu";
 import { Handle, Position, type NodeProps } from "reactflow";
 import { VisualEditorContext } from "../VisualEditorContext";
 import FilterChooser from "../box/FilterChooser";
+import LabelFunctionChooser from "../box/LabelFunctionChooser";
 import NewVariableChooser from "../box/NewVariablesChooser";
 import type { EventTypeNodeData } from "../types";
 import { getViolationStyles } from "../violation-styles";
 import SituationIndicator from "./SituationIndicator";
 import ViolationIndicator from "./ViolationIndicator";
-import { Label } from "@/components/ui/label";
-import LabelFunctionChooser from "../box/LabelFunctionChooser";
 export default memo(EventTypeNode);
 function EventTypeNode({ data, id, selected }: NodeProps<EventTypeNodeData>) {
   const { violationsPerNode, onNodeDataChange } =

@@ -1,4 +1,4 @@
-import { FilterLabel } from "@/types/generated/FilterLabel";
+import { type FilterLabel } from "@/types/generated/FilterLabel";
 import { TbFilterCheck, TbFilterOff, TbFilterX } from "react-icons/tb";
 
 export default function FilterLabelIcon({ label }: { label: FilterLabel }) {

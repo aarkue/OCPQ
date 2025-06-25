@@ -1,8 +1,13 @@
 // import { connectionFormSchema } from "@/AppContext";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCallback, useEffect, useImperativeHandle, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useState,
+} from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { type z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -21,8 +26,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { ConnectionConfig, connectionFormSchema } from "@/types/hpc-backend";
-import React from "react";
+import {
+  type ConnectionConfig,
+  connectionFormSchema,
+} from "@/types/hpc-backend";
 
 const SAVED_AUTH_LOCAL_STORAGE_KEY = "saved-auth";
 const ConnectionConfigForm = React.forwardRef<
@@ -61,7 +68,7 @@ const ConnectionConfigForm = React.forwardRef<
     const s = localStorage.getItem(SAVED_AUTH_LOCAL_STORAGE_KEY);
     if (s != null) {
       try {
-        let l: z.infer<typeof connectionFormSchema> = JSON.parse(s);
+        const l: z.infer<typeof connectionFormSchema> = JSON.parse(s);
         console.log("Got login info", l);
         form.reset(l);
       } catch (e) {
