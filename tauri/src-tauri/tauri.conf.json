@@ -45,7 +45,20 @@
       "deb": {
         "depends": []
       }
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["xml"],
+        "mimeType": "text/xml"
+      },      {
+        "ext": ["json"],
+        "mimeType": "text/plain"
+      },
+      {
+        "ext": ["sqlite"],
+        "mimeType": "application/x-sqlite3"
+      }
+    ]
   },
   "plugins": {},
   "app": {
@@ -56,7 +69,8 @@
         "resizable": true,
         "title": "OCPQ (App)",
         "width": 800,
-        "useHttpsScheme": true
+        "useHttpsScheme": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {

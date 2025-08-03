@@ -7,7 +7,7 @@ import {
   type BackendProvider,
   BackendProviderContext,
 } from "$/BackendProviderContext";
-import {  invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   EventTypeQualifiers,
   OCELInfo,
@@ -23,7 +23,7 @@ import * as dialog from "@tauri-apps/plugin-dialog"
 
 const tauriBackend: BackendProvider = {
   "ocel/info": async () => {
-    const ocelInfo: OCELInfo|undefined = await invoke("get_current_ocel_info");
+    const ocelInfo: OCELInfo | undefined = await invoke("get_current_ocel_info");
     return ocelInfo;
   },
   "ocel/picker": async () => {
@@ -36,6 +36,16 @@ const tauriBackend: BackendProvider = {
       return ocelInfo;
     }
     throw new Error("No file selected");
+  },
+  "ocel/upload": async (ocelFile) => {
+    const format = ocelFile.name.endsWith(".json")
+      ? "json"
+      : ocelFile.name.endsWith(".xml")
+        ? "xml"
+        : "sqlite";
+    const ocelInfo: OCELInfo = await invoke("import_ocel_slice", { data: await ocelFile.bytes(), format });
+    return ocelInfo;
+
   },
 
   "ocel/check-constraints-box": async (tree, measurePerformance) => {
@@ -82,9 +92,9 @@ const tauriBackend: BackendProvider = {
   "hpc/job-status": async (jobID: string): Promise<JobStatus> => {
     return await invoke("get_hpc_job_status_tauri", { jobId: jobID });
   },
-  "download-blob": async (blob,fileName) => {
+  "download-blob": async (blob, fileName) => {
     const filePath = await save({ defaultPath: fileName });
-    if(filePath){
+    if (filePath) {
       await writeFile(filePath, new Uint8Array(await blob.arrayBuffer()));
     }
   }

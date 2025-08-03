@@ -1084,6 +1084,7 @@ function AttributeValueFilterDisplay({ value }: { value: ValueFilter }) {
         <MinMaxDisplayWithSugar
           min={value.min}
           max={value.max}
+          rangeMode
         ></MinMaxDisplayWithSugar>
       );
     case "Boolean":

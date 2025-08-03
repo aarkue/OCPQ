@@ -22,6 +22,7 @@ process_mining = { git = "https://github.com/aarkue/rust4pm", features= ["ocel-s
 ocpq-shared = {path = "../../backend/shared"}
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+url = "2.5.2"
 
 
 [features]

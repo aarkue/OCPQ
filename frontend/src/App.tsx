@@ -678,42 +678,56 @@ function InnerApp({ children }: { children?: ReactNode }) {
               </div>
             )}
 
-          {isAtRoot && backend["ocel/upload"] !== undefined && (
-            <div>
-              {showAvailableOcels && <div className="w-full my-4">OR</div>}
+          {isAtRoot && (
+            <div className="my-4">
+              {showAvailableOcels && <div className="w-full">OR</div>}
               <div
                 className="flex items-center justify-center w-full max-w-2xl mx-auto"
                 onDragOver={(ev) => {
                   ev.preventDefault();
                   const items = ev.dataTransfer.items;
-                  if (items.length > 0 && items[0].kind === "file") {
-                    const fileMimeType = items[0].type;
-                    if (!VALID_OCEL_MIME_TYPES.includes(fileMimeType)) {
-                      const fileType =
-                        fileMimeType.length === 0 ? "" : `(${fileMimeType})`;
-                      toast(
-                        `Files of type ${fileType} are not supported!\n\nIf you are sure that this is an valid OCEL2 file, please select it manually by clicking on the dropzone.`,
-                        { id: "unsupported-file" },
-                      );
-                    }
-                  }
+                  // const invalidTypes = [];
+                  // let atLeastOnceValidType = false;
+                  // for (let i = 0; i < items.length; i++) {
+                  //   const fileMimeType = items[i].type;
+                  //   if (!VALID_OCEL_MIME_TYPES.includes(fileMimeType)) {
+                  //     // invalidTypes.push(fileMimeType);
+                  //   } else {
+                  //     atLeastOnceValidType = true;
+                  //   }
+                  // }
+                  // if (!atLeastOnceValidType && items.length > 0 && invalidTypes.length > 0) {
+                  //   console.log(atLeastOnceValidType,items.length,invalidTypes)
+                  //   toast(
+                  //     `Files of type ${invalidTypes.join(", ")} are not supported!\n\nIf you are sure that this is an valid OCEL2 file, please select it manually by clicking on the dropzone.`,
+                  //     { id: "unsupported-file" },
+                  //   );
+                  // }
                 }}
                 onDrop={(ev) => {
                   ev.preventDefault();
+                  const invalidTypes: string[] = [];
                   const files = ev.dataTransfer.items;
-                  if (files.length > 0) {
-                    const fileWrapper = files[0];
+                  for (let i = 0; i < files.length; i++) {
+                    const fileWrapper = files[i];
                     const file = fileWrapper.getAsFile();
-                    if (VALID_OCEL_MIME_TYPES.includes(file?.type ?? "")) {
-                      handleFileUpload(file);
-                    } else {
-                      const fileType =
-                        file?.type == null ? "" : `(${file?.type})`;
-                      toast(
-                        `Files of this type ${fileType} are not supported!\n\nIf you are sure that this is an valid OCEL2 file, please select it manually by clicking on the dropzone.`,
-                        { id: "unsupported-file" },
-                      );
+                    if (file !== null) {
+                      console.log(file.type)
+                      // if (file?.type === undefined || VALID_OCEL_MIME_TYPES.includes(file?.type ?? "")) {
+                      setTimeout(() => {
+                        handleFileUpload(file);
+                      }, 100);
+                      return;
+                      // } else {
+                      //   invalidTypes.push(file?.type ?? "unknown");
+                      // }
                     }
+                  }
+                  if (invalidTypes.length > 0) {
+                    toast(
+                      `Files of this type ${invalidTypes.join(", ")} are not supported!\n\nIf you are sure that this is an valid OCEL2 file, please select it manually by clicking on the dropzone.`,
+                      { id: "unsupported-file" },
+                    );
                   }
                 }}
               >
@@ -733,6 +747,22 @@ function InnerApp({ children }: { children?: ReactNode }) {
                     </p>
                   </div>
                   <input
+                    onClickCapture={(ev) => {
+                      if (backend['ocel/picker']) {
+                        ev.preventDefault();
+                        void toast
+                          .promise(backend["ocel/picker"]!(), {
+                            loading: "Loading OCEL2...",
+                            success: "Imported OCEL2",
+                            error: "Failed to load OCEL2",
+                          })
+                          .then((ocelInfo) => {
+                            setOcelInfoAndNavigate(ocelInfo);
+                          })
+                          .finally(() => setLoading(false));
+                      }
+
+                    }}
                     onChange={(ev) => {
                       if (ev.currentTarget.files !== null) {
                         handleFileUpload(ev.currentTarget.files[0]);

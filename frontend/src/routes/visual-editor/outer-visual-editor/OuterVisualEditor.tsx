@@ -65,8 +65,8 @@ export default function VisualEditorOuter() {
     instance?: ReactFlowInstance | undefined;
     getter?: () =>
       | {
-          violations?: EvaluationResPerNodes;
-        }
+        violations?: EvaluationResPerNodes;
+      }
       | undefined;
   }>({});
 
@@ -270,12 +270,12 @@ export default function VisualEditorOuter() {
           otherData:
             activeIndex !== undefined
               ? {
-                  violations: prevDataRef.current[activeIndex]?.violations,
-                  nodes: prevDataRef.current[activeIndex]?.flowJson?.nodes,
-                  edges: prevDataRef.current[activeIndex]?.flowJson?.edges,
-                  viewport:
-                    prevDataRef.current[activeIndex]?.flowJson?.viewport,
-                }
+                violations: prevDataRef.current[activeIndex]?.violations,
+                nodes: prevDataRef.current[activeIndex]?.flowJson?.nodes,
+                edges: prevDataRef.current[activeIndex]?.flowJson?.edges,
+                viewport:
+                  prevDataRef.current[activeIndex]?.flowJson?.viewport,
+              }
               : undefined,
         }}
       >
@@ -285,11 +285,10 @@ export default function VisualEditorOuter() {
             objectQualifiers !== undefined && (
               <>
                 <div
-                  className={`w-full max-w-4xl gap-y-2 ${
-                    constraints.length > 0
+                  className={`w-full max-w-4xl gap-y-2 ${constraints.length > 0
                       ? "justify-between"
                       : "justify-center"
-                  }`}
+                    }`}
                 ></div>
                 <AlertDialog
                   open={deletePromptForIndex !== undefined}
@@ -353,11 +352,11 @@ export default function VisualEditorOuter() {
                       className={clsx(
                         "grid w-full px-4 text-center",
                         activeIndex !== undefined &&
-                          constraints[activeIndex] !== undefined &&
-                          "grid-cols-[1fr,1fr,1fr]",
+                        constraints[activeIndex] !== undefined &&
+                        "grid-cols-[1fr,1fr,1fr]",
                         (activeIndex === undefined ||
                           constraints[activeIndex] === undefined) &&
-                          "grid-cols-1 max-w-sm mx-auto h-full",
+                        "grid-cols-1 max-w-sm mx-auto h-full",
                       )}
                     >
                       <div className="flex flex-col w-full h-full relative">
@@ -490,6 +489,19 @@ export default function VisualEditorOuter() {
                             </Button>
                           </div>
                         </div>
+                        {constraints.length === 0 && <Button className="text-lg h-14" onClick={() => {
+                          changeIndex(
+                            constraints.length,
+                            constraints.length + 1,
+                          );
+                          setConstraints((cs) => [
+                            ...cs,
+                            {
+                              name: `My first OCPQ Query`,
+                              description: "",
+                            },
+                          ]);
+                        }}>Create your first query...</Button>}
                         <div className="h-full w-full">
                           <AutoSizer>
                             {({ height, width }) => (
@@ -584,15 +596,15 @@ export default function VisualEditorOuter() {
                             <p className="h-[1.5rem]">Query Info</p>
                             <div className="px-2 border rounded flex flex-col items-center justify-around w-full">
                               {prevDataRef.current[activeIndex]?.flowJson !==
-                              undefined
+                                undefined
                                 ? prevDataRef.current[activeIndex].flowJson
-                                    .nodes.length
+                                  .nodes.length
                                 : 0}{" "}
                               Nodes,{" "}
                               {prevDataRef.current[activeIndex]?.flowJson !==
-                              undefined
+                                undefined
                                 ? prevDataRef.current[activeIndex].flowJson
-                                    .edges.length
+                                  .edges.length
                                 : 0}{" "}
                               Edges
                               <TotalViolationInfo

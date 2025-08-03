@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::File,
     io::{Cursor, Write},
+    path::Path,
     sync::Arc,
 };
 
@@ -30,11 +31,12 @@ use ocpq_shared::{
 };
 use process_mining::{
     export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
-    import_ocel_json_from_path, import_ocel_sqlite_from_path, import_ocel_xml_file,
+    import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
+    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice, OCEL,
 };
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
-    AppHandle, State,
+    AppHandle, Manager, State,
 };
 use tauri_plugin_dialog::DialogExt;
 
@@ -46,14 +48,41 @@ pub struct AppState {
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
 }
 
-#[tauri::command(async)]
-async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
-    let ocel = match path.ends_with(".json") {
+fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
+    let path = path.as_ref();
+    println!("{:?}",path);
+    let path_str = path.to_string_lossy();
+    let ocel = match path_str.ends_with(".json") {
         true => import_ocel_json_from_path(path).map_err(|e| format!("{:?}", e))?,
-        false => match path.ends_with(".xml") {
+        false => match path_str.ends_with(".xml") {
             true => import_ocel_xml_file(path),
             false => import_ocel_sqlite_from_path(path).map_err(|e| format!("{:?}", e))?,
         },
+    };
+    Ok(ocel)
+}
+#[tauri::command(async)]
+async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
+    let ocel = import_ocel_from_path(path)?;
+    let ocel_info: OCELInfo = (&ocel).into();
+    let mut state_guard = state.ocel.write().await;
+    *state_guard = Some(link_ocel_info(ocel));
+    Ok(ocel_info)
+}
+
+#[tauri::command(async)]
+async fn import_ocel_slice(
+    data: Vec<u8>,
+    format: &str,
+    state: tauri::State<'_, AppState>,
+) -> Result<OCELInfo, String> {
+    let ocel = match format {
+        "xml" => import_ocel_xml_slice(&data),
+        "json" => import_ocel_json_from_slice(&data).map_err(|e| e.to_string())?,
+        "sqlite" => import_ocel_sqlite_from_slice(&data).map_err(|e| e.to_string())?,
+        _ => {
+            return Err("Unknown OCEL format {format}.".to_string());
+        }
     };
     let ocel_info: OCELInfo = (&ocel).into();
     let mut state_guard = state.ocel.write().await;
@@ -302,9 +331,47 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState::default())
+        // .manage(AppState::default())
+        .setup(|app| {
+            let mut state = AppState::default();
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                let mut files = Vec::new();
+
+                // NOTICE: `args` may include URL protocol (`your-app-protocol://`)
+                // or arguments (`--`) if your app supports them.
+                // files may aslo be passed as `file://path/to/file`
+                for maybe_file in std::env::args().skip(1) {
+                    // skip flags like -f or --flag
+
+                    use std::path::PathBuf;
+                    if maybe_file.starts_with('-') {
+                        continue;
+                    }
+
+                    // handle `file://` path urls and skip other urls
+                    if let Ok(url) = url::Url::parse(&maybe_file) {
+                        if let Ok(path) = url.to_file_path() {
+                            files.push(path);
+                        }
+                    } else {
+                        files.push(PathBuf::from(maybe_file))
+                    }
+                }
+                for f in files {
+                    let ocel = import_ocel_from_path(f.to_str().unwrap());
+                    if let Ok(ocel) = ocel {
+                        state.ocel = Arc::new(RwLock::new(Some(link_ocel_info(ocel))));
+                        break;
+                    }
+                }
+            }
+            app.manage(state);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             import_ocel,
+            import_ocel_slice,
             get_current_ocel_info,
             get_event_qualifiers,
             get_object_qualifiers,
