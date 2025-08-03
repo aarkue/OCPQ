@@ -1,25 +1,24 @@
-import "$/index.css";
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { Toaster } from "react-hot-toast";
-import { MainRouterProvider } from "$/router";
 import {
   type BackendProvider,
   BackendProviderContext,
 } from "$/BackendProviderContext";
-import { invoke } from "@tauri-apps/api/core";
+import "$/index.css";
+import { MainRouterProvider } from "$/router";
+import type { DiscoverConstraintsResponse } from "$/routes/visual-editor/helper/types";
+import { BindingBoxTree } from "$/types/generated/BindingBoxTree";
+import { OCPQJobOptions } from "$/types/generated/OCPQJobOptions";
+import { ConnectionConfig, JobStatus } from "$/types/hpc-backend";
 import type {
   EventTypeQualifiers,
   OCELInfo,
   ObjectTypeQualifiers,
 } from "$/types/ocel";
-import type { DiscoverConstraintsResponse } from "$/routes/visual-editor/helper/types";
-import { BindingBoxTree } from "$/types/generated/BindingBoxTree";
-import { OCPQJobOptions } from "$/types/generated/OCPQJobOptions";
-import { ConnectionConfig, JobStatus } from "$/types/hpc-backend";
+import { invoke } from "@tauri-apps/api/core";
+import * as dialog from "@tauri-apps/plugin-dialog";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import * as dialog from "@tauri-apps/plugin-dialog"
+import React from "react";
+import ReactDOM from "react-dom/client";
 
 const tauriBackend: BackendProvider = {
   "ocel/info": async () => {
@@ -43,7 +42,7 @@ const tauriBackend: BackendProvider = {
       : ocelFile.name.endsWith(".xml")
         ? "xml"
         : "sqlite";
-    const ocelInfo: OCELInfo = await invoke("import_ocel_slice", { data: await ocelFile.bytes(), format });
+    const ocelInfo: OCELInfo = await invoke("import_ocel_slice", { data: await ocelFile.arrayBuffer(), format });
     return ocelInfo;
 
   },
