@@ -130,7 +130,7 @@ function App() {
           }}
         >
           <AlertDialogTrigger asChild>
-            <Button className="mt-8">
+            <Button className="mt-8" variant="ghost">
               Backend Mode:{" "}
               <span className="font-bold ml-1">
                 {backendMode === "local" ? "local" : "HPC"}
@@ -598,15 +598,18 @@ function InnerApp({ children }: { children?: ReactNode }) {
             <br />
             {!isAtRoot && (
               <>
-                <MenuLink to={"/"}>Back</MenuLink>
+                <MenuLink to={"/"}>Load another dataset</MenuLink>
               </>
             )}
             {children}
           </div>
         </div>
-        <div className="px-4 overflow-auto">
+        <div className="px-4 overflow-auto my-4">
           {isAtRoot && (
-            <h2 className="text-3xl font-semibold mb-4">Load OCEL</h2>
+            <>
+              <h2 className="text-4xl font-semibold">Load a Dataset</h2>
+              <p className="text-muted-foreground mb-2">OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite)</p>
+            </>
           )}
           {isAtRoot &&
             filePickerAvailable &&
