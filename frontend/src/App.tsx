@@ -46,7 +46,7 @@ import {
   AlertDialogTrigger,
 } from "./components/ui/alert-dialog";
 import { CheckCircledIcon, CheckIcon } from "@radix-ui/react-icons";
-import { BsCheckCircleFill } from "react-icons/bs";
+import { BsCheckCircleFill, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml } from "react-icons/bs";
 import { Label } from "./components/ui/label";
 import { Input } from "./components/ui/input";
 import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
@@ -494,7 +494,74 @@ function InnerApp({ children }: { children?: ReactNode }) {
           setAvailableOcels(res);
         });
     }
+
+    if(backend["ocel/get-initial-files"] !== undefined){
+      backend["ocel/get-initial-files"]().then((res) => {
+        if(res.length > 0){
+          const path = res[0];
+          setLoading(true);
+          void toast
+            .promise(backend['ocel/picker']!(path), {
+              loading: "Loading OCEL2...",
+              success: "Imported OCEL2",
+              error: "Failed to load OCEL2",
+            })
+            .then((ocelInfo) => {
+              setOcelInfoAndNavigate(ocelInfo);
+            })
+            .finally(() => setLoading(false));
+        }
+      })
+    }
+
   }, [backend]);
+
+
+  useEffect(() => {
+
+    let dragDropUnregister: (() => unknown)| undefined|true = undefined;
+
+        if (backend['drag-drop-listener'] !== undefined && backend['ocel/picker'] !== undefined) {
+      backend['drag-drop-listener']((e) => {
+        if(loading){
+          return;
+        }
+        if(e.type === "enter"){
+          if(e.path.endsWith(".json") || e.path.endsWith(".xml") || e.path.endsWith(".sqlite")) {
+            const Icon = e.path.endsWith(".json") ? BsFiletypeJson : e.path.endsWith(".xml") ? BsFiletypeXml : BsFiletypeSql;
+            toast(<p className="text-md font-medium flex items-center gap-x-1"><Icon size={24} className="text-green-600"/>Drop to load as OCEL dataset</p>, {position: "bottom-center", style: {marginBottom: "1rem"}, id: "ocel-drop-hint"});
+          }
+        }
+        if (e.type === "drop") {
+          setLoading(true);
+          void toast
+            .promise(backend['ocel/picker']!(e.path), {
+              loading: "Loading OCEL2...",
+              success: "Imported OCEL2",
+              error: "Failed to load OCEL2",
+            })
+            .then((ocelInfo) => {
+              setOcelInfoAndNavigate(ocelInfo);
+            })
+            .finally(() => setLoading(false));
+        }
+      }).then(unregister => {
+        if(dragDropUnregister === true){
+          // Immediately unregister, because cleanup already happened....
+          unregister()
+        }else{
+          dragDropUnregister = unregister;
+        }
+      })
+    }
+    return () => {
+      if(typeof dragDropUnregister === "function"){
+        dragDropUnregister();
+      }else{
+        dragDropUnregister = true;
+      }
+    }
+  },[backend,loading])
 
   async function loadOcel() {
     if (selectedOcel == null) {
@@ -523,9 +590,10 @@ function InnerApp({ children }: { children?: ReactNode }) {
       return;
     }
     if (file != null) {
+      setLoading(true);
       void toast
         .promise(backend["ocel/upload"](file), {
-          loading: "Importing file...",
+          loading: "Importing OCEL...",
           success: "Imported OCEL",
           error: "Failed to import OCEL",
         })
@@ -535,7 +603,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
           } else {
             setOcelInfo(undefined);
           }
-        });
+        }).finally(() => setLoading(false));
     }
   }
 
@@ -685,7 +753,10 @@ function InnerApp({ children }: { children?: ReactNode }) {
                 className="flex items-center justify-center w-full max-w-2xl mx-auto"
                 onDragOver={(ev) => {
                   ev.preventDefault();
-                  const items = ev.dataTransfer.items;
+                  if (loading) {
+                    return;
+                  }
+                  // const items = ev.dataTransfer.items;
                   // const invalidTypes = [];
                   // let atLeastOnceValidType = false;
                   // for (let i = 0; i < items.length; i++) {
@@ -706,17 +777,21 @@ function InnerApp({ children }: { children?: ReactNode }) {
                 }}
                 onDrop={(ev) => {
                   ev.preventDefault();
+                  if (loading) {
+                    return;
+                  }
                   const invalidTypes: string[] = [];
                   const files = ev.dataTransfer.items;
                   for (let i = 0; i < files.length; i++) {
                     const fileWrapper = files[i];
                     const file = fileWrapper.getAsFile();
+                    console.log(file?.webkitRelativePath);
                     if (file !== null) {
                       console.log(file.type)
                       // if (file?.type === undefined || VALID_OCEL_MIME_TYPES.includes(file?.type ?? "")) {
                       setTimeout(() => {
                         handleFileUpload(file);
-                      }, 100);
+                      }, 500);
                       return;
                       // } else {
                       //   invalidTypes.push(file?.type ?? "unknown");
@@ -733,7 +808,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
               >
                 <label
                   htmlFor="dropzone-ocel-file"
-                  className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-400 border-dashed rounded-lg cursor-pointer bg-blue-50/20 hover:bg-blue-100/30"
+                  className={clsx("flex flex-col items-center justify-center w-full h-64 border-2 border-gray-400 border-dashed rounded-lg cursor-pointer", !loading && " bg-blue-50/20 hover:bg-blue-100/30", loading && "bg-gray-200/30")}
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <p className="mb-2 text-sm text-gray-500">
@@ -746,7 +821,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
                       Supported: OCEL2-JSON, OCEL2-XML, OCEL2-SQLITE
                     </p>
                   </div>
-                  <input
+                  <input disabled={loading}
                     onClickCapture={(ev) => {
                       if (backend['ocel/picker']) {
                         ev.preventDefault();

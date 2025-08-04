@@ -1,11 +1,9 @@
-import { useContext } from "react";
-import OcelTypeViewer from "./OcelTypeViewer";
 import { OcelInfoContext } from "@/App";
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LuArrowRight, LuLink } from "react-icons/lu";
-import { BsArrowRight } from "react-icons/bs";
+import { useContext } from "react";
 import { RxArrowRight } from "react-icons/rx";
+import { Link } from "react-router-dom";
+import OcelTypeViewer from "./OcelTypeViewer";
 
 export default function OcelInfoViewer() {
   const ocelInfo = useContext(OcelInfoContext);
@@ -19,6 +17,8 @@ export default function OcelInfoViewer() {
         <span>{ocelInfo.num_events} Events</span>
         <span>{ocelInfo.num_objects} Objects</span>
       </p>
+    <Link to="/constraints">
+    <Button size="lg" className="w-fit h-16 text-xl mt-4 mb-2"> <RxArrowRight className="mr-2"/> Query & Constraint Editor</Button></Link>
       <div className="grid grid-cols-[1fr,1fr] gap-x-2">
       <div className="bg-green-100 py-4 px-2 my-4 rounded-lg shadow border border-emerald-200">
         <h3 className="text-2xl font-semibold">
@@ -47,8 +47,6 @@ export default function OcelInfoViewer() {
         </div>
       </div>
     </div>
-    <Link to="/constraints">
-    <Button size="lg" className="w-fit h-16 text-xl"> <RxArrowRight className="mr-2"/> Query & Constraint Editor</Button></Link>
         
       </div>
   );

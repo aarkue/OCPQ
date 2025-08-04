@@ -6,7 +6,7 @@ use std::{
     fs::File,
     io::{Cursor, Write},
     path::Path,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use ocpq_shared::{
@@ -46,6 +46,7 @@ pub struct AppState {
     client: Arc<RwLock<Option<Client>>>,
     jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
+    initial_files: Arc<Mutex<Option<Vec<String>>>>,
 }
 
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
@@ -327,6 +328,19 @@ async fn get_hpc_job_status_tauri(
     Ok(status)
 }
 
+#[tauri::command]
+fn get_initial_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let mut ret = state.initial_files.lock().unwrap();
+    if let Some(ret) = ret.take() {
+        Ok(ret)
+    }else{
+        Ok(Vec::default())
+    }
+}
+
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -358,13 +372,7 @@ fn main() {
                         files.push(PathBuf::from(maybe_file))
                     }
                 }
-                for f in files {
-                    let ocel = import_ocel_from_path(f.to_str().unwrap());
-                    if let Ok(ocel) = ocel {
-                        state.ocel = Arc::new(RwLock::new(Some(link_ocel_info(ocel))));
-                        break;
-                    }
-                }
+                state.initial_files = Arc::new(Mutex::new(Some(files.into_iter().map(|f| f.to_string_lossy().to_string()).collect())));
             }
             app.manage(state);
             Ok(())
@@ -384,7 +392,8 @@ fn main() {
             get_object,
             login_to_hpc_tauri,
             start_hpc_job_tauri,
-            get_hpc_job_status_tauri
+            get_hpc_job_status_tauri,
+            get_initial_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -19,17 +19,21 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 const tauriBackend: BackendProvider = {
   "ocel/info": async () => {
     const ocelInfo: OCELInfo | undefined = await invoke("get_current_ocel_info");
     return ocelInfo;
   },
-  "ocel/picker": async () => {
-    const path = await dialog.open({
-      title: "Select an OCEL2 file",
-      filters: [{ name: "OCEL2", extensions: ["json", "xml", "sqlite", "sqlite3", "db"] }],
-    });
+  "ocel/picker": async (givenPath) => {
+    let path: string | undefined | null = givenPath;
+    if (path === undefined) {
+      path = await dialog.open({
+        title: "Select an OCEL2 file",
+        filters: [{ name: "OCEL2", extensions: ["json", "xml", "sqlite", "sqlite3", "db"] }],
+      });
+    }
     if (typeof path === "string") {
       const ocelInfo: OCELInfo = await invoke("import_ocel", { path });
       return ocelInfo;
@@ -42,7 +46,11 @@ const tauriBackend: BackendProvider = {
       : ocelFile.name.endsWith(".xml")
         ? "xml"
         : "sqlite";
-    const ocelInfo: OCELInfo = await invoke("import_ocel_slice", { data: await ocelFile.arrayBuffer(), format });
+    const bytes = await ocelFile.arrayBuffer();
+    const ocelInfo: OCELInfo = await new Promise((res, rej) => setTimeout(async () => {
+      const ocelInfo: OCELInfo = await invoke("import_ocel_slice", { data: bytes, format });
+      res(ocelInfo);
+    }, 100));
     return ocelInfo;
 
   },
@@ -96,8 +104,32 @@ const tauriBackend: BackendProvider = {
     if (filePath) {
       await writeFile(filePath, new Uint8Array(await blob.arrayBuffer()));
     }
+  },
+  "drag-drop-listener": async (f) => {
+    return await getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "enter") {
+        f({ type: "enter", path: event.payload.paths[0] })
+      } else if (event.payload.type === "leave") {
+        f({ type: "leave" })
+      } else if (event.payload.type === "drop") {
+        f({ type: "drop", path: event.payload.paths[0] })
+      }
+    })
+  },
+  "ocel/get-initial-files": () => {
+    return invoke("get_initial_files")
   }
 };
+
+// const unlisten = await getCurrentWebview().onDragDropEvent((event) => {
+//  if (event.payload.type === 'over') {
+//    console.log('User hovering', event.payload.position);
+//  } else if (event.payload.type === 'drop') {
+//    console.log('User dropped', event.payload.paths);
+//  } else {
+//    console.log('File drop cancelled');
+//  }
+// });
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 ReactDOM.createRoot(document.getElementById("root")!).render(

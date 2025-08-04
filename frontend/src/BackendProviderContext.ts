@@ -6,6 +6,9 @@ import type {
 import type { BindingBoxTree } from "./types/generated/BindingBoxTree";
 import type { EvaluateBoxTreeResult } from "./types/generated/EvaluateBoxTreeResult";
 import type { OCELGraphOptions } from "./types/generated/OCELGraphOptions";
+import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
+import { type TableExportOptions } from "./types/generated/TableExportOptions";
+import { type ConnectionConfig, type JobStatus } from "./types/hpc-backend";
 import type {
   EventTypeQualifiers,
   OCELEvent,
@@ -13,17 +16,12 @@ import type {
   OCELObject,
   ObjectTypeQualifiers,
 } from "./types/ocel";
-import { EvaluationResultWithCount } from "./types/generated/EvaluationResultWithCount";
-import { type TableExportOptions } from "./types/generated/TableExportOptions";
-import { z } from "zod";
-import { type ConnectionConfig, type JobStatus } from "./types/hpc-backend";
-import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;
   "ocel/available"?: () => Promise<string[]>;
   "ocel/load"?: (name: string) => Promise<OCELInfo>;
-  "ocel/picker"?: () => Promise<OCELInfo>;
+  "ocel/picker"?: (path?: string) => Promise<OCELInfo>;
   "ocel/check-constraints-box": (
     tree: BindingBoxTree,
     measurePerformance?: boolean,
@@ -55,6 +53,9 @@ export type BackendProvider = {
   "hpc/start": (jobOptions: OCPQJobOptions) => Promise<string>;
   "hpc/job-status": (jobID: string) => Promise<JobStatus>;
   "download-blob": (blob: Blob, fileName: string) => unknown;
+  // Register drag/drop listener, returns unregister function
+  "drag-drop-listener"?: (f: (args: ({ type: "enter", path: string } | { type: "leave" } | { type: "drop", path: string })) => unknown) => Promise<(() => unknown)>,
+  "ocel/get-initial-files"?: () => Promise<string[]>,
 };
 
 export async function warnForNoBackendProvider<T>(): Promise<T> {
@@ -109,8 +110,8 @@ export function getAPIServerBackendProvider(
       const type = ocelFile.name.endsWith(".json")
         ? "json"
         : ocelFile.name.endsWith(".xml")
-        ? "xml"
-        : "sqlite";
+          ? "xml"
+          : "sqlite";
       return await (
         await fetch(localBackendURL + `/ocel/upload-${type}`, {
           method: "post",

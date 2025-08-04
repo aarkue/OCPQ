@@ -70,7 +70,7 @@
         "title": "OCPQ (App)",
         "width": 800,
         "useHttpsScheme": true,
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       }
     ],
     "security": {
