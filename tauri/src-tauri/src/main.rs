@@ -340,14 +340,16 @@ fn get_initial_files(state: State<'_, AppState>) -> Result<Vec<String>, String> 
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         // .manage(AppState::default())
         .setup(|app| {
+            log::info!("Setup!");
             let mut state = AppState::default();
-            #[cfg(any(windows, target_os = "linux"))]
+            // #[cfg(any(windows, target_os = "linux"))]
             {
                 let mut files = Vec::new();
 
@@ -356,7 +358,8 @@ fn main() {
                 // files may aslo be passed as `file://path/to/file`
                 for maybe_file in std::env::args().skip(1) {
                     // skip flags like -f or --flag
-
+                    log::info!("Args: {}", maybe_file);
+                    // println!("Got arg: {}", maybe_file);
                     use std::path::PathBuf;
                     if maybe_file.starts_with('-') {
                         continue;
@@ -366,6 +369,9 @@ fn main() {
                     if let Ok(url) = url::Url::parse(&maybe_file) {
                         if let Ok(path) = url.to_file_path() {
                             files.push(path);
+                        } else {
+                            log::info!("Url file path failed. Using directly as PathBuf instead.");
+                            files.push(maybe_file.into());
                         }
                     } else {
                         files.push(PathBuf::from(maybe_file))
@@ -399,6 +405,23 @@ fn main() {
             get_hpc_job_status_tauri,
             get_initial_files
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(
+            #[allow(unused_variables)]
+            |app, event| {
+                #[cfg(any(target_os = "macos", target_os = "ios"))]
+                if let tauri::RunEvent::Opened { urls } = event {
+                    // let urls: Vec<url::Url> = Vec::new();
+                    let files = urls
+                        .into_iter()
+                        .filter_map(|url| url.to_file_path().ok())
+                        .collect::<Vec<_>>();
+                    let strs: Vec<_> = files.into_iter().map(|f| f.to_string_lossy().to_string()).collect();
+                    let state = app.state::<AppState>();
+                    let mut initial_files = state.initial_files.lock().unwrap();
+                    *initial_files = Some(strs);
+                }
+            },
+        );
 }

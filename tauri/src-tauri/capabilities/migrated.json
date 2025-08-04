@@ -12,6 +12,8 @@
     "dialog:allow-save",
     "dialog:default",
     "fs:default",
-    "updater:default"
+    "updater:default",
+    "process:default",
+    "log:default"
   ]
 }
