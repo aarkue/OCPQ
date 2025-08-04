@@ -56,6 +56,27 @@ export type BackendProvider = {
   // Register drag/drop listener, returns unregister function
   "drag-drop-listener"?: (f: (args: ({ type: "enter", path: string } | { type: "leave" } | { type: "drop", path: string })) => unknown) => Promise<(() => unknown)>,
   "ocel/get-initial-files"?: () => Promise<string[]>,
+  "check-for-updates"?: () => Promise<UpdateInfo | null>,
+  "restart"?: () => Promise<void>,
+};
+
+export type UpdateInfo = {
+  currentVersion: string, version: string, date?: string, body?: string,
+  download: (onEvent: (progress: {
+    event: 'Started';
+    data: {
+      contentLength?: number;
+    };
+  } | {
+    event: 'Progress';
+    data: {
+      chunkLength: number;
+    };
+  } | {
+    event: 'Finished';
+  }) => void) => Promise<void>,
+  install: () => Promise<void>,
+  close: () => Promise<void>,
 };
 
 export async function warnForNoBackendProvider<T>(): Promise<T> {

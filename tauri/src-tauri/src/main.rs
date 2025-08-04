@@ -51,7 +51,7 @@ pub struct AppState {
 
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
     let path = path.as_ref();
-    println!("{:?}",path);
+    println!("{:?}", path);
     let path_str = path.to_string_lossy();
     let ocel = match path_str.ends_with(".json") {
         true => import_ocel_json_from_path(path).map_err(|e| format!("{:?}", e))?,
@@ -329,20 +329,19 @@ async fn get_hpc_job_status_tauri(
 }
 
 #[tauri::command]
-fn get_initial_files(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+fn get_initial_files(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let mut ret = state.initial_files.lock().unwrap();
     if let Some(ret) = ret.take() {
         Ok(ret)
-    }else{
+    } else {
         Ok(Vec::default())
     }
 }
 
-
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         // .manage(AppState::default())
@@ -372,7 +371,12 @@ fn main() {
                         files.push(PathBuf::from(maybe_file))
                     }
                 }
-                state.initial_files = Arc::new(Mutex::new(Some(files.into_iter().map(|f| f.to_string_lossy().to_string()).collect())));
+                state.initial_files = Arc::new(Mutex::new(Some(
+                    files
+                        .into_iter()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .collect(),
+                )));
             }
             app.manage(state);
             Ok(())

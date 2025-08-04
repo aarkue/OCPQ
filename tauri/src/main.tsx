@@ -14,12 +14,16 @@ import type {
   ObjectTypeQualifiers,
 } from "$/types/ocel";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import * as dialog from "@tauri-apps/plugin-dialog";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
+
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
+
 
 const tauriBackend: BackendProvider = {
   "ocel/info": async () => {
@@ -106,7 +110,7 @@ const tauriBackend: BackendProvider = {
     }
   },
   "drag-drop-listener": async (f) => {
-    return await getCurrentWebview().onDragDropEvent((event) => {
+    const unregister = await getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === "enter") {
         f({ type: "enter", path: event.payload.paths[0] })
       } else if (event.payload.type === "leave") {
@@ -114,22 +118,23 @@ const tauriBackend: BackendProvider = {
       } else if (event.payload.type === "drop") {
         f({ type: "drop", path: event.payload.paths[0] })
       }
-    })
+    });
+    return unregister;
   },
   "ocel/get-initial-files": () => {
     return invoke("get_initial_files")
+  },
+  "check-for-updates": async () => {
+    const update = await check();
+    if (update === null) {
+      return update;
+    }
+    return update
+  },
+  "restart": () => {
+  return relaunch()
   }
 };
-
-// const unlisten = await getCurrentWebview().onDragDropEvent((event) => {
-//  if (event.payload.type === 'over') {
-//    console.log('User hovering', event.payload.position);
-//  } else if (event.payload.type === 'drop') {
-//    console.log('User dropped', event.payload.paths);
-//  } else {
-//    console.log('File drop cancelled');
-//  }
-// });
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 ReactDOM.createRoot(document.getElementById("root")!).render(

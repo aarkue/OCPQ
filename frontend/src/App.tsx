@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import clsx from "clsx";
 import {
   createContext,
   type ReactNode,
@@ -15,26 +16,23 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
+import { BsCheckCircleFill, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml } from "react-icons/bs";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import {
   type BackendProvider,
   BackendProviderContext,
-  ErrorBackendContext,
-  getAPIServerBackendProvider,
+  getAPIServerBackendProvider
 } from "./BackendProviderContext";
+import ConnectionConfigForm from "./components/hpc/HPCConnectionConfigForm";
 import MenuLink from "./components/MenuLink";
 import Spinner from "./components/Spinner";
-import { Button } from "./components/ui/button";
-import { type OCELInfo } from "./types/ocel";
-import AlertHelper from "./components/AlertHelper";
-import ConnectionConfigForm from "./components/hpc/HPCConnectionConfigForm";
 import {
-  type ConnectionConfig,
-  connectionFormSchema,
-  type JobStatus,
-} from "./types/hpc-backend";
-import { z } from "zod";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./components/ui/accordion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,19 +43,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "./components/ui/alert-dialog";
-import { CheckCircledIcon, CheckIcon } from "@radix-ui/react-icons";
-import { BsCheckCircleFill, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml } from "react-icons/bs";
-import { Label } from "./components/ui/label";
+import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
+import { Label } from "./components/ui/label";
+import { UpdateButton } from "./components/UpdateButton";
 import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
-import clsx from "clsx";
-import { Combobox } from "./components/ui/combobox";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "./components/ui/accordion";
+  type ConnectionConfig,
+  type JobStatus
+} from "./types/hpc-backend";
+import { type OCELInfo } from "./types/ocel";
 const VALID_OCEL_MIME_TYPES = [
   "application/json",
   "text/json",
@@ -495,9 +490,9 @@ function InnerApp({ children }: { children?: ReactNode }) {
         });
     }
 
-    if(backend["ocel/get-initial-files"] !== undefined){
+    if (backend["ocel/get-initial-files"] !== undefined) {
       backend["ocel/get-initial-files"]().then((res) => {
-        if(res.length > 0){
+        if (res.length > 0) {
           const path = res[0];
           setLoading(true);
           void toast
@@ -516,20 +511,21 @@ function InnerApp({ children }: { children?: ReactNode }) {
 
   }, [backend]);
 
-
+  const initRef = useRef(false);
   useEffect(() => {
 
-    let dragDropUnregister: (() => unknown)| undefined|true = undefined;
+    let dragDropUnregister: (() => unknown) | undefined | true = undefined;
 
-        if (backend['drag-drop-listener'] !== undefined && backend['ocel/picker'] !== undefined) {
+    if (initRef.current === false && backend['drag-drop-listener'] !== undefined && backend['ocel/picker'] !== undefined) {
+      initRef.current = true;
       backend['drag-drop-listener']((e) => {
-        if(loading){
+        if (loading) {
           return;
         }
-        if(e.type === "enter"){
-          if(e.path.endsWith(".json") || e.path.endsWith(".xml") || e.path.endsWith(".sqlite")) {
+        if (e.type === "enter") {
+          if (e.path.endsWith(".json") || e.path.endsWith(".xml") || e.path.endsWith(".sqlite")) {
             const Icon = e.path.endsWith(".json") ? BsFiletypeJson : e.path.endsWith(".xml") ? BsFiletypeXml : BsFiletypeSql;
-            toast(<p className="text-md font-medium flex items-center gap-x-1"><Icon size={24} className="text-green-600"/>Drop to load as OCEL dataset</p>, {position: "bottom-center", style: {marginBottom: "1rem"}, id: "ocel-drop-hint"});
+            toast(<p className="text-md font-medium flex items-center gap-x-1"><Icon size={24} className="text-green-600" />Drop to load as OCEL dataset</p>, { position: "bottom-center", style: { marginBottom: "1rem" }, id: "ocel-drop-hint" });
           }
         }
         if (e.type === "drop") {
@@ -546,22 +542,22 @@ function InnerApp({ children }: { children?: ReactNode }) {
             .finally(() => setLoading(false));
         }
       }).then(unregister => {
-        if(dragDropUnregister === true){
+        console.log(dragDropUnregister)
+        if (dragDropUnregister === true) {
           // Immediately unregister, because cleanup already happened....
           unregister()
-        }else{
+        } else {
           dragDropUnregister = unregister;
         }
       })
     }
     return () => {
-      if(typeof dragDropUnregister === "function"){
+      if (typeof dragDropUnregister === "function") {
         dragDropUnregister();
-      }else{
-        dragDropUnregister = true;
       }
+      dragDropUnregister = true;
     }
-  },[backend,loading])
+  }, [backend, loading])
 
   async function loadOcel() {
     if (selectedOcel == null) {
@@ -669,6 +665,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
                 <MenuLink to={"/"}>Load another dataset</MenuLink>
               </>
             )}
+            <UpdateButton />
             {children}
           </div>
         </div>
