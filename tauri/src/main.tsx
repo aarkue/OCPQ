@@ -14,6 +14,7 @@ import type {
   ObjectTypeQualifiers,
 } from "$/types/ocel";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app"
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import * as dialog from "@tauri-apps/plugin-dialog";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -133,6 +134,9 @@ const tauriBackend: BackendProvider = {
   },
   "restart": () => {
   return relaunch()
+  },
+  "get-version": () => {
+    return getVersion()
   }
 };
 

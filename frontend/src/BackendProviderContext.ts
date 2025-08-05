@@ -58,6 +58,7 @@ export type BackendProvider = {
   "ocel/get-initial-files"?: () => Promise<string[]>,
   "check-for-updates"?: () => Promise<UpdateInfo | null>,
   "restart"?: () => Promise<void>,
+  "get-version"?: () => Promise<string>,
 };
 
 export type UpdateInfo = {

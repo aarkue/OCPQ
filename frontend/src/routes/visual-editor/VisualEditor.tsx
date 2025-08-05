@@ -349,9 +349,9 @@ export default function VisualEditor(props: VisualEditorProps) {
     const { x, y } = instance.screenToFlowPosition(mousePos.current);
     const firstNodeSize =
       NODE_TYPE_SIZE[
-        nodes[0].type === EVENT_TYPE_NODE_TYPE
-          ? EVENT_TYPE_NODE_TYPE
-          : GATE_NODE_TYPE
+      nodes[0].type === EVENT_TYPE_NODE_TYPE
+        ? EVENT_TYPE_NODE_TYPE
+        : GATE_NODE_TYPE
       ];
     const xOffset = x - nodeRect.x - firstNodeSize.width / 2;
     const yOffset = y - nodeRect.y - firstNodeSize.minHeight / 2;
@@ -537,9 +537,9 @@ export default function VisualEditor(props: VisualEditorProps) {
         const pos =
           x === undefined || y === undefined
             ? instance.screenToFlowPosition({
-                x: window.innerWidth / 2,
-                y: window.innerHeight / 1.5,
-              })
+              x: window.innerWidth / 2,
+              y: window.innerHeight / 1.5,
+            })
             : { x, y };
         return [
           ...nodes,
@@ -686,13 +686,12 @@ export default function VisualEditor(props: VisualEditorProps) {
       }}
     >
       <ContextMenu>
-        <ContextMenuTrigger className="pointer-events-auto hidden" asChild>
-          <button ref={contextMenuTriggerRef}></button>
+        <ContextMenuTrigger className="pointer-events-auto hidden " asChild ref={contextMenuTriggerRef}>
+          <button></button>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem
             onClick={(ev) => {
-              ev.stopPropagation();
               const { x, y } = instance.screenToFlowPosition({
                 x: ev.clientX,
                 y: ev.clientY,
@@ -721,16 +720,18 @@ export default function VisualEditor(props: VisualEditorProps) {
         defaultEdges={otherData?.edges ?? []}
         isValidConnection={isValidConnection}
         onContextMenu={(ev) => {
-          if (!ev.isDefaultPrevented() && contextMenuTriggerRef.current) {
-            contextMenuTriggerRef.current.dispatchEvent(
-              new MouseEvent("contextmenu", {
-                bubbles: true,
-                clientX: ev.clientX,
-                clientY: ev.clientY,
-              }),
-            );
-          }
+          const trigger = !ev.isDefaultPrevented();
+          ev.stopPropagation();
           ev.preventDefault();
+          if (trigger && contextMenuTriggerRef.current) {
+            let newEv = new MouseEvent("contextmenu", {
+              bubbles: true,
+              cancelable: true,
+              clientX: ev.clientX,
+              clientY: ev.clientY,
+            });
+            contextMenuTriggerRef.current.dispatchEvent(newEv);
+          }
         }}
         defaultEdgeOptions={{
           type: EVENT_TYPE_LINK_TYPE,
@@ -751,7 +752,7 @@ export default function VisualEditor(props: VisualEditorProps) {
           selectedRef.current = sel;
         }}
       >
-        <Controls onInteractiveChange={() => {}} />
+        <Controls onInteractiveChange={() => { }} />
         <Panel position="top-right" className="flex gap-x-2">
           <Button
             variant="outline"
@@ -811,7 +812,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                 variant="outline"
                 title="Add Gate"
                 className="bg-white relative"
-                onClick={() => {}}
+                onClick={() => { }}
               >
                 <TbLogicAnd size={20} />
                 <TbPlus
@@ -828,9 +829,9 @@ export default function VisualEditor(props: VisualEditorProps) {
                 const center =
                   instance != null
                     ? instance.screenToFlowPosition({
-                        x: window.innerWidth / 2,
-                        y: window.innerHeight / 2,
-                      })
+                      x: window.innerWidth / 2,
+                      y: window.innerHeight / 2,
+                    })
                     : { x: 0, y: 0 };
                 return [
                   ...nodes,
@@ -1097,8 +1098,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                           if (res) {
                             backend["download-blob"](
                               res,
-                              `${
-                                props.constraintInfo.name
+                              `${props.constraintInfo.name
                               }-export.${type.toLowerCase()}`,
                             );
                           }

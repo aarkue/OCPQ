@@ -193,7 +193,7 @@ export default function NewVariableChooser({
               )}
               {ocelInfo.event_types.length !== evTypes.length && (
                 <span
-                  className="ml-1 max-w-full shrink overflow-ellipsis overflow-hidden inline-block whitespace-pre text-left"
+                  className="ml-1 max-w-36 shrink overflow-ellipsis overflow-hidden inline-block whitespace-pre text-left"
                   title={evTypes.join(",\n")}
                 >
                   {evTypes.join(",\n")}

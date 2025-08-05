@@ -345,27 +345,26 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        // .manage(AppState::default())
+        .manage(AppState::default())
         .setup(|app| {
             log::info!("Setup!");
-            let mut state = AppState::default();
-            // #[cfg(any(windows, target_os = "linux"))]
+            #[cfg(any(windows, target_os = "linux"))]
             {
+                let state = app.state::<AppState>();
                 let mut files = Vec::new();
 
                 // NOTICE: `args` may include URL protocol (`your-app-protocol://`)
                 // or arguments (`--`) if your app supports them.
-                // files may aslo be passed as `file://path/to/file`
+                // files may also be passed as `file://path/to/file`
                 for maybe_file in std::env::args().skip(1) {
                     // skip flags like -f or --flag
                     log::info!("Args: {}", maybe_file);
-                    // println!("Got arg: {}", maybe_file);
                     use std::path::PathBuf;
                     if maybe_file.starts_with('-') {
                         continue;
                     }
 
-                    // handle `file://` path urls and skip other urls
+                    // handle `file://` path urls and fallback for other urls
                     if let Ok(url) = url::Url::parse(&maybe_file) {
                         if let Ok(path) = url.to_file_path() {
                             files.push(path);
@@ -377,14 +376,14 @@ fn main() {
                         files.push(PathBuf::from(maybe_file))
                     }
                 }
-                state.initial_files = Arc::new(Mutex::new(Some(
+                let mut init_files_guard = state.initial_files.lock().unwrap();
+                *init_files_guard = Some(
                     files
                         .into_iter()
                         .map(|f| f.to_string_lossy().to_string())
                         .collect(),
-                )));
+                );
             }
-            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -412,13 +411,15 @@ fn main() {
             |app, event| {
                 #[cfg(any(target_os = "macos", target_os = "ios"))]
                 if let tauri::RunEvent::Opened { urls } = event {
-                    // let urls: Vec<url::Url> = Vec::new();
+                    let state = app.state::<AppState>();
                     let files = urls
                         .into_iter()
                         .filter_map(|url| url.to_file_path().ok())
                         .collect::<Vec<_>>();
-                    let strs: Vec<_> = files.into_iter().map(|f| f.to_string_lossy().to_string()).collect();
-                    let state = app.state::<AppState>();
+                    let strs: Vec<_> = files
+                        .into_iter()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .collect();
                     let mut initial_files = state.initial_files.lock().unwrap();
                     *initial_files = Some(strs);
                 }

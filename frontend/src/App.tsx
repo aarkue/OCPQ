@@ -617,15 +617,15 @@ function InnerApp({ children }: { children?: ReactNode }) {
   return (
     <OcelInfoContext.Provider value={ocelInfo}>
       <div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[15rem_auto]">
-        <div className="bg-gray-50 border-r border-r-slate-200 px-2">
+        <div className="bg-gray-50 border-r border-r-slate-200 px-2 overflow-auto">
           <img
             src="/favicon.png"
-            className="w-[7rem] h-[7rem] mx-auto mt-4 mb-2"
+            className="w-[6rem] h-[6rem] mx-auto mt-4 mb-2"
           />
           <h2 className="font-bold text-3xl bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-sky-600 tracking-tighter">
             OCPQ
           </h2>
-          <div className="flex flex-col gap-2 mt-4">
+          <div className="flex flex-col gap-2 mt-1 text-xs">
             {backendAvailable && (
               <span className="text-green-700 font-semibold bg-green-200 w-fit mx-auto p-1 rounded">
                 Backend online
@@ -641,9 +641,11 @@ function InnerApp({ children }: { children?: ReactNode }) {
                 <span className=" font-semibold text-green-700">
                   OCEL loaded
                 </span>
-                <span>{ocelInfo.num_events} Events</span>
-                <span>{ocelInfo.num_objects} Objects</span>
+              <span className="text-sm grid grid-cols-[auto,1fr] text-right gap-x-2 items-baseline">
+                <span className="font-mono">{ocelInfo.num_events}</span> <span className="text-left">Events</span>
+                <span className="font-mono">{ocelInfo.num_objects}</span> <span className="text-left">Objects</span>
               </span>
+            </span>
             )}
             {ocelInfo != null && (
               <>

@@ -48,14 +48,21 @@
     },
     "fileAssociations": [
       {
-        "ext": ["xml"],
+        "ext": [
+          "xml"
+        ],
         "mimeType": "text/xml"
-      },      {
-        "ext": ["json"],
+      },
+      {
+        "ext": [
+          "json"
+        ],
         "mimeType": "text/plain"
       },
       {
-        "ext": ["sqlite"],
+        "ext": [
+          "sqlite"
+        ],
         "mimeType": "application/x-sqlite3"
       }
     ],

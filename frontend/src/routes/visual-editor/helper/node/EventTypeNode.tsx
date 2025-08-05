@@ -40,7 +40,9 @@ function EventTypeNode({ data, id, selected }: NodeProps<EventTypeNodeData>) {
   const [deleteAlertOpen, setDeleteAlertOpen] = useState(false);
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(ev) => {
+        ev.stopPropagation();
+      }}>
         <div
           className={clsx(
             "border-2 shadow-lg z-10 flex flex-col py-1 pb-2 px-0.5 rounded-md relative min-h-[5rem] w-[15rem]",
