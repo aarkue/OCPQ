@@ -25,14 +25,15 @@ use ocpq_shared::{
     },
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     ocel_qualifiers::qualifiers::{get_qualifiers_for_event_types, QualifiersForEventType},
-    preprocessing::linked_ocel::{link_ocel_info, IndexLinkedOCEL},
+    preprocessing::preprocess::get_object_rels_per_type,
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
 use process_mining::{
     export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
     import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
-    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice, OCEL,
+    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice,
+    ocel::linked_ocel::IndexLinkedOCEL, OCEL,
 };
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
@@ -67,7 +68,7 @@ async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OC
     let ocel = import_ocel_from_path(path)?;
     let ocel_info: OCELInfo = (&ocel).into();
     let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(link_ocel_info(ocel));
+    *state_guard = Some(ocel.into());
     Ok(ocel_info)
 }
 
@@ -87,7 +88,7 @@ async fn import_ocel_slice(
     };
     let ocel_info: OCELInfo = (&ocel).into();
     let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(link_ocel_info(ocel));
+    *state_guard = Some(ocel.into());
     Ok(ocel_info)
 }
 
@@ -96,7 +97,7 @@ async fn get_current_ocel_info(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<OCELInfo>, String> {
     let res: Result<Option<OCELInfo>, String> = match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(Some((&ocel.ocel).into())),
+        Some(ocel) => Ok(Some((ocel.get_ocel_ref()).into())),
         None => Ok(None),
     };
     res
@@ -107,7 +108,7 @@ async fn get_event_qualifiers(
     state: State<'_, AppState>,
 ) -> Result<HashMap<String, HashMap<String, QualifiersForEventType>>, String> {
     match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(get_qualifiers_for_event_types(&ocel.ocel)),
+        Some(ocel) => Ok(get_qualifiers_for_event_types(&ocel.get_ocel_ref())),
         None => Err("No OCEL loaded".to_string()),
     }
 }
@@ -117,7 +118,10 @@ async fn get_object_qualifiers(
     state: State<'_, AppState>,
 ) -> Result<HashMap<String, HashSet<(String, String)>>, String> {
     match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(ocel.object_rels_per_type.clone()),
+        Some(ocel) => {
+            let object_rels_per_type = get_object_rels_per_type(ocel);
+            Ok(object_rels_per_type)
+        }
         None => Err("No OCEL loaded".to_string()),
     }
 }
