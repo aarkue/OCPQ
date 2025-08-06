@@ -4,13 +4,16 @@ use std::{
 };
 
 use axum::{extract::State, http::StatusCode, Json};
-use ocpq_shared::{preprocessing::linked_ocel::IndexLinkedOCEL, OCELInfo};
+use ocpq_shared::OCELInfo;
 use serde::{Deserialize, Serialize};
 
 use process_mining::{
     event_log::ocel::ocel_struct::OCEL,
     import_ocel_sqlite_from_path,
-    ocel::xml_ocel_import::{import_ocel_xml_file_with, OCELImportOptions},
+    ocel::{
+        linked_ocel::IndexLinkedOCEL,
+        xml_ocel_import::{import_ocel_xml_file_with, OCELImportOptions},
+    },
 };
 
 use crate::AppState;
@@ -36,7 +39,7 @@ pub async fn get_available_ocels() -> (StatusCode, Json<Option<Vec<String>>>) {
             let path_buf = dir_entry.path();
             let path = path_buf.as_os_str().to_str().unwrap();
             if path.ends_with(".json") || path.ends_with(".xml") || path.ends_with(".sqlite") {
-                ocel_names.push(path.split('/').last().unwrap().to_string())
+                ocel_names.push(path.split('/').next_back().unwrap().to_string())
             }
         }
     }
@@ -58,11 +61,11 @@ pub fn load_ocel_file_to_state(name: &str, state: &AppState) -> Option<OCELInfo>
         Ok(ocel) => {
             let ocel_info: OCELInfo = (&ocel).into();
             let mut x = state.ocel.write().unwrap();
-            *x = Some(IndexLinkedOCEL::new(ocel));
+            *x = Some(IndexLinkedOCEL::from_ocel(ocel));
             Some(ocel_info)
         }
         Err(e) => {
-            eprintln!("Error importing OCEL: {:?}", e);
+            eprintln!("Error importing OCEL: {e:?}");
             None
         }
     }

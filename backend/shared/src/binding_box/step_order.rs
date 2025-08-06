@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
+use process_mining::ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess};
 
-use crate::{discovery::advanced::EventOrObjectType, preprocessing::linked_ocel::IndexLinkedOCEL};
+use crate::discovery::advanced::EventOrObjectType;
 
 use super::{
     structs::{BindingBox, BindingStep, Filter, Qualifier, Variable},
@@ -23,9 +24,11 @@ pub fn get_expected_relation_count(
     // First check if bound_by is already bound by parent
     if let Some(bound_by_index) = parent_binding_opt.and_then(|b| b.get_any_index(bound_by)) {
         if let Some(ocel) = ocel {
-            if let Some(bound_by_type) = ocel.get_type_of(bound_by_index) {
-                bound_by_types.push(bound_by_type)
-            }
+            let bound_by_type = match bound_by_index {
+                process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Event(event_index) => EventOrObjectType::Event(ocel.get_ev(&event_index).event_type.clone()),
+                process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Object(object_index) => EventOrObjectType::Object(ocel.get_ob(&object_index).object_type.clone()),
+                };
+            bound_by_types.push(bound_by_type);
         }
     } else {
         bound_by_types = match bound_by {
@@ -48,11 +51,13 @@ pub fn get_expected_relation_count(
     let res = bound_by_types
         .into_iter()
         .map(|bound_by_type| {
-            ocel.unwrap()
-                .avg_rels_of_type_per_type
-                .get(&bound_by_type)
-                .copied()
-                .unwrap_or_default()
+            // TODO
+            0.0
+            // ocel.unwrap()
+            //     .avg_rels_of_type_per_type
+            //     .get(&bound_by_type)
+            //     .copied()
+            //     .unwrap_or_default()
         })
         .sum();
     // println!("{res} for {var:?} {bound_by:?}");

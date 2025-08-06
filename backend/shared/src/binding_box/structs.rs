@@ -6,15 +6,18 @@ use std::{
 
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use process_mining::ocel::ocel_struct::{OCELAttributeValue, OCELEvent, OCELObject};
+use process_mining::ocel::{
+    linked_ocel::{
+        index_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex},
+        IndexLinkedOCEL, LinkedOCELAccess,
+    },
+    ocel_struct::{OCELAttributeValue, OCELEvent, OCELObject},
+};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use ts_rs::TS;
 
-use crate::{
-    cel::{add_cel_label, check_cel_predicate, get_vars_in_cel_program},
-    preprocessing::linked_ocel::{EventIndex, EventOrObjectIndex, IndexLinkedOCEL, ObjectIndex},
-};
+use crate::cel::{add_cel_label, check_cel_predicate, get_vars_in_cel_program};
 #[derive(TS)]
 #[ts(export, export_to = "../../../frontend/src/types/generated/")]
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,7 +61,9 @@ pub type Qualifier = Option<String>;
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct Binding {
+    #[ts(as = "BTreeMap<EventVariable, usize>")]
     pub event_map: BTreeMap<EventVariable, EventIndex>,
+    #[ts(as = "BTreeMap<ObjectVariable, usize>")]
     pub object_map: BTreeMap<ObjectVariable, ObjectIndex>,
     pub label_map: BTreeMap<String, LabelValue>,
 }
@@ -103,7 +108,7 @@ impl Binding {
         ocel: &'a IndexLinkedOCEL,
     ) -> Option<&'a OCELEvent> {
         match self.event_map.get(ev_var) {
-            Some(ev_index) => ocel.ev_by_index(ev_index),
+            Some(ev_index) => Some(ocel.get_ev(ev_index)),
             None => None,
         }
     }
@@ -113,7 +118,7 @@ impl Binding {
         ocel: &'a IndexLinkedOCEL,
     ) -> Option<&'a OCELObject> {
         match self.object_map.get(ob_var) {
-            Some(ob_index) => ocel.ob_by_index(ob_index),
+            Some(ob_index) => Some(ocel.get_ob(ob_index)),
             None => None,
         }
     }
@@ -727,12 +732,12 @@ impl Filter {
                 if let Some(e) = e_opt {
                     if attribute_name == "ocel:id" {
                         if let ValueFilter::String { is_in } = value_filter {
-                            return is_in.contains(&e.id)
+                            return is_in.contains(&e.id);
                         }
                         return false;
                     }
                     if attribute_name == "ocel:time" {
-                        return value_filter.check_value(&OCELAttributeValue::Time(e.time))
+                        return value_filter.check_value(&OCELAttributeValue::Time(e.time));
                     }
                     if let Some(attr) = e.attributes.iter().find(|at| &at.name == attribute_name) {
                         value_filter.check_value(&attr.value)
@@ -753,7 +758,7 @@ impl Filter {
                 if let Some(o) = o_opt {
                     if attribute_name == "ocel:id" {
                         if let ValueFilter::String { is_in } = value_filter {
-                            return is_in.contains(&o.id)
+                            return is_in.contains(&o.id);
                         }
                         return false;
                     }
@@ -982,8 +987,12 @@ impl SizeFilter {
                     let set: HashSet<_> = c_res
                         .iter()
                         .map(|(binding, _)| match child_name_with_var_name[0].1 {
-                            Variable::Event(e_var) => binding.get_ev_index(&e_var).map(|e| e.0),
-                            Variable::Object(o_var) => binding.get_ob_index(&o_var).map(|o| o.0),
+                            Variable::Event(e_var) => binding
+                                .get_ev_index(&e_var)
+                                .map(|e| EventOrObjectIndex::from(*e)),
+                            Variable::Object(o_var) => binding
+                                .get_ob_index(&o_var)
+                                .map(|o| EventOrObjectIndex::from(*o)),
                         })
                         .collect();
                     for (other_c, var) in child_name_with_var_name.iter().skip(1) {
@@ -991,12 +1000,12 @@ impl SizeFilter {
                             let set2: HashSet<_> = c2_res
                                 .iter()
                                 .map(|(binding, _)| match var {
-                                    Variable::Event(e_var) => {
-                                        binding.get_ev_index(e_var).map(|e| e.0)
-                                    }
-                                    Variable::Object(o_var) => {
-                                        binding.get_ob_index(o_var).map(|o| o.0)
-                                    }
+                                    Variable::Event(e_var) => binding
+                                        .get_ev_index(e_var)
+                                        .map(|e| EventOrObjectIndex::from(*e)),
+                                    Variable::Object(o_var) => binding
+                                        .get_ob_index(o_var)
+                                        .map(|o| EventOrObjectIndex::from(*o)),
                                 })
                                 .collect();
                             if set != set2 {
@@ -1112,14 +1121,14 @@ impl Display for Binding {
         writeln!(f, "Binding [")?;
         write!(f, "\tEvents: {{ ")?;
         for (i, (ev_var, ev_index)) in self.event_map.iter().enumerate() {
-            write!(f, "{} => {}", ev_var, ev_index)?;
+            write!(f, "{ev_var} => {ev_index:?}")?;
             if i < self.event_map.len() - 1 {
                 write!(f, ", ")?;
             }
         }
         write!(f, " }}\n\tObjects: {{ ")?;
         for (i, (ob_var, ob_index)) in self.object_map.iter().enumerate() {
-            write!(f, "{} => {}", ob_var, ob_index)?;
+            write!(f, "{ob_var} => {ob_index:?}")?;
             if i < self.object_map.len() - 1 {
                 write!(f, ", ")?;
             }

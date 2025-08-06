@@ -1,6 +1,5 @@
+use process_mining::ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
-use crate::preprocessing::linked_ocel::{EventOrObjectIndex, IndexLinkedOCEL};
 
 use super::structs::{Binding, BindingBox, BindingStep};
 const MAX_NUM_BINDINGS: usize = 2_000_000;
@@ -64,9 +63,9 @@ impl BindingBox {
                         .flat_map_iter(|b| {
                             ev_types
                                 .iter()
-                                .flat_map(|ev_type| ocel.events_of_type.get(ev_type).unwrap())
+                                .flat_map(|ev_type| ocel.get_evs_of_type(ev_type))
                                 .filter_map(move |e_index| {
-                                    let e = ocel.ev_by_index(e_index).unwrap();
+                                    let e = ocel.get_ev(e_index);
                                     if time_constr.is_none()
                                         || time_constr.as_ref().unwrap().iter().all(
                                             |(ref_ev_var_name, (min_sec, max_sec))| {
@@ -105,7 +104,7 @@ impl BindingBox {
                         .flat_map_iter(|b| {
                             ob_types
                                 .iter()
-                                .flat_map(|ob_type| ocel.objects_of_type.get(ob_type).unwrap())
+                                .flat_map(|ob_type| ocel.get_obs_of_type(ob_type))
                                 .filter_map(move |o_index| {
                                     check_next_filters(
                                         b.clone().expand_with_ob(*ob_var, *o_index),
@@ -122,22 +121,17 @@ impl BindingBox {
                     ret = ret
                         .into_par_iter()
                         .flat_map_iter(|b| {
-                            let e = b.get_ev(from_ev_var, ocel).unwrap();
+                            let e = b.get_ev_index(from_ev_var).unwrap();
+                            let obs: Vec<_> = ocel.get_e2o(e).collect();
                             let obj_types = self.new_object_vars.get(ob_var).unwrap();
-                            e.relationships
-                                .iter()
-                                .filter(|rel| {
-                                    obj_types.contains(
-                                        &ocel.ob_by_id(&rel.object_id).unwrap().object_type,
-                                    ) && (qualifier.is_none()
-                                        || qualifier.as_ref().unwrap() == &rel.qualifier)
+                            obs.into_iter()
+                                .filter(|(q, o)| {
+                                    obj_types.contains(&ocel.get_ob(o).object_type)
+                                        && qualifier.as_ref().is_none_or(|qual| qual == *q)
                                 })
-                                .filter_map(move |rel| {
+                                .filter_map(move |(_q, o)| {
                                     check_next_filters(
-                                        b.clone().expand_with_ob(
-                                            *ob_var,
-                                            *ocel.object_index_map.get(&rel.object_id).unwrap(),
-                                        ),
+                                        b.clone().expand_with_ob(*ob_var, *o),
                                         step_index + 1,
                                         steps,
                                         ocel,
@@ -152,36 +146,29 @@ impl BindingBox {
                         .into_par_iter()
                         .flat_map_iter(|b| {
                             let ob_index = b.get_ob_index(from_ob_var_name).unwrap();
-                            ocel.get_symmetric_rels_ob(ob_index)
-                                .unwrap()
-                                .iter()
-                                .filter_map(move |(to_index, rev, qual)| {
-                                    if let EventOrObjectIndex::Object(to_ob_index) = to_index {
-                                        if rev == reversed
-                                            && (qualifier.is_none()
-                                                || qual == qualifier.as_ref().unwrap())
-                                        {
-                                            let allowed_types =
-                                                self.new_object_vars.get(ob_var_name)?;
-                                            let o = ocel.ob_by_index(to_ob_index)?;
-                                            if allowed_types.contains(&o.object_type) {
-                                                check_next_filters(
-                                                    b.clone()
-                                                        .expand_with_ob(*ob_var_name, *to_ob_index),
-                                                    step_index + 1,
-                                                    steps,
-                                                    ocel,
-                                                )
-                                            } else {
-                                                None
-                                            }
-                                        } else {
-                                            None
-                                        }
+                            let o2os: Vec<_> = if *reversed {
+                                ocel.get_o2o_rev(ob_index).collect()
+                            } else {
+                                ocel.get_o2o(ob_index).collect()
+                            };
+                            o2os.into_iter().filter_map(move |(qual, to_ob_index)| {
+                                if qualifier.as_ref().is_none_or(|q| q == qual) {
+                                    let allowed_types = self.new_object_vars.get(ob_var_name)?;
+                                    let o = ocel.get_ob(to_ob_index);
+                                    if allowed_types.contains(&o.object_type) {
+                                        check_next_filters(
+                                            b.clone().expand_with_ob(*ob_var_name, *to_ob_index),
+                                            step_index + 1,
+                                            steps,
+                                            ocel,
+                                        )
                                     } else {
                                         None
                                     }
-                                })
+                                } else {
+                                    None
+                                }
+                            })
                         })
                         .take_any(MAX_NUM_BINDINGS + 1)
                         .collect()
@@ -193,33 +180,24 @@ impl BindingBox {
                             let ob_index = b.get_ob_index(from_ob_var_name).unwrap();
                             // let ob = ocel.ob_by_index(ob_index).unwrap();
                             let ev_types = self.new_event_vars.get(ev_var_name).unwrap();
-                            ocel.get_symmetric_rels_ob(ob_index)
-                                .unwrap()
-                                .iter()
-                                .filter_map(move |(rel_to, _reversed, q)| {
-                                    if qualifier.is_none()
-                                        || qualifier.as_ref().unwrap().contains(q)
-                                    {
-                                        if let EventOrObjectIndex::Event(rel_to_ev) = rel_to {
-                                            let to_ev = ocel.ev_by_index(rel_to_ev)?;
-                                            if ev_types.contains(&to_ev.event_type) {
-                                                check_next_filters(
-                                                    b.clone()
-                                                        .expand_with_ev(*ev_var_name, *rel_to_ev),
-                                                    step_index + 1,
-                                                    steps,
-                                                    ocel,
-                                                )
-                                            } else {
-                                                None
-                                            }
-                                        } else {
-                                            None
-                                        }
+                            let e2o_rev: Vec<_> = ocel.get_e2o_rev(ob_index).collect();
+                            e2o_rev.into_iter().filter_map(move |(q, to_ev_index)| {
+                                if qualifier.as_ref().is_none_or(move |qual| qual == q) {
+                                    let to_ev = ocel.get_ev(to_ev_index);
+                                    if ev_types.contains(&to_ev.event_type) {
+                                        check_next_filters(
+                                            b.clone().expand_with_ev(*ev_var_name, *to_ev_index),
+                                            step_index + 1,
+                                            steps,
+                                            ocel,
+                                        )
                                     } else {
                                         None
                                     }
-                                })
+                                } else {
+                                    None
+                                }
+                            })
                         })
                         .take_any(MAX_NUM_BINDINGS + 1)
                         .collect();

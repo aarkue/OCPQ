@@ -1,6 +1,8 @@
-use preprocessing::linked_ocel::IndexLinkedOCEL;
 use process_mining::{
-    ocel::ocel_struct::{OCELEvent, OCELObject, OCELType},
+    ocel::{
+        linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
+        ocel_struct::{OCELEvent, OCELObject, OCELType},
+    },
     OCEL,
 };
 use serde::{Deserialize, Serialize};
@@ -69,22 +71,34 @@ pub struct EventWithIndex {
 
 pub fn get_event_info(ocel: &IndexLinkedOCEL, req: IndexOrID) -> Option<EventWithIndex> {
     let ev_with_index = match req {
-        IndexOrID::ID(id) => ocel
-            .ev_by_id(&id)
+        IndexOrID::ID(id) => {
+            let ev_index = ocel.get_ev_index(id)?;
+            let ev = ocel.get_ev(&ev_index);
+            Some((ev.clone(), ev_index.into_inner()))
+        }
+        IndexOrID::Index(index) => ocel
+            .get_ocel_ref()
+            .events
+            .get(index)
             .cloned()
-            .and_then(|ev| ocel.index_of_ev(&id).map(|ev_index| (ev, ev_index.0))),
-        IndexOrID::Index(index) => ocel.ocel.events.get(index).cloned().map(|ev| (ev, index)),
+            .map(|ev| (ev, index)),
     };
     ev_with_index.map(|(event, index)| EventWithIndex { event, index })
 }
 
 pub fn get_object_info(ocel: &IndexLinkedOCEL, req: IndexOrID) -> Option<ObjectWithIndex> {
     let ob_with_index = match req {
-        IndexOrID::ID(id) => ocel
-            .ob_by_id(&id)
+        IndexOrID::ID(id) => {
+            let ob_index = ocel.get_ob_index(id)?;
+            let ev = ocel.get_ob(&ob_index);
+            Some((ev.clone(), ob_index.into_inner()))
+        }
+        IndexOrID::Index(index) => ocel
+            .get_ocel_ref()
+            .objects
+            .get(index)
             .cloned()
-            .and_then(|ob| ocel.index_of_ob(&id).map(|ob_index| (ob, ob_index.0))),
-        IndexOrID::Index(index) => ocel.ocel.objects.get(index).cloned().map(|ev| (ev, index)),
+            .map(|ev| (ev, index)),
     };
     ob_with_index.map(|(object, index)| ObjectWithIndex { object, index })
 }

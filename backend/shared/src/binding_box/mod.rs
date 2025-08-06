@@ -11,12 +11,20 @@ use std::{collections::HashSet, fs::File, io::BufWriter, time::Instant};
 
 use chrono::DateTime;
 use itertools::Itertools;
-use process_mining::{export_ocel_json_path, OCEL};
+use process_mining::{
+    export_ocel_json_path,
+    ocel::{
+        linked_ocel::{
+            index_linked_ocel::{EventIndex, ObjectIndex},
+            IndexLinkedOCEL, LinkedOCELAccess,
+        },
+        ocel_struct::OCELRelationship,
+    },
+    OCEL,
+};
 use serde::{Deserialize, Serialize};
 pub use structs::{Binding, BindingBox, BindingBoxTree, BindingStep, ViolationReason};
 use ts_rs::TS;
-
-use crate::preprocessing::linked_ocel::{EventIndex, IndexLinkedOCEL, ObjectIndex};
 
 #[derive(TS)]
 #[ts(export, export_to = "../../../frontend/src/types/generated/")]
@@ -39,7 +47,8 @@ impl EvaluateBoxTreeResult {
                     situations: res_with_count
                         .situations
                         .iter()
-                        .take(10_000).cloned()
+                        .take(10_000)
+                        .cloned()
                         .collect(),
                     situation_count: res_with_count.situation_count,
                     situation_violated_count: res_with_count.situation_violated_count,
@@ -178,8 +187,18 @@ pub fn evaluate_box_tree(
     );
     EvaluateBoxTreeResult {
         evaluation_results,
-        object_ids: ocel.ocel.objects.iter().map(|o| o.id.clone()).collect(),
-        event_ids: ocel.ocel.events.iter().map(|o| o.id.clone()).collect(),
+        object_ids: ocel
+            .get_ocel_ref()
+            .objects
+            .iter()
+            .map(|o| o.id.clone())
+            .collect(),
+        event_ids: ocel
+            .get_ocel_ref()
+            .events
+            .iter()
+            .map(|o| o.id.clone())
+            .collect(),
         bindings_skipped,
     }
 }
@@ -333,58 +352,60 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Opt
     };
     let mut added_ob_types: HashSet<String> = HashSet::new();
     for ob_index in &final_included_obs {
-        if let Some(ob) = ocel.ob_by_index(ob_index) {
-            if !added_ob_types.contains(&ob.object_type) {
-                if let Some(ot) = ocel
-                    .ocel
-                    .object_types
-                    .iter()
-                    .find(|ot| ot.name == ob.object_type)
-                {
-                    filtered_ocel.object_types.push(ot.clone());
-                } else {
-                    eprintln!("Failed to find object type: {}", ob.object_type);
-                }
-                added_ob_types.insert(ob.object_type.clone());
+        let ob = ocel.get_ob(ob_index);
+        if !added_ob_types.contains(&ob.object_type) {
+            if let Some(ot) = ocel
+                .get_ocel_ref()
+                .object_types
+                .iter()
+                .find(|ot| ot.name == ob.object_type)
+            {
+                filtered_ocel.object_types.push(ot.clone());
+            } else {
+                eprintln!("Failed to find object type: {}", ob.object_type);
             }
-            let mut ob = ob.clone();
-            ob.relationships.retain(|rel| {
-                check_o2o_inclusion(
-                    **ob_index,
-                    *ocel.object_index_map.get(&rel.object_id).unwrap(),
-                    &rel.qualifier,
-                )
-            });
-            filtered_ocel.objects.push(ob);
+            added_ob_types.insert(ob.object_type.clone());
         }
+        let mut ob = ob.clone();
+        let o2os = ocel.get_o2o(ob_index);
+        ob.relationships = o2os
+            .into_iter()
+            .filter(|(q, other_ob)| check_o2o_inclusion(**ob_index, **other_ob, &q.to_string()))
+            .map(|(q, other_ob)| OCELRelationship {
+                qualifier: q.to_string(),
+                object_id: ocel.get_ob(other_ob).id.clone(),
+            })
+            .collect();
+        filtered_ocel.objects.push(ob);
     }
 
     let mut added_ev_types: HashSet<String> = HashSet::new();
     for ev_index in &final_included_evs {
-        if let Some(ev) = ocel.ev_by_index(ev_index) {
-            if !added_ev_types.contains(&ev.event_type) {
-                if let Some(et) = ocel
-                    .ocel
-                    .event_types
-                    .iter()
-                    .find(|ot| ot.name == ev.event_type)
-                {
-                    filtered_ocel.event_types.push(et.clone());
-                } else {
-                    eprintln!("Failed to find object type: {}", ev.event_type);
-                }
-                added_ev_types.insert(ev.event_type.clone());
+        let ev = ocel.get_ev(ev_index);
+        if !added_ev_types.contains(&ev.event_type) {
+            if let Some(et) = ocel
+                .get_ocel_ref()
+                .event_types
+                .iter()
+                .find(|ot| ot.name == ev.event_type)
+            {
+                filtered_ocel.event_types.push(et.clone());
+            } else {
+                eprintln!("Failed to find object type: {}", ev.event_type);
             }
-            let mut ev = ev.clone();
-            ev.relationships.retain(|rel| {
-                check_e2o_inclusion(
-                    **ev_index,
-                    *ocel.object_index_map.get(&rel.object_id).unwrap(),
-                    &rel.qualifier,
-                )
-            });
-            filtered_ocel.events.push(ev.clone());
+            added_ev_types.insert(ev.event_type.clone());
         }
+        let mut ev = ev.clone();
+        let e2os = ocel.get_e2o(ev_index);
+        ev.relationships = e2os
+            .into_iter()
+            .filter(|(q, o_index)| check_e2o_inclusion(**ev_index, **o_index, &q.to_string()))
+            .map(|(q, o_index)| OCELRelationship {
+                object_id: ocel.get_ob(o_index).id.clone(),
+                qualifier: q.to_string(),
+            })
+            .collect();
+        filtered_ocel.events.push(ev.clone());
     }
     println!("Filtering (excl. export) took {:?}", filter_now.elapsed());
     export_ocel_json_path(&filtered_ocel, "filtered-ocel.json").unwrap();
