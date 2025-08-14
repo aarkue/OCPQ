@@ -8,7 +8,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use ocpq_shared::binding_box::{evaluate_box_tree, BindingBoxTree};
-use process_mining::{
+use ocpq_shared::process_mining::{
     import_ocel_json_from_path, import_ocel_sqlite_from_path, import_ocel_xml_file,
     ocel::linked_ocel::IndexLinkedOCEL,
 };

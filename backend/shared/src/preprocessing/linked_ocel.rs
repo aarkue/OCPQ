@@ -1,13 +1,8 @@
-
 use process_mining::{
     event_log::ocel::ocel_struct::{OCELEvent, OCELObject},
-    ocel::linked_ocel::{
-        index_linked_ocel::EventOrObjectIndex,
-        IndexLinkedOCEL, LinkedOCELAccess,
-    },
+    ocel::linked_ocel::{index_linked_ocel::EventOrObjectIndex, IndexLinkedOCEL, LinkedOCELAccess},
 };
 use serde::{Deserialize, Serialize};
-
 
 // pub fn get_object_events_map(
 //     ocel: &OCEL,

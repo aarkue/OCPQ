@@ -10,8 +10,6 @@ axum = {version = "0.7.7", features = ["default","macros"]}
 tokio = { version = "1.43", features = ["full"] }
 serde = {version = "1.0.192" , features = ["derive"]}
 serde_json = "1.0.108"
-# process_mining = { git = "https://github.com/aarkue/rust4pm", features=["ocel-sqlite"]}
-process_mining = { path = "/home/aarkue/doc/projects/rust4pm/process_mining", features=["ocel-sqlite"]}
 ocpq-shared = {path = "../shared"}
 rayon = "1.8.0"
 itertools = "0.11.0"

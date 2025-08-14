@@ -7,7 +7,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use ocpq_shared::OCELInfo;
 use serde::{Deserialize, Serialize};
 
-use process_mining::{
+use ocpq_shared::process_mining::{
     event_log::ocel::ocel_struct::OCEL,
     import_ocel_sqlite_from_path,
     ocel::{

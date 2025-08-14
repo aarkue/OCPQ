@@ -1842,7 +1842,6 @@ dependencies = [
  "chrono",
  "itertools 0.11.0",
  "ocpq-shared",
- "process_mining",
  "rayon",
  "serde",
  "serde_json",
@@ -1859,7 +1858,6 @@ dependencies = [
  "clap",
  "itertools 0.11.0",
  "ocpq-shared",
- "process_mining",
  "rayon",
  "serde",
  "serde_json",
@@ -2222,6 +2220,7 @@ dependencies = [
 [[package]]
 name = "process_mining"
 version = "0.3.25"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat%2Fkuzudb#f8dc82c72b3ad3bc0a74f7b356ccaea22bd02444"
 dependencies = [
  "chrono",
  "flate2",

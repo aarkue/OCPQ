@@ -9,6 +9,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ocpq_shared::process_mining::{
+    export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
+    import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
+    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice,
+    ocel::linked_ocel::IndexLinkedOCEL, OCEL,
+};
 use ocpq_shared::{
     binding_box::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
@@ -29,12 +35,6 @@ use ocpq_shared::{
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
-use process_mining::{
-    export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
-    import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
-    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice,
-    ocel::linked_ocel::IndexLinkedOCEL, OCEL,
-};
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
     AppHandle, Manager, State,
@@ -52,13 +52,13 @@ pub struct AppState {
 
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
     let path = path.as_ref();
-    println!("{:?}", path);
+    println!("{path:?}");
     let path_str = path.to_string_lossy();
     let ocel = match path_str.ends_with(".json") {
-        true => import_ocel_json_from_path(path).map_err(|e| format!("{:?}", e))?,
+        true => import_ocel_json_from_path(path).map_err(|e| format!("{e:?}"))?,
         false => match path_str.ends_with(".xml") {
             true => import_ocel_xml_file(path),
-            false => import_ocel_sqlite_from_path(path).map_err(|e| format!("{:?}", e))?,
+            false => import_ocel_sqlite_from_path(path).map_err(|e| format!("{e:?}"))?,
         },
     };
     Ok(ocel)
@@ -108,7 +108,7 @@ async fn get_event_qualifiers(
     state: State<'_, AppState>,
 ) -> Result<HashMap<String, HashMap<String, QualifiersForEventType>>, String> {
     match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(get_qualifiers_for_event_types(&ocel.get_ocel_ref())),
+        Some(ocel) => Ok(get_qualifiers_for_event_types(ocel.get_ocel_ref())),
         None => Err("No OCEL loaded".to_string()),
     }
 }
@@ -150,7 +150,7 @@ async fn export_filter_box(
 ) -> Result<(), String> {
     let res = match state.ocel.read().await.as_ref() {
         Some(ocel) => {
-            let res: process_mining::OCEL = filter_ocel_box_tree(req.tree, ocel).unwrap();
+            let res: OCEL = filter_ocel_box_tree(req.tree, ocel).unwrap();
             Some(res)
         }
         None => None,
@@ -305,8 +305,8 @@ async fn start_hpc_job_tauri(
         .map_err(|er| er.to_string())?;
     let p = start_port_forwarding(
         c2,
-        &format!("127.0.0.1:{}", port),
-        &format!("127.0.0.1:{}", port),
+        &format!("127.0.0.1:{port}"),
+        &format!("127.0.0.1:{port}"),
     )
     .await
     .map_err(|er| er.to_string())?;
@@ -316,7 +316,7 @@ async fn start_hpc_job_tauri(
         port,
         tauri::async_runtime::JoinHandle::Tokio(p),
     ));
-    println!("Ceated job {} in folder {}", job_id, folder_id);
+    println!("Ceated job {job_id} in folder {folder_id}");
     Ok(job_id)
 }
 
@@ -362,7 +362,7 @@ fn main() {
                 // files may also be passed as `file://path/to/file`
                 for maybe_file in std::env::args().skip(1) {
                     // skip flags like -f or --flag
-                    log::info!("Args: {}", maybe_file);
+                    log::info!("Args: {maybe_file}");
                     use std::path::PathBuf;
                     if maybe_file.starts_with('-') {
                         continue;

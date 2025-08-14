@@ -15,6 +15,15 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use ocpq_shared::process_mining::{
+    event_log::ocel::ocel_struct::OCEL,
+    export_ocel_json_to_vec, export_ocel_sqlite_to_vec, export_ocel_xml,
+    import_ocel_sqlite_from_slice, import_ocel_xml_slice,
+    ocel::{
+        linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
+        ocel_struct::{OCELEvent, OCELObject},
+    },
+};
 use ocpq_shared::{
     binding_box::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
@@ -36,15 +45,6 @@ use ocpq_shared::{
     preprocessing::preprocess::get_object_rels_per_type,
     table_export::{export_bindings_to_writer, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
-};
-use process_mining::{
-    event_log::ocel::ocel_struct::OCEL,
-    export_ocel_json_to_vec, export_ocel_sqlite_to_vec, export_ocel_xml,
-    import_ocel_sqlite_from_slice, import_ocel_xml_slice,
-    ocel::{
-        linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
-        ocel_struct::{OCELEvent, OCELObject},
-    },
 };
 use tower_http::cors::CorsLayer;
 
@@ -206,12 +206,8 @@ pub async fn get_qualifers_for_object_types<'a>(
     StatusCode,
     Json<Option<HashMap<String, HashSet<QualifierAndObjectType>>>>,
 ) {
-    let qualifier_and_type = with_ocel_from_state(&State(state), |ocel| {
-        let object_id_map: HashMap<_, _> =
-            ocel.get_all_obs().map(|ob| (ob.id.as_str(), ob)).collect();
-        let object_rels_per_type = get_object_rels_per_type(ocel.get_ocel_ref(), &object_id_map);
-        object_rels_per_type
-    });
+    let qualifier_and_type =
+        with_ocel_from_state(&State(state), |ocel| get_object_rels_per_type(ocel));
     match qualifier_and_type {
         Some(x) => (StatusCode::OK, Json(Some(x))),
         None => (StatusCode::BAD_REQUEST, Json(None)),

@@ -89,9 +89,9 @@ pub fn get_object_relationships(obj: &OCELObject) -> Vec<OCELRelationship> {
 
 use std::collections::{HashMap, HashSet};
 
-use process_mining::{
-    ocel::ocel_struct::{OCELObject, OCELRelationship},
-    OCEL,
+use process_mining::ocel::{
+    linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
+    ocel_struct::{OCELObject, OCELRelationship},
 };
 
 use crate::ocel_qualifiers::qualifiers::QualifierAndObjectType;
@@ -99,9 +99,10 @@ use crate::ocel_qualifiers::qualifiers::QualifierAndObjectType;
 ///
 /// Computes [HashMap] linking an object type to the [HashSet] of [QualifierAndObjectType] that objects of that type are linked to (through O2O Relationships)
 pub fn get_object_rels_per_type(
-    ocel: &OCEL,
-    object_map: &HashMap<&str, &OCELObject>,
+    locel: &IndexLinkedOCEL,
 ) -> HashMap<String, HashSet<QualifierAndObjectType>> {
+    let object_map: HashMap<_, _> = locel.get_all_obs().map(|ob| (ob.id.as_str(), ob)).collect();
+    let ocel = locel.get_ocel_ref();
     let mut object_to_object_rels_per_type: HashMap<String, HashSet<QualifierAndObjectType>> = ocel
         .object_types
         .iter()

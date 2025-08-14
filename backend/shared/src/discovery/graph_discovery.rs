@@ -90,47 +90,42 @@ pub fn get_instances(
     instances.unwrap_or_default()
 }
 
-struct SymmetricRel {
-    index: EventOrObjectIndex,
-    reversed: bool,
-    // qualifier: String,
+pub struct SymmetricRel {
+    pub index: EventOrObjectIndex,
+    pub reversed: bool,
+    pub qualifier: String,
 }
-fn get_symmetric_rels(index: &EventOrObjectIndex, locel: &IndexLinkedOCEL) -> Vec<SymmetricRel> {
+pub fn get_symmetric_rels(
+    index: &EventOrObjectIndex,
+    locel: &IndexLinkedOCEL,
+) -> Vec<SymmetricRel> {
     match index {
-        EventOrObjectIndex::Event(event_index) => {
-            locel
-                .get_e2o(event_index)
-                .map(|(_q, o)| SymmetricRel {
-                    index: (*o).into(),
-                    reversed: false,
-                })
-                .collect()
-        }
-        EventOrObjectIndex::Object(object_index) => {
-            locel
-                .get_o2o(object_index)
-                .map(|(_q, o)| SymmetricRel {
-                    index: (*o).into(),
-                    reversed: false,
-                })
-                .chain(
-                    locel
-                        .get_e2o_rev(object_index)
-                        .map(|(_q, e)| SymmetricRel {
-                            index: (*e).into(),
-                            reversed: true,
-                        }),
-                )
-                .chain(
-                    locel
-                        .get_o2o_rev(object_index)
-                        .map(|(_q, o)| SymmetricRel {
-                            index: (*o).into(),
-                            reversed: true,
-                        }),
-                )
-                .collect()
-        }
+        EventOrObjectIndex::Event(event_index) => locel
+            .get_e2o(event_index)
+            .map(|(q, o)| SymmetricRel {
+                index: (*o).into(),
+                reversed: false,
+                qualifier: q.to_string(),
+            })
+            .collect(),
+        EventOrObjectIndex::Object(object_index) => locel
+            .get_o2o(object_index)
+            .map(|(q, o)| SymmetricRel {
+                index: (*o).into(),
+                reversed: false,
+                qualifier: q.to_string(),
+            })
+            .chain(locel.get_e2o_rev(object_index).map(|(q, e)| SymmetricRel {
+                index: (*e).into(),
+                reversed: true,
+                qualifier: q.to_string(),
+            }))
+            .chain(locel.get_o2o_rev(object_index).map(|(q, o)| SymmetricRel {
+                index: (*o).into(),
+                reversed: true,
+                qualifier: q.to_string(),
+            }))
+            .collect(),
     }
 }
 pub fn discover_count_constraints(
@@ -176,7 +171,10 @@ pub fn discover_count_constraints_for_supporting_instances<
             }))
             .collect();
         let rels = get_symmetric_rels(o_index.borrow(), ocel);
-        for SymmetricRel { index, reversed } in rels {
+        for SymmetricRel {
+            index, reversed, ..
+        } in rels
+        {
             let (ref_type, ocel_type) = match event_or_object_from_index(index, ocel) {
                 OCELNodeRef::Event(e) => (
                     if reversed {
@@ -608,10 +606,16 @@ pub fn discover_ef_constraints_for_supporting_instances<
         let rels = get_symmetric_rels(&(*o_index.borrow()).into(), ocel);
         let evs = rels
             .iter()
-            .flat_map(|SymmetricRel { index, reversed: _ }| match index {
-                EventOrObjectIndex::Event(ei) => Some(ocel.get_ev(ei)),
-                EventOrObjectIndex::Object(_) => None,
-            })
+            .flat_map(
+                |SymmetricRel {
+                     index,
+                     reversed: _,
+                     qualifier: _,
+                 }| match index {
+                    EventOrObjectIndex::Event(ei) => Some(ocel.get_ev(ei)),
+                    EventOrObjectIndex::Object(_) => None,
+                },
+            )
             .collect_vec();
         let evs_num = evs.len();
         let evs = if evs_num >= 1000 {

@@ -23,7 +23,7 @@ pub mod cel;
 pub mod table_export;
 
 pub mod hpc_backend;
-
+pub use process_mining;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OCELInfo {
     pub num_objects: usize,
