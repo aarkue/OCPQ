@@ -113,7 +113,8 @@ pub fn evaluate_box_tree(
         let mut eval_times = Vec::new();
         let st = std::time::SystemTime::now();
         let dt: DateTime<chrono::Utc> = st.into();
-        let dt_iso = dt.to_rfc3339();
+        // Replace colons as some operating system (e.g., Windows) have issues with colons in filenames (depending on partition formatting etc.)
+        let dt_iso = dt.to_rfc3339().replace(":", "-");
         let mut tree_path = dirs_next::download_dir().unwrap_or_default();
         tree_path.push(format!("{dt_iso}-tree.json"));
         let tree_json_file = File::create(tree_path).unwrap();
