@@ -152,6 +152,10 @@ pub fn evaluate_box_tree(
         let seconds_json_file = File::create(durations_path).unwrap();
         serde_json::to_writer_pretty(BufWriter::new(seconds_json_file), &eval_times).unwrap();
         println!("Evaluation time: {eval_times:?}");
+        println!(
+            "Mean: {:.2}ms",
+            1000.0 * eval_times.iter().sum::<f64>() / eval_times.len() as f64
+        );
     }
     let now = Instant::now();
     let (evaluation_results_flat, bindings_skipped) = tree.evaluate(ocel);

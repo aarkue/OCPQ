@@ -5,3 +5,10 @@ members = [ "ocpq_cli",
 	"shared",
   "web-server",
 ]
+
+[profile.release]
+strip = true
+panic = 'abort'
+opt-level = 3
+lto = 'fat'
+codegen-units = 1

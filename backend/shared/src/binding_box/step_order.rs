@@ -225,8 +225,7 @@ impl BindingStep {
         }
 
         let mut expansion = var_can_bind
-            .clone()
-            .into_iter()
+            .iter()
             .filter(|(v, _vs)| !bound_vars.contains(v))
             // Prefer binding events over objects first
             .sorted_by_key(|(v, vs)| {
@@ -241,7 +240,7 @@ impl BindingStep {
             .collect_vec();
         while !expansion.is_empty() {
             if let Some(var) = expansion.pop() {
-                if bound_vars.contains(&var) {
+                if bound_vars.contains(var) {
                     continue;
                 }
                 if let Some((v, (_var, qualifier, filter_index, reversed))) = bound_vars
@@ -251,7 +250,7 @@ impl BindingStep {
                             .get(v)
                             .unwrap()
                             .iter()
-                            .find(|(x, _q, _filter_index, _reversed)| x == &var)
+                            .find(|(x, _q, _filter_index, _reversed)| x == var)
                             .map(|t| (v, t))
                     })
                     .sorted_by_cached_key(|(bound_by_var, (_v, _q, _filter_index, _reversed))| {
@@ -265,7 +264,7 @@ impl BindingStep {
                     match v {
                         Variable::Event(v_ev) => match var {
                             Variable::Object(var_ob) => ret.push(BindingStep::BindObFromEv(
-                                var_ob,
+                                *var_ob,
                                 *v_ev,
                                 qualifier.clone(),
                             )),
@@ -275,12 +274,12 @@ impl BindingStep {
                         },
                         Variable::Object(v_ob) => match var {
                             Variable::Event(var_ev) => ret.push(BindingStep::BindEvFromOb(
-                                var_ev,
+                                *var_ev,
                                 *v_ob,
                                 qualifier.clone(),
                             )),
                             Variable::Object(var_ob) => ret.push(BindingStep::BindObFromOb(
-                                var_ob,
+                                *var_ob,
                                 *v_ob,
                                 qualifier.clone(),
                                 *reversed,
@@ -293,18 +292,18 @@ impl BindingStep {
                             if let Some((ref_ev, min_sec, max_sec)) = time_between_evs.get(&var_ev)
                             {
                                 ret.push(BindingStep::BindEv(
-                                    var_ev,
+                                    *var_ev,
                                     Some(vec![(**ref_ev, (*min_sec, *max_sec))]),
                                 ));
                             } else {
-                                ret.push(BindingStep::BindEv(var_ev, None));
+                                ret.push(BindingStep::BindEv(*var_ev, None));
                             }
                         }
-                        Variable::Object(var_ob) => ret.push(BindingStep::BindOb(var_ob)),
+                        Variable::Object(var_ob) => ret.push(BindingStep::BindOb(*var_ob)),
                     }
                 }
-                var_requiring_bindings.remove(&var);
-                bound_vars.insert(var);
+                var_requiring_bindings.remove(var);
+                bound_vars.insert(var.clone());
                 add_supported_filters(
                     bbox,
                     &mut filter_indices_incoporated,
@@ -317,7 +316,7 @@ impl BindingStep {
                     .iter()
                     .any(|bv| var_can_bind.get(bv).unwrap().contains(var));
                 if can_be_bound {
-                    100
+                    1
                 } else {
                     0
                 }

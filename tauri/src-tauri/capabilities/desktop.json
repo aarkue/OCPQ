@@ -11,6 +11,7 @@
   "permissions": [
     "updater:default",
     "process:default",
-    "log:default"
+    "log:default",
+    "fs:allow-download-write-recursive"
   ]
 }

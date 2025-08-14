@@ -1,3 +1,6 @@
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
@@ -206,8 +209,7 @@ pub async fn get_qualifers_for_object_types<'a>(
     StatusCode,
     Json<Option<HashMap<String, HashSet<QualifierAndObjectType>>>>,
 ) {
-    let qualifier_and_type =
-        with_ocel_from_state(&State(state), get_object_rels_per_type);
+    let qualifier_and_type = with_ocel_from_state(&State(state), get_object_rels_per_type);
     match qualifier_and_type {
         Some(x) => (StatusCode::OK, Json(Some(x))),
         None => (StatusCode::BAD_REQUEST, Json(None)),

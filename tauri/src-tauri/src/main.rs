@@ -353,46 +353,52 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
-        .setup(|app| {
-            log::info!("Setup!");
-            #[cfg(any(windows, target_os = "linux"))]
-            {
-                let state = app.state::<AppState>();
-                let mut files = Vec::new();
+        .setup(
+            #[allow(unused_variables)]
+            // might be unused, depending on the platform
+            |app| {
+                log::info!("Setup!");
+                #[cfg(any(windows, target_os = "linux"))]
+                {
+                    let state = app.state::<AppState>();
+                    let mut files = Vec::new();
 
-                // NOTICE: `args` may include URL protocol (`your-app-protocol://`)
-                // or arguments (`--`) if your app supports them.
-                // files may also be passed as `file://path/to/file`
-                for maybe_file in std::env::args().skip(1) {
-                    // skip flags like -f or --flag
-                    log::info!("Args: {maybe_file}");
-                    use std::path::PathBuf;
-                    if maybe_file.starts_with('-') {
-                        continue;
-                    }
-
-                    // handle `file://` path urls and fallback for other urls
-                    if let Ok(url) = url::Url::parse(&maybe_file) {
-                        if let Ok(path) = url.to_file_path() {
-                            files.push(path);
-                        } else {
-                            log::info!("Url file path failed. Using directly as PathBuf instead.");
-                            files.push(maybe_file.into());
+                    // NOTICE: `args` may include URL protocol (`your-app-protocol://`)
+                    // or arguments (`--`) if your app supports them.
+                    // files may also be passed as `file://path/to/file`
+                    for maybe_file in std::env::args().skip(1) {
+                        // skip flags like -f or --flag
+                        log::info!("Args: {maybe_file}");
+                        use std::path::PathBuf;
+                        if maybe_file.starts_with('-') {
+                            continue;
                         }
-                    } else {
-                        files.push(PathBuf::from(maybe_file))
+
+                        // handle `file://` path urls and fallback for other urls
+                        if let Ok(url) = url::Url::parse(&maybe_file) {
+                            if let Ok(path) = url.to_file_path() {
+                                files.push(path);
+                            } else {
+                                log::info!(
+                                    "Url file path failed. Using directly as PathBuf instead."
+                                );
+                                files.push(maybe_file.into());
+                            }
+                        } else {
+                            files.push(PathBuf::from(maybe_file))
+                        }
                     }
+                    let mut init_files_guard = state.initial_files.lock().unwrap();
+                    *init_files_guard = Some(
+                        files
+                            .into_iter()
+                            .map(|f| f.to_string_lossy().to_string())
+                            .collect(),
+                    );
                 }
-                let mut init_files_guard = state.initial_files.lock().unwrap();
-                *init_files_guard = Some(
-                    files
-                        .into_iter()
-                        .map(|f| f.to_string_lossy().to_string())
-                        .collect(),
-                );
-            }
-            Ok(())
-        })
+                Ok(())
+            },
+        )
         .invoke_handler(tauri::generate_handler![
             import_ocel,
             import_ocel_slice,
