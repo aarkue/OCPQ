@@ -25,7 +25,7 @@ url = "2.5.2"
 tauri-plugin-process = "2"
 tauri-plugin-log = "2"
 log = "0.4.27"
-
+mimalloc = { version = "0.1.47", default-features = false }
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.

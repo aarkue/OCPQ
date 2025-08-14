@@ -40,7 +40,7 @@ impl BindingBox {
     }
 
     pub fn expand(&self, parent_binding: Binding, ocel: &IndexLinkedOCEL) -> (Vec<Binding>, bool) {
-        let order = BindingStep::get_binding_order(self, Some(&parent_binding), Some(ocel));
+        let order = BindingStep::get_binding_order(self, Some(&parent_binding), ocel);
         self.expand_with_steps(parent_binding, ocel, &order)
     }
 

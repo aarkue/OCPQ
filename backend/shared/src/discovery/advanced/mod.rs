@@ -285,3 +285,17 @@ impl EventOrObjectType {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum EventOrObjectTypeRef<'a> {
+    Event(&'a str),
+    Object(&'a str),
+}
+
+impl<'a> EventOrObjectTypeRef<'a> {
+    pub fn inner(&'a self) -> &'a str {
+        match self {
+            EventOrObjectTypeRef::Event(et) => et,
+            EventOrObjectTypeRef::Object(ot) => ot,
+        }
+    }
+}

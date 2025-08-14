@@ -207,7 +207,7 @@ pub async fn get_qualifers_for_object_types<'a>(
     Json<Option<HashMap<String, HashSet<QualifierAndObjectType>>>>,
 ) {
     let qualifier_and_type =
-        with_ocel_from_state(&State(state), |ocel| get_object_rels_per_type(ocel));
+        with_ocel_from_state(&State(state), get_object_rels_per_type);
     match qualifier_and_type {
         Some(x) => (StatusCode::OK, Json(Some(x))),
         None => (StatusCode::BAD_REQUEST, Json(None)),

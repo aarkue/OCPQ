@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use itertools::Itertools;
 use process_mining::ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess};
 
-use crate::discovery::advanced::EventOrObjectType;
+use crate::discovery::advanced::EventOrObjectTypeRef;
 
 use super::{
     structs::{BindingBox, BindingStep, Filter, Qualifier, Variable},
@@ -14,22 +14,20 @@ pub fn get_expected_relation_count(
     bound_by: &Variable,
     bbox: &BindingBox,
     parent_binding_opt: Option<&Binding>,
-    ocel: Option<&IndexLinkedOCEL>,
-) -> Option<f32> {
-    if ocel.is_none() {
-        eprintln!("NO OCEL?! for step order");
-        return None;
-    }
+    ocel: &IndexLinkedOCEL,
+) -> Option<usize> {
     let mut bound_by_types = Vec::new();
     // First check if bound_by is already bound by parent
     if let Some(bound_by_index) = parent_binding_opt.and_then(|b| b.get_any_index(bound_by)) {
-        if let Some(ocel) = ocel {
-            let bound_by_type = match bound_by_index {
-                process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Event(event_index) => EventOrObjectType::Event(ocel.get_ev(&event_index).event_type.clone()),
-                process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Object(object_index) => EventOrObjectType::Object(ocel.get_ob(&object_index).object_type.clone()),
-                };
-            bound_by_types.push(bound_by_type);
-        }
+        let bound_by_type = match bound_by_index {
+            process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Event(
+                event_index,
+            ) => EventOrObjectTypeRef::Event(ocel.get_ev(&event_index).event_type.as_str()),
+            process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Object(
+                object_index,
+            ) => EventOrObjectTypeRef::Object(ocel.get_ob(&object_index).object_type.as_str()),
+        };
+        bound_by_types.push(bound_by_type);
     } else {
         bound_by_types = match bound_by {
             Variable::Event(var_ev) => bbox
@@ -37,30 +35,37 @@ pub fn get_expected_relation_count(
                 .get(var_ev)
                 .unwrap()
                 .iter()
-                .map(|t| EventOrObjectType::Event(t.clone()))
+                .map(|t| EventOrObjectTypeRef::Event(t.as_str()))
                 .collect(),
             Variable::Object(var_ob) => bbox
                 .new_object_vars
                 .get(var_ob)
                 .unwrap()
                 .iter()
-                .map(|t| EventOrObjectType::Object(t.clone()))
+                .map(|t| EventOrObjectTypeRef::Object(t.as_str()))
                 .collect(),
         }
     }
     let res = bound_by_types
         .into_iter()
         .map(|bound_by_type| {
-            // TODO
-            0.0
-            // ocel.unwrap()
-            //     .avg_rels_of_type_per_type
-            //     .get(&bound_by_type)
-            //     .copied()
-            //     .unwrap_or_default()
+            // Previously this was based on the average relations of an object/event
+            // Now it's simply the count (how many exist)
+            match bound_by_type {
+                EventOrObjectTypeRef::Event(t) => ocel
+                    .events_per_type
+                    .get(t)
+                    .map(|es| es.len())
+                    .unwrap_or_default(),
+                EventOrObjectTypeRef::Object(t) => ocel
+                    .objects_per_type
+                    .get(t)
+                    .map(|es| es.len())
+                    .unwrap_or_default(),
+            }
         })
         .sum();
-    // println!("{res} for {var:?} {bound_by:?}");
+    println!("{res} for {bound_by:?}");
     Some(res)
 }
 impl BindingStep {
@@ -75,7 +80,7 @@ impl BindingStep {
     pub fn get_binding_order(
         bbox: &BindingBox,
         parent_binding_opt: Option<&Binding>,
-        ocel: Option<&IndexLinkedOCEL>,
+        ocel: &IndexLinkedOCEL,
     ) -> Vec<Self> {
         let mut ret = Vec::new();
 
@@ -251,8 +256,7 @@ impl BindingStep {
                     })
                     .sorted_by_cached_key(|(bound_by_var, (_v, _q, _filter_index, _reversed))| {
                         get_expected_relation_count(bound_by_var, bbox, parent_binding_opt, ocel)
-                            .unwrap_or(10.0)
-                            .round() as usize
+                            .unwrap_or(10)
                     })
                     .next()
                 {
