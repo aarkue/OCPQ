@@ -18,7 +18,7 @@ import {
   LuLink,
   LuTrash,
 } from "react-icons/lu";
-import { VisualEditorContext } from "../VisualEditorContext";
+import { VisualEditorContext, VisualEditorContextValue } from "../VisualEditorContext";
 import {
   EventVarSelector,
   ObjectOrEventVarSelector,
@@ -29,6 +29,10 @@ import { EvOrObVarName, EvVarName, ObVarName } from "./variable-names";
 import Spinner from "@/components/Spinner";
 import clsx from "clsx";
 import { PiCodeFill } from "react-icons/pi";
+import { ObjectVariable } from "@/types/generated/ObjectVariable";
+import { EventVariable } from "@/types/generated/EventVariable";
+import { OCELInfo } from "@/types/ocel";
+import { MdSwapHoriz } from "react-icons/md";
 
 const CELEditor = lazy(async () => await import("@/components/CELEditor"));
 export default function FilterOrConstraintEditor<
@@ -55,10 +59,12 @@ export default function FilterOrConstraintEditor<
     getNodeIDByName,
     getTypesForVariable,
     getAvailableChildNames,
+    ocelInfo
   } = useContext(VisualEditorContext);
   const childVars = getAvailableChildNames(nodeID);
   switch (value.type) {
-    case "O2E":
+    case "O2E": {
+      const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.event, value.object, true) : null;
       return (
         <>
           <EventVarSelector
@@ -71,8 +77,14 @@ export default function FilterOrConstraintEditor<
               }
             }}
           />
+          <SupportDisplay support={support} />
           <ObjectVarSelector
             objectVars={availableObjectVars}
+            disabledStyleObjectVars={availableObjectVars.filter((v) => {
+              const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.event, v, true) : null;
+              if (support !== null) { return support === 0 }
+              else { return true; }
+            })}
             value={value.object}
             onChange={(newV) => {
               if (newV !== undefined) {
@@ -98,7 +110,9 @@ export default function FilterOrConstraintEditor<
           />
         </>
       );
-    case "O2O":
+    }
+    case "O2O": {
+      const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.object, value.other_object, false) : null;
       return (
         <>
           <ObjectVarSelector
@@ -111,8 +125,19 @@ export default function FilterOrConstraintEditor<
               }
             }}
           />
+          <div className="relative -ml-1 -mr-3">
+            <Button variant="ghost" size="icon" title="Swap relation" onClick={() => updateValue({ ...value, object: value.other_object, other_object: value.object })}>
+              <MdSwapHoriz />
+            </Button>
+          </div>
+          <SupportDisplay support={support} />
           <ObjectVarSelector
             objectVars={availableObjectVars}
+            disabledStyleObjectVars={availableObjectVars.filter((v) => {
+              const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.object, v, false) : null;
+              if (support !== null) { return support === 0 }
+              else { return true; }
+            })}
             value={value.other_object}
             onChange={(newV) => {
               if (newV !== undefined) {
@@ -120,8 +145,7 @@ export default function FilterOrConstraintEditor<
                 updateValue({ ...value });
               }
             }}
-          />
-          <Input
+          />          <Input
             className="w-full"
             placeholder="Qualifier"
             value={value.qualifier ?? ""}
@@ -138,6 +162,7 @@ export default function FilterOrConstraintEditor<
           />
         </>
       );
+    }
     case "NotEqual":
       return (
         <>
@@ -778,9 +803,9 @@ export default function FilterOrConstraintEditor<
             name="At time"
             onChange={(ev) => {
               switch (
-                ev as (Filter & {
-                  type: "ObjectAttributeValueFilter";
-                })["at_time"]["type"]
+              ev as (Filter & {
+                type: "ObjectAttributeValueFilter";
+              })["at_time"]["type"]
               ) {
                 case "Always":
                   value.at_time = { type: "Always" };
@@ -1051,19 +1076,19 @@ function MinMaxDisplayWithSugar({
         (value.min !== value.max &&
           value.min !== null &&
           value.max !== null)) && (
-        <>
-          {rangeMode === true && (
-            <>
-              {value.min ?? 0} - {value.max ?? "∞"}
-            </>
-          )}
-          {rangeMode !== true && (
-            <>
-              {value.min ?? 0} ≤ {children} ≤ {value.max ?? "∞"}
-            </>
-          )}
-        </>
-      )}
+          <>
+            {rangeMode === true && (
+              <>
+                {value.min ?? 0} - {value.max ?? "∞"}
+              </>
+            )}
+            {rangeMode !== true && (
+              <>
+                {value.min ?? 0} ≤ {children} ≤ {value.max ?? "∞"}
+              </>
+            )}
+          </>
+        )}
       {}
     </>
   );
@@ -1326,4 +1351,32 @@ function AttributeValueFilterSelector({
 
 function deDupe<T>(values: T[]): T[] {
   return [...new Set(values).values()];
+}
+
+
+function getRelationshipSupport(ocelInfo: OCELInfo, getTypesForVariable: VisualEditorContextValue['getTypesForVariable'], nodeID: string, var1: ObjectVariable | EventVariable, var2: ObjectVariable, isE2O: boolean): number {
+  const types1 = getTypesForVariable(nodeID, var1, isE2O ? "event" : "object");
+  const types2 = getTypesForVariable(nodeID, var2, "object");
+  let support = 0;
+  for (const type1 of types1) {
+    for (const type2 of types2) {
+      support += (isE2O ? ocelInfo?.e2o_types : ocelInfo?.o2o_types)[type1.name][type2.name][0];
+
+    }
+  }
+  return support;
+
+
+}
+
+function SupportDisplay({ support }: { support: number | null }) {
+  if (support === null) {
+    return null;
+  }
+  return <div className="relative">
+    <div className={clsx("absolute left-1/2 -translate-x-1/2 -bottom-7 p-0.5 rounded text-sm w-fit whitespace-nowrap", support > 0 && "bg-green-200 text-green-800",
+      support === 0 && "bg-red-200 text-red-800")}>
+      {support} Supporting Relations
+    </div></div>
+
 }

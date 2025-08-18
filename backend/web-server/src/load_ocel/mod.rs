@@ -59,9 +59,10 @@ pub async fn load_ocel_file_req(
 pub fn load_ocel_file_to_state(name: &str, state: &AppState) -> Option<OCELInfo> {
     match load_ocel_file(name) {
         Ok(ocel) => {
-            let ocel_info: OCELInfo = (&ocel).into();
+            let locel = IndexLinkedOCEL::from_ocel(ocel);
+            let ocel_info: OCELInfo = (&locel).into();
             let mut x = state.ocel.write().unwrap();
-            *x = Some(IndexLinkedOCEL::from_ocel(ocel));
+            *x = Some(locel);
             Some(ocel_info)
         }
         Err(e) => {

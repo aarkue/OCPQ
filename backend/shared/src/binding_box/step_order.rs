@@ -316,7 +316,7 @@ impl BindingStep {
                     .iter()
                     .any(|bv| var_can_bind.get(bv).unwrap().contains(var));
                 if can_be_bound {
-                    1
+                    100
                 } else {
                     0
                 }

@@ -20,17 +20,17 @@ export function EvVarName({ eventVar }: { eventVar: number }) {
   );
 }
 
-export function getObVarName(obVar: number) {
+export function getObVarName(obVar: number, disabledStyle: boolean = false) {
   return function GetObVarName() {
-    return <ObVarName obVar={obVar} />;
+    return <ObVarName obVar={obVar} disabledStyle={disabledStyle} />;
   };
 }
 
-export function ObVarName({ obVar }: { obVar: number }) {
+export function ObVarName({ obVar, disabledStyle }: { obVar: number, disabledStyle?: boolean }) {
   const { getVarName } = useContext(VisualEditorContext);
   const varInfo = getVarName(obVar, "object");
   return (
-    <span className="font-mono font-semibold" style={{ color: varInfo.color }}>
+    <span className="font-mono font-semibold" style={{ color: disabledStyle === true ? "darkgray" :varInfo.color }}>
       <LuBox className="inline-block -mr-1.5" /> {varInfo.name}
     </span>
   );

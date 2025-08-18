@@ -2,7 +2,7 @@ use process_mining::ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::structs::{Binding, BindingBox, BindingStep};
-const MAX_NUM_BINDINGS: usize = 2_000_000;
+const MAX_NUM_BINDINGS: usize = 109_000_000;
 /// This can slightly reduce memory usage by filtering out unfitting bindings before collecting into a vec
 /// However, the filters may be checked multiple times
 #[inline(always)]
@@ -69,17 +69,24 @@ impl BindingBox {
                                     if time_constr.is_none()
                                         || time_constr.as_ref().unwrap().iter().all(
                                             |(ref_ev_var_name, (min_sec, max_sec))| {
-                                                let ref_ev =
-                                                    b.get_ev(ref_ev_var_name, ocel).unwrap();
-                                                let duration_diff = (e.time - ref_ev.time)
-                                                    .num_milliseconds()
-                                                    as f64
-                                                    / 1000.0;
-                                                !min_sec
-                                                    .is_some_and(|min_sec| duration_diff < min_sec)
-                                                    && !max_sec.is_some_and(|max_sec| {
+                                                // println!(
+                                                //     "{:?} - {:?}; Binding: {:?}",
+                                                //     ref_ev_var_name, step, b
+                                                // );
+                                                let ref_ev = b.get_ev(ref_ev_var_name, ocel);
+                                                if let Some(ref_ev) = ref_ev {
+                                                    let duration_diff = (e.time - ref_ev.time)
+                                                        .num_milliseconds()
+                                                        as f64
+                                                        / 1000.0;
+                                                    !min_sec.is_some_and(|min_sec| {
+                                                        duration_diff < min_sec
+                                                    }) && !max_sec.is_some_and(|max_sec| {
                                                         duration_diff > max_sec
                                                     })
+                                                } else {
+                                                    true
+                                                }
                                             },
                                         )
                                     {
