@@ -12,8 +12,8 @@ export default function ErrorPage() {
     >
       <div>
         <LightningBoltIcon className="mx-auto my-2 text-orange-400 w-12 h-12" />
-        <h1 className="text-5xl">404</h1>
-        <p className="text-3xl">The requested route does not exist.</p>
+        <h1 className="text-5xl">Error</h1>
+        <p className="text-3xl">Sorry about that!</p>
         <p className="text-center text-xl">
           <i>{error?.statusText ?? error?.message}</i>
         </p>
