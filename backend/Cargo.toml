@@ -7,8 +7,8 @@ members = [ "ocpq_cli",
 ]
 
 [profile.release]
-strip = true
+# strip = true
 panic = 'abort'
 opt-level = 3
 lto = 'fat'
-codegen-units = 1
+# codegen-units = 1
