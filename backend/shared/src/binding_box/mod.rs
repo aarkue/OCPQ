@@ -7,7 +7,7 @@ pub mod expand_step;
 #[cfg(test)]
 pub mod test;
 
-use std::{collections::HashSet, fs::File, io::BufWriter, time::Instant};
+use std::{collections::HashSet, env::remove_var, fs::File, io::BufWriter, time::Instant};
 
 use chrono::DateTime;
 use itertools::Itertools;
@@ -215,17 +215,54 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Opt
     if skipped_bindings {
         println!("Bindings were skipped!");
     }
+    let assume_all_included = !tree.nodes.iter().any(|node| {
+        let node_as_box = node.as_box().unwrap();
+        node_as_box
+            .ob_var_labels
+            .iter()
+            .any(|(_, l)| matches!(l, structs::FilterLabel::INCLUDED))
+            || node_as_box
+                .ev_var_labels
+                .iter()
+                .any(|(_, l)| matches!(l, structs::FilterLabel::INCLUDED))
+    });
     // Filter/Export
     let filter_now = Instant::now();
-    let mut ob_included_indices: HashSet<ObjectIndex> = HashSet::new();
-    let mut ev_included_indices: HashSet<EventIndex> = HashSet::new();
+    let mut ob_included_indices: HashSet<ObjectIndex> = if assume_all_included {
+        ocel.get_all_obs_ref().copied().collect()
+    } else {
+        HashSet::new()
+    };
+    let mut ev_included_indices: HashSet<EventIndex> = if assume_all_included {
+        ocel.get_all_evs_ref().copied().collect()
+    } else {
+        HashSet::new()
+    };
+
     let mut ob_excluded_indices: HashSet<ObjectIndex> = HashSet::new();
     let mut ev_excluded_indices: HashSet<EventIndex> = HashSet::new();
 
-    let mut e2o_rels_included: HashSet<(EventIndex, ObjectIndex, Option<String>)> = HashSet::new();
+    let mut e2o_rels_included: HashSet<(EventIndex, ObjectIndex, Option<String>)> =
+        if assume_all_included {
+            ocel.get_all_evs_ref()
+                .map(|e| ocel.get_e2o(e).map(|r| (*e, *r.1, Some(r.0.to_string()))))
+                .flatten()
+                .collect()
+        } else {
+            HashSet::new()
+        };
     let mut e2o_rels_excluded: HashSet<(EventIndex, ObjectIndex, Option<String>)> = HashSet::new();
 
-    let mut o2o_rels_included: HashSet<(ObjectIndex, ObjectIndex, Option<String>)> = HashSet::new();
+    let mut o2o_rels_included: HashSet<(ObjectIndex, ObjectIndex, Option<String>)> =
+        if assume_all_included {
+            ocel.get_all_obs_ref()
+                .map(|o| ocel.get_o2o(o).map(|r| (*o, *r.1, Some(r.0.to_string()))))
+                .flatten()
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
     let mut o2o_rels_excluded: HashSet<(ObjectIndex, ObjectIndex, Option<String>)> = HashSet::new();
 
     for (index, binding, _viol) in evaluation_results_flat {
