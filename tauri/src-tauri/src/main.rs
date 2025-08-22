@@ -69,9 +69,10 @@ fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
 #[tauri::command(async)]
 async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
     let ocel = import_ocel_from_path(path)?;
-    let ocel_info: OCELInfo = (&ocel).into();
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(ocel.into());
+    *state_guard = Some(locel);
     Ok(ocel_info)
 }
 
@@ -89,9 +90,10 @@ async fn import_ocel_slice(
             return Err("Unknown OCEL format {format}.".to_string());
         }
     };
-    let ocel_info: OCELInfo = (&ocel).into();
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(ocel.into());
+    *state_guard = Some(locel);
     Ok(ocel_info)
 }
 
@@ -100,7 +102,7 @@ async fn get_current_ocel_info(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<OCELInfo>, String> {
     let res: Result<Option<OCELInfo>, String> = match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(Some((ocel.get_ocel_ref()).into())),
+        Some(ocel) => Ok(Some(ocel.into())),
         None => Ok(None),
     };
     res

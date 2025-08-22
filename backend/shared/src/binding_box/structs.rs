@@ -363,7 +363,7 @@ impl BindingBoxTreeNode {
                         // Evaluate Child
                             tree.nodes[*c].evaluate(*c, b.clone(), tree, ocel);
                     child_res.insert(c_name, violations);
-                    if children.len() * c_res.len() * expanded_len > 100_000_000 {
+                    if children.len() * c_res.len() * expanded_len > 150_000_000 {
                         x.cancel();
                         println!(
                             "Too much too handle! {}*{}*{}={}",

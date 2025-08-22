@@ -953,6 +953,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                         error: "Evaluation failed",
                       },
                     );
+                    console.log(res.bindingsSkipped);
                     if (res.bindingsSkipped) {
                       toast.error(
                         (x) => (

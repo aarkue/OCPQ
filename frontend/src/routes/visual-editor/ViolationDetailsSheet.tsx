@@ -74,7 +74,7 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
 
   const numBindings = violationsPerNode?.evalRes[nodeID]?.situationCount ?? 0;
   const numViolations =
-    violationsPerNode?.evalRes[nodeID].situationViolatedCount ?? 0;
+    violationsPerNode?.evalRes[nodeID]?.situationViolatedCount ?? 0;
   console.log(violationResPerNodes.evalRes[nodeID]);
   const columns = useMemo(() => {
     if (items.length >= 1) {

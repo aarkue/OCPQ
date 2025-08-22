@@ -15,7 +15,7 @@ pub fn get_expected_relation_count(
     bbox: &BindingBox,
     parent_binding_opt: Option<&Binding>,
     ocel: &IndexLinkedOCEL,
-) -> Option<usize> {
+) -> Option<i32> {
     let mut bound_by_types = Vec::new();
     // First check if bound_by is already bound by parent
     if let Some(bound_by_index) = parent_binding_opt.and_then(|b| b.get_any_index(bound_by)) {
@@ -46,7 +46,7 @@ pub fn get_expected_relation_count(
                 .collect(),
         }
     }
-    let res = bound_by_types
+    let res: usize = bound_by_types
         .into_iter()
         .map(|bound_by_type| {
             // Previously this was based on the average relations of an object/event
@@ -65,8 +65,8 @@ pub fn get_expected_relation_count(
             }
         })
         .sum();
-    println!("{res} for {bound_by:?}");
-    Some(res)
+    // println!("{res} for {bound_by:?}");
+    Some((res as i32))
 }
 impl BindingStep {
     /// Get a binding order from a binding box
@@ -253,10 +253,10 @@ impl BindingStep {
                             .find(|(x, _q, _filter_index, _reversed)| x == var)
                             .map(|t| (v, t))
                     })
-                    .sorted_by_cached_key(|(bound_by_var, (_v, _q, _filter_index, _reversed))| {
-                        get_expected_relation_count(bound_by_var, bbox, parent_binding_opt, ocel)
-                            .unwrap_or(10)
-                    })
+                    // .sorted_by_cached_key(|(bound_by_var, (_v, _q, _filter_index, _reversed))| {
+                    //     get_expected_relation_count(bound_by_var, bbox, parent_binding_opt, ocel)
+                    //         .unwrap_or(10)
+                    // })
                     .next()
                 {
                     // `var` can be bound based on `v`!
@@ -316,7 +316,7 @@ impl BindingStep {
                     .iter()
                     .any(|bv| var_can_bind.get(bv).unwrap().contains(var));
                 if can_be_bound {
-                    1
+                    100
                 } else {
                     0
                 }

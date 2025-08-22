@@ -135,7 +135,7 @@ async fn main() {
 async fn get_loaded_ocel_info(
     State(state): State<AppState>,
 ) -> (StatusCode, Json<Option<OCELInfo>>) {
-    match with_ocel_from_state(&State(state), |ocel| (ocel.get_ocel_ref()).into()) {
+    match with_ocel_from_state(&State(state), |ocel| ocel.into()) {
         Some(ocel_info) => (StatusCode::OK, Json(Some(ocel_info))),
         None => (StatusCode::NOT_FOUND, Json(None)),
     }
@@ -147,8 +147,9 @@ async fn upload_ocel_xml<'a>(
 ) -> (StatusCode, Json<OCELInfo>) {
     let ocel = import_ocel_xml_slice(&ocel_bytes);
     let mut x = state.ocel.write().unwrap();
-    let ocel_info: OCELInfo = (&ocel).into();
-    *x = Some(IndexLinkedOCEL::from(ocel));
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
+    *x = Some(locel);
 
     (StatusCode::OK, Json(ocel_info))
 }
@@ -158,10 +159,10 @@ async fn upload_ocel_sqlite<'a>(
     ocel_bytes: Bytes,
 ) -> (StatusCode, Json<OCELInfo>) {
     let ocel = import_ocel_sqlite_from_slice(&ocel_bytes).unwrap();
-    let mut x: std::sync::RwLockWriteGuard<'_, Option<IndexLinkedOCEL>> =
-        state.ocel.write().unwrap();
-    let ocel_info: OCELInfo = (&ocel).into();
-    *x = Some(IndexLinkedOCEL::from_ocel(ocel));
+    let mut x = state.ocel.write().unwrap();
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
+    *x = Some(locel);
 
     (StatusCode::OK, Json(ocel_info))
 }
@@ -172,8 +173,9 @@ async fn upload_ocel_json<'a>(
 ) -> (StatusCode, Json<OCELInfo>) {
     let ocel: OCEL = serde_json::from_slice(&ocel_bytes).unwrap();
     let mut x = state.ocel.write().unwrap();
-    let ocel_info: OCELInfo = (&ocel).into();
-    *x = Some(IndexLinkedOCEL::from_ocel(ocel));
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
+    *x = Some(locel);
     (StatusCode::OK, Json(ocel_info))
 }
 

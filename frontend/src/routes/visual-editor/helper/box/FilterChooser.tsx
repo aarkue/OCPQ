@@ -25,6 +25,7 @@ import FilterOrConstraintEditor, {
 import { getEvVarName, getObVarName } from "./variable-names";
 import FilterLabelIcon from "@/components/FilterLabelIcon";
 import { type FilterLabel } from "@/types/generated/FilterLabel";
+import { MdDisabledVisible } from "react-icons/md";
 
 export default function FilterChooser({
   id,
@@ -452,7 +453,7 @@ export default function FilterChooser({
               </div>
             </AlertDialogHeader>
             {alertState.value !== undefined && (
-              <div className="flex gap-x-2">
+              <div className="flex gap-x-2 mb-6">
                 <FilterOrConstraintEditor
                   value={alertState.value}
                   updateValue={(val) => {
@@ -690,8 +691,10 @@ export function ObjectVarSelector({
   objectVars,
   value,
   onChange,
+  disabledStyleObjectVars
 }: {
   objectVars: ObjectVariable[];
+  disabledStyleObjectVars?: ObjectVariable[],
   value: ObjectVariable | undefined;
   onChange: (value: ObjectVariable | undefined) => unknown;
 }) {
@@ -699,7 +702,7 @@ export function ObjectVarSelector({
   return (
     <Combobox
       options={objectVars.map((v) => ({
-        label: getObVarName(v),
+        label: getObVarName(v,disabledStyleObjectVars !== undefined ? disabledStyleObjectVars.includes(v) : undefined),
         value: `${v} --- ${getVarName(v, "object").name}`,
       }))}
       onChange={(val) => {

@@ -49,7 +49,7 @@ export function DataTablePagination<TData, TValue>({
     initialState: {
       pagination: {
         pageIndex: 0,
-        pageSize: 10,
+        pageSize: 20,
       },
     },
   });
@@ -66,7 +66,7 @@ export function DataTablePagination<TData, TValue>({
   }, [initialMode]);
   return (
     <div className="w-full">
-      <div className="rounded-md border w-full max-h-[70vh] overflow-auto">
+      <div className="rounded-md border w-full max-h-[73vh] overflow-auto">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

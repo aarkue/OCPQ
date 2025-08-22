@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use process_mining::{
     ocel::{
         linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
@@ -32,17 +34,83 @@ pub struct OCELInfo {
     pub event_types: Vec<OCELType>,
     pub object_ids: Vec<String>,
     pub event_ids: Vec<String>,
+    pub e2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>>,
+    pub o2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>>,
 }
 
-impl From<&OCEL> for OCELInfo {
-    fn from(val: &OCEL) -> Self {
+impl From<&IndexLinkedOCEL> for OCELInfo {
+    fn from(val: &IndexLinkedOCEL) -> Self {
+        let mut e2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>> = val
+            .get_ev_types()
+            .map(|t| {
+                (
+                    t.to_string(),
+                    val.get_ob_types()
+                        .map(|ot| (ot.to_string(), (0, HashSet::default())))
+                        .collect(),
+                )
+            })
+            .collect();
+        let mut o2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>> = val
+            .get_ob_types()
+            .map(|t| {
+                (
+                    t.to_string(),
+                    val.get_ob_types()
+                        .map(|ot| (ot.to_string(), (0, HashSet::default())))
+                        .collect(),
+                )
+            })
+            .collect();
+
+        for ob in val.get_all_obs_ref() {
+            let ob_type = &val.get_ob(ob).object_type;
+            for (q, ev) in val.get_e2o_rev(ob) {
+                let ev_type = &val.get_ev(ev).event_type;
+                let (ref mut count, ref mut qualifiers) = e2o_types
+                    .get_mut(ev_type)
+                    .unwrap()
+                    .get_mut(ob_type)
+                    .unwrap();
+                *count += 1;
+                if !qualifiers.contains(q) {
+                    qualifiers.insert(q.to_string());
+                }
+            }
+
+            for (q, ob2) in val.get_o2o(ob) {
+                let ob2_type = &val.get_ob(ob2).object_type;
+                let (ref mut count, ref mut qualifiers) = o2o_types
+                    .get_mut(ob_type)
+                    .unwrap()
+                    .get_mut(ob2_type)
+                    .unwrap();
+                *count += 1;
+                if !qualifiers.contains(q) {
+                    qualifiers.insert(q.to_string());
+                }
+            }
+        }
+
         OCELInfo {
-            num_objects: val.objects.len(),
-            num_events: val.events.len(),
-            object_types: val.object_types.clone(),
-            event_types: val.event_types.clone(),
-            event_ids: val.events.iter().map(|ev| ev.id.clone()).collect(),
-            object_ids: val.objects.iter().map(|ob| ob.id.clone()).collect(),
+            num_objects: val.get_ocel_ref().objects.len(),
+            num_events: val.get_ocel_ref().events.len(),
+            object_types: val.get_ocel_ref().object_types.clone(),
+            event_types: val.get_ocel_ref().event_types.clone(),
+            event_ids: val
+                .get_ocel_ref()
+                .events
+                .iter()
+                .map(|ev| ev.id.clone())
+                .collect(),
+            object_ids: val
+                .get_ocel_ref()
+                .objects
+                .iter()
+                .map(|ob| ob.id.clone())
+                .collect(),
+            e2o_types,
+            o2o_types,
         }
     }
 }
