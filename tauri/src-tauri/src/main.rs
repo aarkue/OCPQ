@@ -1,6 +1,9 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::{
     collections::{HashMap, HashSet},
     fs::File,
@@ -9,6 +12,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ocpq_shared::process_mining::{
+    export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
+    import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
+    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice,
+    ocel::linked_ocel::IndexLinkedOCEL, OCEL,
+};
 use ocpq_shared::{
     binding_box::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
@@ -25,14 +34,9 @@ use ocpq_shared::{
     },
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     ocel_qualifiers::qualifiers::{get_qualifiers_for_event_types, QualifiersForEventType},
-    preprocessing::linked_ocel::{link_ocel_info, IndexLinkedOCEL},
+    preprocessing::preprocess::get_object_rels_per_type,
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
-};
-use process_mining::{
-    export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
-    import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
-    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice, OCEL,
 };
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
@@ -51,13 +55,13 @@ pub struct AppState {
 
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
     let path = path.as_ref();
-    println!("{:?}", path);
+    println!("{path:?}");
     let path_str = path.to_string_lossy();
     let ocel = match path_str.ends_with(".json") {
-        true => import_ocel_json_from_path(path).map_err(|e| format!("{:?}", e))?,
+        true => import_ocel_json_from_path(path).map_err(|e| format!("{e:?}"))?,
         false => match path_str.ends_with(".xml") {
             true => import_ocel_xml_file(path),
-            false => import_ocel_sqlite_from_path(path).map_err(|e| format!("{:?}", e))?,
+            false => import_ocel_sqlite_from_path(path).map_err(|e| format!("{e:?}"))?,
         },
     };
     Ok(ocel)
@@ -67,7 +71,7 @@ async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OC
     let ocel = import_ocel_from_path(path)?;
     let ocel_info: OCELInfo = (&ocel).into();
     let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(link_ocel_info(ocel));
+    *state_guard = Some(ocel.into());
     Ok(ocel_info)
 }
 
@@ -87,7 +91,7 @@ async fn import_ocel_slice(
     };
     let ocel_info: OCELInfo = (&ocel).into();
     let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(link_ocel_info(ocel));
+    *state_guard = Some(ocel.into());
     Ok(ocel_info)
 }
 
@@ -96,7 +100,7 @@ async fn get_current_ocel_info(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<OCELInfo>, String> {
     let res: Result<Option<OCELInfo>, String> = match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(Some((&ocel.ocel).into())),
+        Some(ocel) => Ok(Some((ocel.get_ocel_ref()).into())),
         None => Ok(None),
     };
     res
@@ -107,7 +111,7 @@ async fn get_event_qualifiers(
     state: State<'_, AppState>,
 ) -> Result<HashMap<String, HashMap<String, QualifiersForEventType>>, String> {
     match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(get_qualifiers_for_event_types(&ocel.ocel)),
+        Some(ocel) => Ok(get_qualifiers_for_event_types(ocel.get_ocel_ref())),
         None => Err("No OCEL loaded".to_string()),
     }
 }
@@ -117,7 +121,10 @@ async fn get_object_qualifiers(
     state: State<'_, AppState>,
 ) -> Result<HashMap<String, HashSet<(String, String)>>, String> {
     match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(ocel.object_rels_per_type.clone()),
+        Some(ocel) => {
+            let object_rels_per_type = get_object_rels_per_type(ocel);
+            Ok(object_rels_per_type)
+        }
         None => Err("No OCEL loaded".to_string()),
     }
 }
@@ -146,7 +153,7 @@ async fn export_filter_box(
 ) -> Result<(), String> {
     let res = match state.ocel.read().await.as_ref() {
         Some(ocel) => {
-            let res: process_mining::OCEL = filter_ocel_box_tree(req.tree, ocel).unwrap();
+            let res: OCEL = filter_ocel_box_tree(req.tree, ocel).unwrap();
             Some(res)
         }
         None => None,
@@ -301,8 +308,8 @@ async fn start_hpc_job_tauri(
         .map_err(|er| er.to_string())?;
     let p = start_port_forwarding(
         c2,
-        &format!("127.0.0.1:{}", port),
-        &format!("127.0.0.1:{}", port),
+        &format!("127.0.0.1:{port}"),
+        &format!("127.0.0.1:{port}"),
     )
     .await
     .map_err(|er| er.to_string())?;
@@ -312,7 +319,7 @@ async fn start_hpc_job_tauri(
         port,
         tauri::async_runtime::JoinHandle::Tokio(p),
     ));
-    println!("Ceated job {} in folder {}", job_id, folder_id);
+    println!("Ceated job {job_id} in folder {folder_id}");
     Ok(job_id)
 }
 
@@ -346,46 +353,52 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
-        .setup(|app| {
-            log::info!("Setup!");
-            #[cfg(any(windows, target_os = "linux"))]
-            {
-                let state = app.state::<AppState>();
-                let mut files = Vec::new();
+        .setup(
+            #[allow(unused_variables)]
+            // might be unused, depending on the platform
+            |app| {
+                log::info!("Setup!");
+                #[cfg(any(windows, target_os = "linux"))]
+                {
+                    let state = app.state::<AppState>();
+                    let mut files = Vec::new();
 
-                // NOTICE: `args` may include URL protocol (`your-app-protocol://`)
-                // or arguments (`--`) if your app supports them.
-                // files may also be passed as `file://path/to/file`
-                for maybe_file in std::env::args().skip(1) {
-                    // skip flags like -f or --flag
-                    log::info!("Args: {}", maybe_file);
-                    use std::path::PathBuf;
-                    if maybe_file.starts_with('-') {
-                        continue;
-                    }
-
-                    // handle `file://` path urls and fallback for other urls
-                    if let Ok(url) = url::Url::parse(&maybe_file) {
-                        if let Ok(path) = url.to_file_path() {
-                            files.push(path);
-                        } else {
-                            log::info!("Url file path failed. Using directly as PathBuf instead.");
-                            files.push(maybe_file.into());
+                    // NOTICE: `args` may include URL protocol (`your-app-protocol://`)
+                    // or arguments (`--`) if your app supports them.
+                    // files may also be passed as `file://path/to/file`
+                    for maybe_file in std::env::args().skip(1) {
+                        // skip flags like -f or --flag
+                        log::info!("Args: {maybe_file}");
+                        use std::path::PathBuf;
+                        if maybe_file.starts_with('-') {
+                            continue;
                         }
-                    } else {
-                        files.push(PathBuf::from(maybe_file))
+
+                        // handle `file://` path urls and fallback for other urls
+                        if let Ok(url) = url::Url::parse(&maybe_file) {
+                            if let Ok(path) = url.to_file_path() {
+                                files.push(path);
+                            } else {
+                                log::info!(
+                                    "Url file path failed. Using directly as PathBuf instead."
+                                );
+                                files.push(maybe_file.into());
+                            }
+                        } else {
+                            files.push(PathBuf::from(maybe_file))
+                        }
                     }
+                    let mut init_files_guard = state.initial_files.lock().unwrap();
+                    *init_files_guard = Some(
+                        files
+                            .into_iter()
+                            .map(|f| f.to_string_lossy().to_string())
+                            .collect(),
+                    );
                 }
-                let mut init_files_guard = state.initial_files.lock().unwrap();
-                *init_files_guard = Some(
-                    files
-                        .into_iter()
-                        .map(|f| f.to_string_lossy().to_string())
-                        .collect(),
-                );
-            }
-            Ok(())
-        })
+                Ok(())
+            },
+        )
         .invoke_handler(tauri::generate_handler![
             import_ocel,
             import_ocel_slice,

@@ -7,15 +7,12 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use ocpq_shared::{
-    binding_box::{evaluate_box_tree, BindingBoxTree},
-    preprocessing::linked_ocel::IndexLinkedOCEL,
-};
-use process_mining::{
+use ocpq_shared::binding_box::{evaluate_box_tree, BindingBoxTree};
+use ocpq_shared::process_mining::{
     import_ocel_json_from_path, import_ocel_sqlite_from_path, import_ocel_xml_file,
+    ocel::linked_ocel::IndexLinkedOCEL,
 };
 
-/// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -43,11 +40,11 @@ fn main() {
             import_ocel_sqlite_from_path(args.ocel).expect("Could not parse SQLite OCEL2.0")
         }
         Some("xml") => import_ocel_xml_file(args.ocel),
-        x => panic!("Could not import OCEL 2.0 file. Unknown extension: {:?}", x),
+        x => panic!("Could not import OCEL 2.0 file. Unknown extension: {x:?}"),
     };
     println!("Imported OCEL 2.0 in {:?}", now.elapsed());
     let now = Instant::now();
-    let index_linked_ocel = IndexLinkedOCEL::new(ocel);
+    let index_linked_ocel = IndexLinkedOCEL::from_ocel(ocel);
     println!("Linked OCEL 2.0 in {:?}", now.elapsed());
     let res = evaluate_box_tree(bbox_tree, &index_linked_ocel, true);
 

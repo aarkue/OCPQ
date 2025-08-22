@@ -6,15 +6,15 @@ use std::{cmp::max, collections::HashMap};
 
 use itertools::Itertools;
 
+use process_mining::ocel::linked_ocel::{
+    index_linked_ocel::EventOrObjectIndex, IndexLinkedOCEL, LinkedOCELAccess,
+};
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{
-    binding_box::{
-        structs::{BindingBoxTreeNode, Constraint, EventVariable, ObjectVariable, Variable},
-        Binding, BindingBox, BindingBoxTree,
-    },
-    preprocessing::linked_ocel::{EventOrObjectIndex, IndexLinkedOCEL},
+use crate::binding_box::{
+    structs::{BindingBoxTreeNode, Constraint, EventVariable, ObjectVariable, Variable},
+    Binding, BindingBox, BindingBoxTree,
 };
 
 use super::{
@@ -33,8 +33,7 @@ pub fn generate_sample_bindings(
         Variable::Event(ev) => {
             let instances: Vec<_> = ocel_types
                 .iter()
-                .flat_map(|t| ocel.events_of_type.get(t.inner()))
-                .flatten()
+                .flat_map(|t| ocel.get_evs_of_type(t.inner()))
                 .collect();
             let sample_count = if instances.len() >= SAMPLE_MIN_NUM_INSTANCES {
                 (instances.len() as f32 * SAMPLE_FRAC).ceil() as usize
@@ -51,8 +50,7 @@ pub fn generate_sample_bindings(
         Variable::Object(ov) => {
             let instances: Vec<_> = ocel_types
                 .iter()
-                .flat_map(|t| ocel.objects_of_type.get(t.inner()))
-                .flatten()
+                .flat_map(|t| ocel.get_obs_of_type(t.inner()))
                 .collect();
             let sample_count = if instances.len() >= SAMPLE_MIN_NUM_INSTANCES {
                 (instances.len() as f32 * SAMPLE_FRAC).ceil() as usize
@@ -284,6 +282,20 @@ impl EventOrObjectType {
         match self {
             EventOrObjectType::Event(et) => et,
             EventOrObjectType::Object(ot) => ot,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum EventOrObjectTypeRef<'a> {
+    Event(&'a str),
+    Object(&'a str),
+}
+
+impl<'a> EventOrObjectTypeRef<'a> {
+    pub fn inner(&'a self) -> &'a str {
+        match self {
+            EventOrObjectTypeRef::Event(et) => et,
+            EventOrObjectTypeRef::Object(ot) => ot,
         }
     }
 }

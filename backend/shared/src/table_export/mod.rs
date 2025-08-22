@@ -2,14 +2,17 @@ use std::{borrow::Cow, collections::HashSet};
 
 use anyhow::{Error, Ok};
 use itertools::Itertools;
-use process_mining::ocel::ocel_struct::{OCELAttributeType, OCELAttributeValue};
+use process_mining::ocel::{
+    linked_ocel::IndexLinkedOCEL,
+    ocel_struct::{OCELAttributeType, OCELAttributeValue},
+};
 use rust_xlsxwriter::{
     ColNum, Format, FormatAlign, FormatBorder, IntoExcelData, RowNum, Workbook, Worksheet,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{binding_box::EvaluationResultWithCount, preprocessing::linked_ocel::IndexLinkedOCEL};
+use crate::binding_box::EvaluationResultWithCount;
 
 // #[test]
 // fn test(){
@@ -38,7 +41,7 @@ impl IntoExcelData for CellContent<'_> {
                 OCELAttributeValue::Time(date_time) => {
                     IntoExcelData::write(&date_time.naive_utc(), worksheet, row, col)
                 }
-                s => IntoExcelData::write(format!("{}", s), worksheet, row, col),
+                s => IntoExcelData::write(format!("{s}"), worksheet, row, col),
             },
         }
     }
@@ -71,9 +74,7 @@ impl IntoExcelData for CellContent<'_> {
                     col,
                     format,
                 ),
-                s => {
-                    IntoExcelData::write_with_format(format!("{}", s), worksheet, row, col, format)
-                }
+                s => IntoExcelData::write_with_format(format!("{s}"), worksheet, row, col, format),
             },
         }
     }
@@ -118,7 +119,7 @@ impl From<&CellContent<'_>> for Vec<u8> {
                     // OCELAttributeValue::Boolean(_) => todo!(),
                     // OCELAttributeValue::String(_) => todo!(),
                     // OCELAttributeValue::Null => todo!(),
-                    v => format!("{}", v).into_bytes(),
+                    v => format!("{v}").into_bytes(),
                 }
             }
         }

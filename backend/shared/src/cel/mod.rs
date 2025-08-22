@@ -11,16 +11,20 @@ use cel_interpreter::{
 use chrono::{DateTime, FixedOffset, Local};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use process_mining::ocel::ocel_struct::OCELAttributeValue;
+use process_mining::ocel::{
+    linked_ocel::{
+        index_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex},
+        IndexLinkedOCEL,
+    },
+    ocel_struct::OCELAttributeValue,
+};
 
 use crate::{
     binding_box::{
         structs::{EventVariable, LabelFunction, LabelValue, ObjectVariable, Variable},
         Binding, ViolationReason,
     },
-    preprocessing::linked_ocel::{
-        EventIndex, EventOrObjectIndex, IndexLinkedOCEL, OCELNodeRef, ObjectIndex,
-    },
+    preprocessing::linked_ocel::{event_or_object_from_index, OCELNodeRef},
 };
 
 fn string_to_index(s: &str) -> Option<EventOrObjectIndex> {
@@ -28,9 +32,9 @@ fn string_to_index(s: &str) -> Option<EventOrObjectIndex> {
     let (typ, num) = s.split_at(3);
     let num = num.parse::<usize>().ok()?;
     if typ == "ob_" {
-        Some(EventOrObjectIndex::Object(ObjectIndex(num)))
+        Some(EventOrObjectIndex::Object(num.into()))
     } else if typ == "ev_" {
-        Some(EventOrObjectIndex::Event(EventIndex(num)))
+        Some(EventOrObjectIndex::Event(num.into()))
     } else {
         None
     }
@@ -50,7 +54,8 @@ impl<T> Copy for RawBindingContextPtr<'_, T> {}
 
 fn index_string_to_val<'a>(s: &str, ocel: &'a IndexLinkedOCEL) -> Option<OCELNodeRef<'a>> {
     let index = string_to_index(s)?;
-    ocel.ob_or_ev_by_index(index)
+    let ret = event_or_object_from_index(index, ocel);
+    Some(ret)
 }
 
 unsafe fn index_string_to_val_raw<'a>(
@@ -86,10 +91,10 @@ pub fn ob_var_to_name(ob_var: &ObjectVariable) -> String {
 }
 
 pub fn ev_index_to_name(ev_index: &EventIndex) -> String {
-    format!("ev_{}", ev_index.0)
+    format!("ev_{}", ev_index.into_inner())
 }
 pub fn ob_index_to_name(ob_index: &ObjectIndex) -> String {
-    format!("ob_{}", ob_index.0)
+    format!("ob_{}", ob_index.into_inner())
 }
 
 pub fn evaluate_cel<'a>(
@@ -270,7 +275,7 @@ pub fn evaluate_cel<'a>(
                                 .filter(|a| &a.name == attr_name.as_ref())
                                 .sorted_by_key(|a| a.time)
                                 .filter(|a| a.time <= at)
-                                .last()
+                                .next_back()
                                 .map(|a| &a.value),
                         }
                         .unwrap_or(&OCELAttributeValue::Null);
@@ -353,20 +358,20 @@ pub fn evaluate_cel<'a>(
         );
 
         context.add_function("numEvents", move || -> ResolveResult {
-            unsafe { Ok((get_ocel_raw(ocel_raw).ocel.events.len() as u64).into()) }
+            unsafe { Ok((get_ocel_raw(ocel_raw).get_ocel_ref().events.len() as u64).into()) }
         });
         context.add_function("numObjects", move || -> ResolveResult {
-            unsafe { Ok((get_ocel_raw(ocel_raw).ocel.objects.len() as u64).into()) }
+            unsafe { Ok((get_ocel_raw(ocel_raw).get_ocel_ref().objects.len() as u64).into()) }
         });
 
         context.add_function("events", move || -> ResolveResult {
             unsafe {
                 Ok((get_ocel_raw(ocel_raw)
-                    .ocel
+                    .get_ocel_ref()
                     .events
                     .iter()
                     .enumerate()
-                    .map(|(i, _)| ev_index_to_name(&EventIndex(i))))
+                    .map(|(i, _)| ev_index_to_name(&EventIndex::from(i))))
                 .collect_vec()
                 .into())
             }
@@ -375,11 +380,11 @@ pub fn evaluate_cel<'a>(
         context.add_function("objects", move || -> ResolveResult {
             unsafe {
                 Ok((get_ocel_raw(ocel_raw)
-                    .ocel
+                    .get_ocel_ref()
                     .objects
                     .iter()
                     .enumerate()
-                    .map(|(i, _)| ob_index_to_name(&ObjectIndex(i))))
+                    .map(|(i, _)| ob_index_to_name(&ObjectIndex::from(i))))
                 .collect_vec()
                 .into())
             }

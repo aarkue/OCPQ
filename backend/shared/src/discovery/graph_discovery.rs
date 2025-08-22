@@ -9,6 +9,10 @@ use std::{
 
 use itertools::Itertools;
 
+use process_mining::ocel::linked_ocel::{
+    index_linked_ocel::{EventOrObjectIndex, ObjectIndex},
+    IndexLinkedOCEL, LinkedOCELAccess,
+};
 // use plotly::{
 //     common::Marker,
 //     layout::{Axis, ColorAxis},
@@ -33,7 +37,7 @@ use crate::{
         advanced::{binding_to_instances, generate_sample_bindings, label_bindings},
         RNG_SEED, SAMPLE_FRAC, SAMPLE_MIN_NUM_INSTANCES,
     },
-    preprocessing::linked_ocel::{EventOrObjectIndex, IndexLinkedOCEL, OCELNodeRef, ObjectIndex},
+    preprocessing::linked_ocel::{event_or_object_from_index, OCELNodeRef},
 };
 
 use super::advanced::EventOrObjectType;
@@ -53,45 +57,77 @@ pub fn get_instances(
     let mut rng = StdRng::seed_from_u64(RNG_SEED);
     let instances: Option<Vec<_>> = match &ocel_type {
         EventOrObjectType::Event(et) => {
-            if let Some(o_indices) = ocel.events_of_type.get(et) {
-                let instances = if o_indices.len() >= SAMPLE_MIN_NUM_INSTANCES {
-                    let sample_count = (o_indices.len() as f32 * SAMPLE_FRAC).ceil() as usize;
-                    o_indices.iter().choose_multiple(&mut rng, sample_count)
-                } else {
-                    o_indices.iter().collect()
-                };
-                Some(
-                    instances
-                        .into_iter()
-                        .map(|i| EventOrObjectIndex::Event(*i))
-                        .collect(),
-                )
+            let o_indices: Vec<_> = ocel.get_evs_of_type(et).collect();
+            let instances = if o_indices.len() >= SAMPLE_MIN_NUM_INSTANCES {
+                let sample_count = (o_indices.len() as f32 * SAMPLE_FRAC).ceil() as usize;
+                o_indices.iter().choose_multiple(&mut rng, sample_count)
             } else {
-                None
-            }
+                o_indices.iter().collect()
+            };
+            Some(
+                instances
+                    .into_iter()
+                    .map(|i| EventOrObjectIndex::Event(**i))
+                    .collect(),
+            )
         }
         EventOrObjectType::Object(ot) => {
-            if let Some(o_indices) = ocel.objects_of_type.get(ot) {
-                let instances = if o_indices.len() >= SAMPLE_MIN_NUM_INSTANCES {
-                    let sample_count = (o_indices.len() as f32 * SAMPLE_FRAC).ceil() as usize;
-                    o_indices.iter().choose_multiple(&mut rng, sample_count)
-                } else {
-                    o_indices.iter().collect()
-                };
-                Some(
-                    instances
-                        .into_iter()
-                        .map(|i| EventOrObjectIndex::Object(*i))
-                        .collect(),
-                )
+            let o_indices: Vec<_> = ocel.get_obs_of_type(ot).collect();
+            let instances = if o_indices.len() >= SAMPLE_MIN_NUM_INSTANCES {
+                let sample_count = (o_indices.len() as f32 * SAMPLE_FRAC).ceil() as usize;
+                o_indices.iter().choose_multiple(&mut rng, sample_count)
             } else {
-                None
-            }
+                o_indices.iter().collect()
+            };
+            Some(
+                instances
+                    .into_iter()
+                    .map(|i| EventOrObjectIndex::Object(**i))
+                    .collect(),
+            )
         }
     };
     instances.unwrap_or_default()
 }
 
+pub struct SymmetricRel {
+    pub index: EventOrObjectIndex,
+    pub reversed: bool,
+    pub qualifier: String,
+}
+pub fn get_symmetric_rels(
+    index: &EventOrObjectIndex,
+    locel: &IndexLinkedOCEL,
+) -> Vec<SymmetricRel> {
+    match index {
+        EventOrObjectIndex::Event(event_index) => locel
+            .get_e2o(event_index)
+            .map(|(q, o)| SymmetricRel {
+                index: (*o).into(),
+                reversed: false,
+                qualifier: q.to_string(),
+            })
+            .collect(),
+        EventOrObjectIndex::Object(object_index) => locel
+            .get_o2o(object_index)
+            .map(|(q, o)| SymmetricRel {
+                index: (*o).into(),
+                reversed: false,
+                qualifier: q.to_string(),
+            })
+            .chain(locel.get_e2o_rev(object_index).map(|(q, e)| SymmetricRel {
+                index: (*e).into(),
+                reversed: true,
+                qualifier: q.to_string(),
+            }))
+            .chain(locel.get_o2o_rev(object_index).map(|(q, o)| SymmetricRel {
+                index: (*o).into(),
+                reversed: true,
+                qualifier: q.to_string(),
+            }))
+            .collect(),
+    }
+}
 pub fn discover_count_constraints(
     ocel: &IndexLinkedOCEL,
     coverage: f32,
@@ -123,39 +159,41 @@ pub fn discover_count_constraints_for_supporting_instances<
     let mut total_map: HashMap<_, Vec<usize>> = HashMap::new();
     for o_index in supporting_instances {
         let mut map: HashMap<_, usize> = ocel
-            .ocel
+            .get_ocel_ref()
             .event_types
             .iter()
             .map(|et| ((RefType::Event, et.name.clone()), 0))
-            .chain(ocel.ocel.object_types.iter().flat_map(|ot| {
+            .chain(ocel.get_ocel_ref().object_types.iter().flat_map(|ot| {
                 vec![
                     ((RefType::Object, ot.name.clone()), 0),
                     ((RefType::ObjectReversed, ot.name.clone()), 0),
                 ]
             }))
             .collect();
-        if let Some(rels) = ocel.symmetric_rels.get(o_index.borrow()) {
-            for (index, reversed, _qualifier) in rels {
-                let (ref_type, ocel_type) = match ocel.ob_or_ev_by_index(*index).unwrap() {
-                    OCELNodeRef::Event(e) => (
-                        if *reversed {
-                            RefType::EventReversed
-                        } else {
-                            RefType::Event
-                        },
-                        e.event_type.clone(),
-                    ),
-                    OCELNodeRef::Object(o) => (
-                        if *reversed {
-                            RefType::ObjectReversed
-                        } else {
-                            RefType::Object
-                        },
-                        o.object_type.clone(),
-                    ),
-                };
-                *map.entry((ref_type, ocel_type)).or_default() += 1;
-            }
+        let rels = get_symmetric_rels(o_index.borrow(), ocel);
+        for SymmetricRel {
+            index, reversed, ..
+        } in rels
+        {
+            let (ref_type, ocel_type) = match event_or_object_from_index(index, ocel) {
+                OCELNodeRef::Event(e) => (
+                    if reversed {
+                        RefType::EventReversed
+                    } else {
+                        RefType::Event
+                    },
+                    e.event_type.clone(),
+                ),
+                OCELNodeRef::Object(o) => (
+                    if reversed {
+                        RefType::ObjectReversed
+                    } else {
+                        RefType::Object
+                    },
+                    o.object_type.clone(),
+                ),
+            };
+            *map.entry((ref_type, ocel_type)).or_default() += 1;
         }
         for (k, val) in map {
             total_map.entry(k).or_default().push(val);
@@ -565,46 +603,50 @@ pub fn discover_ef_constraints_for_supporting_instances<
     let mut rng = StdRng::seed_from_u64(RNG_SEED);
     let mut total_map: HashMap<(&String, &String), Vec<Option<f64>>> = HashMap::new();
     for o_index in supporting_instances {
-        if let Some(rels) = ocel.get_symmetric_rels_ob(o_index.borrow()) {
-            let evs = rels
-                .iter()
-                .flat_map(|(o_or_e_index, _reverse, _qualifier)| match o_or_e_index {
-                    EventOrObjectIndex::Event(ei) => ocel.ev_by_index(ei),
+        let rels = get_symmetric_rels(&(*o_index.borrow()).into(), ocel);
+        let evs = rels
+            .iter()
+            .flat_map(
+                |SymmetricRel {
+                     index,
+                     reversed: _,
+                     qualifier: _,
+                 }| match index {
+                    EventOrObjectIndex::Event(ei) => Some(ocel.get_ev(ei)),
                     EventOrObjectIndex::Object(_) => None,
-                })
-                .collect_vec();
-            let evs_num = evs.len();
-            let evs = if evs_num >= 1000 {
-                evs.into_iter()
-                    .choose_multiple(&mut rng, (SAMPLE_FRAC * evs_num as f32).ceil() as usize)
-            } else {
-                evs
-            };
-            // println!("Selected {} out of {} events",evs.len(), evs_num);
-            for i in 0..evs.len() {
-                let mut min_delay_to: HashMap<&String, Option<f64>> = ocel
-                    .ocel
-                    .event_types
-                    .iter()
-                    .map(|t| (&t.name, None))
-                    .collect();
-                for j in 0..evs.len() {
-                    if i != j && evs[i].time <= evs[j].time {
-                        let time_diff =
-                            (evs[j].time - evs[i].time).num_milliseconds() as f64 / 1000.0;
+                },
+            )
+            .collect_vec();
+        let evs_num = evs.len();
+        let evs = if evs_num >= 1000 {
+            evs.into_iter()
+                .choose_multiple(&mut rng, (SAMPLE_FRAC * evs_num as f32).ceil() as usize)
+        } else {
+            evs
+        };
+        // println!("Selected {} out of {} events",evs.len(), evs_num);
+        for i in 0..evs.len() {
+            let mut min_delay_to: HashMap<&String, Option<f64>> = ocel
+                .get_ocel_ref()
+                .event_types
+                .iter()
+                .map(|t| (&t.name, None))
+                .collect();
+            for j in 0..evs.len() {
+                if i != j && evs[i].time <= evs[j].time {
+                    let time_diff = (evs[j].time - evs[i].time).num_milliseconds() as f64 / 1000.0;
 
-                        let v = min_delay_to.entry(&evs[j].event_type).or_default();
-                        if v.is_none() || v.unwrap() > time_diff {
-                            *v = Some(time_diff);
-                        }
+                    let v = min_delay_to.entry(&evs[j].event_type).or_default();
+                    if v.is_none() || v.unwrap() > time_diff {
+                        *v = Some(time_diff);
                     }
                 }
-                for (to_ev_type, min_delay) in &min_delay_to {
-                    total_map
-                        .entry((&evs[i].event_type, *to_ev_type))
-                        .or_default()
-                        .push(*min_delay);
-                }
+            }
+            for (to_ev_type, min_delay) in &min_delay_to {
+                total_map
+                    .entry((&evs[i].event_type, *to_ev_type))
+                    .or_default()
+                    .push(*min_delay);
             }
         }
     }

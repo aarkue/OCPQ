@@ -1,3 +1,6 @@
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
@@ -15,6 +18,15 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use ocpq_shared::process_mining::{
+    event_log::ocel::ocel_struct::OCEL,
+    export_ocel_json_to_vec, export_ocel_sqlite_to_vec, export_ocel_xml,
+    import_ocel_sqlite_from_slice, import_ocel_xml_slice,
+    ocel::{
+        linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
+        ocel_struct::{OCELEvent, OCELObject},
+    },
+};
 use ocpq_shared::{
     binding_box::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
@@ -33,15 +45,9 @@ use ocpq_shared::{
     ocel_qualifiers::qualifiers::{
         get_qualifiers_for_event_types, QualifierAndObjectType, QualifiersForEventType,
     },
-    preprocessing::{linked_ocel::IndexLinkedOCEL, preprocess::link_ocel_info},
+    preprocessing::preprocess::get_object_rels_per_type,
     table_export::{export_bindings_to_writer, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
-};
-use process_mining::{
-    event_log::ocel::ocel_struct::OCEL,
-    export_ocel_json_to_vec, export_ocel_sqlite_to_vec, export_ocel_xml,
-    import_ocel_sqlite_from_slice, import_ocel_xml_slice,
-    ocel::ocel_struct::{OCELEvent, OCELObject},
 };
 use tower_http::cors::CorsLayer;
 
@@ -129,7 +135,7 @@ async fn main() {
 async fn get_loaded_ocel_info(
     State(state): State<AppState>,
 ) -> (StatusCode, Json<Option<OCELInfo>>) {
-    match with_ocel_from_state(&State(state), |ocel| (&ocel.ocel).into()) {
+    match with_ocel_from_state(&State(state), |ocel| (ocel.get_ocel_ref()).into()) {
         Some(ocel_info) => (StatusCode::OK, Json(Some(ocel_info))),
         None => (StatusCode::NOT_FOUND, Json(None)),
     }
@@ -142,7 +148,7 @@ async fn upload_ocel_xml<'a>(
     let ocel = import_ocel_xml_slice(&ocel_bytes);
     let mut x = state.ocel.write().unwrap();
     let ocel_info: OCELInfo = (&ocel).into();
-    *x = Some(IndexLinkedOCEL::new(ocel));
+    *x = Some(IndexLinkedOCEL::from(ocel));
 
     (StatusCode::OK, Json(ocel_info))
 }
@@ -155,7 +161,7 @@ async fn upload_ocel_sqlite<'a>(
     let mut x: std::sync::RwLockWriteGuard<'_, Option<IndexLinkedOCEL>> =
         state.ocel.write().unwrap();
     let ocel_info: OCELInfo = (&ocel).into();
-    *x = Some(IndexLinkedOCEL::new(ocel));
+    *x = Some(IndexLinkedOCEL::from_ocel(ocel));
 
     (StatusCode::OK, Json(ocel_info))
 }
@@ -167,7 +173,7 @@ async fn upload_ocel_json<'a>(
     let ocel: OCEL = serde_json::from_slice(&ocel_bytes).unwrap();
     let mut x = state.ocel.write().unwrap();
     let ocel_info: OCELInfo = (&ocel).into();
-    *x = Some(IndexLinkedOCEL::new(ocel));
+    *x = Some(IndexLinkedOCEL::from_ocel(ocel));
     (StatusCode::OK, Json(ocel_info))
 }
 
@@ -189,7 +195,7 @@ pub async fn get_qualifiers_for_event_types_handler<'a>(
     match with_ocel_from_state(
         &State(state),
         |ocel| -> HashMap<String, HashMap<String, QualifiersForEventType>> {
-            get_qualifiers_for_event_types(&ocel.ocel)
+            get_qualifiers_for_event_types(ocel.get_ocel_ref())
         },
     ) {
         Some(x) => (StatusCode::OK, Json(Some(x))),
@@ -203,9 +209,7 @@ pub async fn get_qualifers_for_object_types<'a>(
     StatusCode,
     Json<Option<HashMap<String, HashSet<QualifierAndObjectType>>>>,
 ) {
-    let qualifier_and_type = with_ocel_from_state(&State(state), |ocel| {
-        link_ocel_info(&ocel.ocel).object_rels_per_type.clone()
-    });
+    let qualifier_and_type = with_ocel_from_state(&State(state), get_object_rels_per_type);
     match qualifier_and_type {
         Some(x) => (StatusCode::OK, Json(Some(x))),
         None => (StatusCode::BAD_REQUEST, Json(None)),
@@ -297,14 +301,24 @@ pub async fn get_event_info_req<'a>(
     state: State<AppState>,
     Path(event_id): Path<String>,
 ) -> Json<Option<OCELEvent>> {
-    Json(with_ocel_from_state(&state, |ocel| ocel.ev_by_id(&event_id).cloned()).unwrap_or_default())
+    Json(
+        with_ocel_from_state(&state, |ocel| {
+            ocel.get_ev_index(event_id)
+                .map(|e_index| ocel.get_ev(&e_index).clone())
+        })
+        .unwrap_or_default(),
+    )
 }
 pub async fn get_object_info_req<'a>(
     state: State<AppState>,
     Path(object_id): Path<String>,
 ) -> Json<Option<OCELObject>> {
     Json(
-        with_ocel_from_state(&state, |ocel| ocel.ob_by_id(&object_id).cloned()).unwrap_or_default(),
+        with_ocel_from_state(&state, |ocel| {
+            ocel.get_ob_index(&object_id)
+                .map(|o_index| ocel.get_ob(&o_index).clone())
+        })
+        .unwrap_or_default(),
     )
 }
 
@@ -355,14 +369,14 @@ async fn start_hpc_job_web(
         .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
     let p = start_port_forwarding(
         c2,
-        &format!("127.0.0.1:{}", port),
-        &format!("127.0.0.1:{}", port),
+        &format!("127.0.0.1:{port}"),
+        &format!("127.0.0.1:{port}"),
     )
     .await
     .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
 
     state.jobs.write().unwrap().push((job_id.clone(), port, p));
-    println!("Ceated job {} in folder {}", job_id, folder_id);
+    println!("Ceated job {job_id} in folder {folder_id}");
     Ok(Json(job_id))
 }
 

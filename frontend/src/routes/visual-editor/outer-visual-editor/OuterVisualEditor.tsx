@@ -347,7 +347,7 @@ export default function VisualEditorOuter() {
                 </AlertDialog>
 
                 <ReactFlowProvider>
-                  <div className="w-full h-full flex flex-col gap-y-2 px-12">
+                  <div className="w-full h-full flex flex-col gap-y-2 px-r">
                     <div
                       className={clsx(
                         "grid w-full px-4 text-center",
@@ -537,7 +537,7 @@ export default function VisualEditorOuter() {
                       {activeIndex !== undefined &&
                         constraints[activeIndex] !== undefined && (
                           <div className="">
-                            <p className="h-[1.5rem]">Selected Query</p>
+                            <p className="h-[1.5rem] text-xs lg:text-base">Selected Query</p>
                             <div
                               className="w-full flex flex-col gap-y-1 px-2"
                               key={activeIndex}
@@ -592,7 +592,7 @@ export default function VisualEditorOuter() {
                         )}
                       {activeIndex !== undefined &&
                         constraints[activeIndex] !== undefined && (
-                          <div>
+                          <div className="text-xs lg:text-base">
                             <p className="h-[1.5rem]">Query Info</p>
                             <div className="px-2 border rounded flex flex-col items-center justify-around w-full">
                               {prevDataRef.current[activeIndex]?.flowJson !==
@@ -622,7 +622,7 @@ export default function VisualEditorOuter() {
                     {activeIndex !== undefined &&
                       constraints[activeIndex] !== undefined && (
                         <div className="relative w-full h-full">
-                          <div className="xl:w-full min-h-[35rem] h-full border p-2">
+                          <div className="xl:w-full min-h-[35rem] h-full border border-blue-100 rounded-sm p-2">
                             {qualifiers !== undefined &&
                               ocelInfo !== undefined && (
                                 <>

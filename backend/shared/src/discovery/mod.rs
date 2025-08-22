@@ -7,9 +7,10 @@ use graph_discovery::{
 };
 use itertools::Itertools;
 
+use process_mining::ocel::linked_ocel::IndexLinkedOCEL;
 use serde::{Deserialize, Serialize};
 
-use crate::{binding_box::BindingBoxTree, preprocessing::linked_ocel::IndexLinkedOCEL};
+use crate::binding_box::BindingBoxTree;
 
 // use self::evaluation::{get_count_constraint_fraction, get_ef_constraint_fraction};
 
