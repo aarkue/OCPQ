@@ -24,10 +24,10 @@ export default function OcelElementInfo({
   const backend = useContext(BackendProviderContext);
   const [info, setInfo] = useState<
     | {
-        index: number;
-        object: OCELObject;
-        event?: undefined;
-      }
+      index: number;
+      object: OCELObject;
+      event?: undefined;
+    }
     | { index: number; event: OCELEvent; object?: undefined }
     | null
     | undefined
@@ -59,7 +59,7 @@ export default function OcelElementInfo({
   return (
     <div className="text-lg text-left h-full w-full">
       <div className="h-full grid grid-cols-2 justify-center gap-x-4 w-full">
-        <div className="h-full overflow-auto w-full" ref={overflowDiv}>
+        <div className="h-full overflow-auto w-full border-r-2" ref={overflowDiv}>
           {info?.object != null && (
             <OcelObjectViewer
               object={info.object}
@@ -80,26 +80,18 @@ export default function OcelElementInfo({
           {info === null && (
             <div className="text-4xl font-bold text-red-700">Not Found</div>
           )}
-          <div className="h-[60rem] mx-8 border-t-4 mt-4">
-            <OcelGraphViewer
-              initialGrapOptions={{
-                type,
-                id: (info?.event ?? info?.object)?.id ?? req.id,
-              }}
-            />
-          </div>
         </div>
-        <div
-          className={`block mx-2 bg-white border rounded-lg shadow-md text-left h-full w-full`}
-        >
-          <h2 className="text-lg font-semibold my-1 px-2 py-1">
-            JSON Representation
-          </h2>
-          <JSONEditor
-            value={JSON.stringify(info?.event ?? info?.object ?? null, null, 2)}
-            onChange={() => {}}
-          />
-        </div>
+      <div className="">
+        
+        {info !== null &&
+        <OcelGraphViewer
+          initialGrapOptions={{
+            type,
+            id: (type === "event" ? info?.event : info?.object)?.id ?? req.id,
+          }}
+        />
+      }
+      </div>
       </div>
     </div>
   );
@@ -138,31 +130,31 @@ function OcelObjectViewer({
 }) {
   return (
     <div
-      className={`block p-1 bg-white border rounded-lg shadow-md max-w-4xl text-left`}
+      className={`block p-1 bg-white text-left`}
     >
       <h4 className="font-semibold text-2xl">{object.id}</h4>
       <span className="text-gray-600 text-xl block mb-2">
         Type: {object.type}
       </span>
-      <ul className="text-left text-xl space-y-1 ">
+      <ul className="text-left text-xl -space-y-2">
         {type?.attributes.map((attr) => (
           <li key={attr.name}>
-            <div className="flex gap-x-1 items-center">
+            <div className="flex gap-x-1 items-center w-full">
               <span className="flex justify-center -mt-1 w-8">
                 {/* {attr.name} */}
                 <IconForDataType dtype={attr.type} />
               </span>
               <span className="font-mono">{attr.name}:</span>{" "}
-              <span className="font-mono text-blue-700">
+              <span className="font-mono text-blue-700 w-full overflow-hidden inline-block">
                 {object.attributes
                   .filter((a) => a.name === attr.name)
                   .map((a) => (
                     <span
                       key={a.time}
-                      className="mr-4 border p-0.5 m-0.5 rounded-sm"
+                      className="mr-4 border p-0.5 m-0.5 rounded-sm inline-block w-fit max-w-full truncate"
                       title={`${a.value} at ${a.time}`}
                     >
-                      {a.value}
+                      {String(a.value)}
                     </span>
                   ))}
               </span>
@@ -184,7 +176,7 @@ function OcelEventViewer({
 }) {
   return (
     <div
-      className={`block p-2 bg-white m-2 border rounded-lg shadow-md max-w-4xl text-left`}
+      className={`block p-1 bg-white text-left`}
     >
       <h4 className="font-semibold text-2xl">{event.id}</h4>
       <span className="text-gray-600 text-xl block mb-2">
@@ -199,8 +191,8 @@ function OcelEventViewer({
                 <IconForDataType dtype={attr.type} />
               </span>
               <span className="font-mono">{attr.name}:</span>{" "}
-              <span className="font-mono text-blue-700">
-                {event.attributes.find((a) => a.name === attr.name)?.value}
+              <span className="font-mono text-blue-700 truncate">
+                {String(event.attributes.find((a) => a.name === attr.name)?.value ?? "-")}
               </span>
             </div>
           </li>

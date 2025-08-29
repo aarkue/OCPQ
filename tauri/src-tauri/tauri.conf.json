@@ -64,6 +64,18 @@
           "sqlite"
         ],
         "mimeType": "application/x-sqlite3"
+      },
+      {
+        "ext": [
+          "xes"
+        ],
+        "mimeType": "application/xml"
+      },
+      {
+        "ext": [
+          "xes.gz"
+        ],
+        "mimeType": "application/gzip"
       }
     ],
     "createUpdaterArtifacts": true

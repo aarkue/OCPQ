@@ -19,6 +19,7 @@ import type {
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;
+  "ocel/upload-from-xes"?: (file: File) => Promise<OCELInfo>;
   "ocel/available"?: () => Promise<string[]>;
   "ocel/load"?: (name: string) => Promise<OCELInfo>;
   "ocel/picker"?: (path?: string) => Promise<OCELInfo>;
@@ -141,6 +142,16 @@ export function getAPIServerBackendProvider(
           headers: {},
         })
       ).json();
+    },
+    "ocel/upload-from-xes": async (xesFile) => {
+      const format = xesFile.name.endsWith(".gz") ? ".xes.gz" : ".xes";
+      return await (
+        await fetch(localBackendURL + `/ocel/upload-xes-conversion/${format}`, {
+          method: "post",
+          body: xesFile,
+          headers: {},
+        })
+      ).json()
     },
     "ocel/load": async (name) => {
       return await (

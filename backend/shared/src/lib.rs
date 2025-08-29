@@ -1,11 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use process_mining::{
-    ocel::{
-        linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
-        ocel_struct::{OCELEvent, OCELObject, OCELType},
-    },
-    OCEL,
+pub use process_mining;
+use process_mining::ocel::{
+    linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
+    ocel_struct::{OCELEvent, OCELObject, OCELType},
 };
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +14,7 @@ pub mod binding_box;
 pub mod constraints_2;
 pub mod discovery;
 pub mod ocel_graph;
+pub mod trad_event_log;
 pub mod preprocessing {
     pub mod linked_ocel;
     pub mod preprocess;
@@ -25,7 +24,6 @@ pub mod cel;
 pub mod table_export;
 
 pub mod hpc_backend;
-pub use process_mining;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OCELInfo {
     pub num_objects: usize,

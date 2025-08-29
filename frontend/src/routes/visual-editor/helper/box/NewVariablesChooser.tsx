@@ -119,13 +119,13 @@ export default function NewVariableChooser({
             >
               <ObVarName obVar={parseInt(obVar)} />
               <span className="text-muted-foreground">:</span>
-              {ocelInfo.object_types.length === obTypes.length && (
+              {ocelInfo.object_types.length > 1 && ocelInfo.object_types.length === obTypes.length && (
                 <LuAsterisk
                   className="self-center size-4 text-gray-600"
                   title="Any object type included in the OCEL"
                 />
               )}
-              {ocelInfo.object_types.length !== obTypes.length && (
+              {(ocelInfo.object_types.length <= 1 || ocelInfo.object_types.length !== obTypes.length) && (
                 <span
                   className="ml-1 max-w-[13ch] shrink overflow-ellipsis overflow-hidden inline-block whitespace-pre text-left"
                   title={obTypes.join(",\n")}
@@ -185,13 +185,13 @@ export default function NewVariableChooser({
             >
               <EvVarName eventVar={parseInt(evVar)} />
               <span className="text-muted-foreground">:</span>
-              {ocelInfo.event_types.length === evTypes.length && (
+              {ocelInfo.event_types.length > 1 && ocelInfo.event_types.length === evTypes.length && (
                 <LuAsterisk
                   className="self-center size-4 text-gray-600"
                   title="Any event type included in the OCEL"
                 />
               )}
-              {ocelInfo.event_types.length !== evTypes.length && (
+              {(ocelInfo.event_types.length <= 1 || ocelInfo.event_types.length !== evTypes.length) && (
                 <span
                   className="ml-1 max-w-36 shrink overflow-ellipsis overflow-hidden inline-block whitespace-pre text-left"
                   title={evTypes.join(",\n")}

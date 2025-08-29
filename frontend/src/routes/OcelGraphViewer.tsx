@@ -37,7 +37,7 @@ type GraphData = {
 export default function OcelGraphViewer({
   initialGrapOptions,
 }: {
-  initialGrapOptions?: { type?: "event" | "object"; id?: string };
+  initialGrapOptions?: { type: "event" | "object"; id?: string };
 }) {
   const ocelInfo = useContext(OcelInfoContext);
   const [graphData, setGraphData] = useState<GraphData>({
@@ -45,6 +45,14 @@ export default function OcelGraphViewer({
     links: [],
   });
   const backend = useContext(BackendProviderContext);
+    const [options, setOptions] = useState<OCELGraphOptions>({
+    maxDistance: 2,
+    relsSizeIgnoreThreshold: 10,
+    rootIsObject: initialGrapOptions?.type !== "event",
+    root: initialGrapOptions?.id ?? ocelInfo?.object_ids[0] ?? "",
+    spanningTree: false,
+  });
+
 
   const data = useMemo(() => {
     const gData = graphData;
@@ -73,7 +81,8 @@ export default function OcelGraphViewer({
 
   useEffect(() => {
     setTimeout(() => {
-      graphRef.current?.zoomToFit(200, 100);
+      graphRef.current?.zoomToFit();
+      // graphRef.current?.zoomToFit(200, 100);
     }, 300);
   }, [data]);
 
@@ -122,12 +131,10 @@ export default function OcelGraphViewer({
     return <div>No Info!</div>;
   }
   return (
-    <div className="text-lg text-left w-full h-full flex flex-col">
-      <h2 className="text-4xl font-semibold my-4">OCEL Graph</h2>
-      <GraphOptions
-        initialGrapOptions={initialGrapOptions}
+    <div className="text-lg text-left w-full h-full">
+      <div className="flex h-full w-full items-start gap-x-1">
+      <GraphOptions options={options} setOptions={setOptions} initialGrapOptions={initialGrapOptions}
         setGraphData={(gd) => {
-          console.log(graphRef.current?.d3Force);
           graphRef.current!.d3Force("link")!.distance(10);
 
           if (gd === undefined) {
@@ -137,7 +144,7 @@ export default function OcelGraphViewer({
           }
         }}
       />
-      <div className="border w-full h-full my-4 overflow-hidden relative">
+      <div className="border w-full h-full overflow-hidden relative">
         <Button
           title="Center Root Node"
           size="icon"
@@ -310,6 +317,7 @@ export default function OcelGraphViewer({
                     );
                 }}
                 onNodeClick={async (node) => {
+                  
                   await navigator.clipboard.writeText(node.id);
                   toast("Copied ID to clipboard!", {
                     icon: <LuClipboardCopy />,
@@ -321,26 +329,56 @@ export default function OcelGraphViewer({
         )}
       </div>
     </div>
+  </div>
   );
 }
-
 function GraphOptions({
   setGraphData,
+  options,
+  setOptions,
   initialGrapOptions,
 }: {
   setGraphData: (data: GraphData | undefined) => unknown;
   initialGrapOptions?: { type?: "event" | "object"; id?: string };
+  options: OCELGraphOptions,
+  setOptions: (newVal:OCELGraphOptions) =>  unknown;
 }) {
   const ocelInfo = useContext(OcelInfoContext)!;
   const backend = useContext(BackendProviderContext);
-  const [options, setOptions] = useState<OCELGraphOptions>({
-    maxDistance: 2,
-    relsSizeIgnoreThreshold: 10,
-    rootIsObject: initialGrapOptions?.type !== "event",
-    root: initialGrapOptions?.id ?? ocelInfo.object_ids[0],
-    spanningTree: false,
-  });
 
+  function applyGraph(graphOptions = options){
+              setLoading(true);
+          void toast
+            .promise(backend["ocel/graph"](graphOptions), {
+              loading: "Loading graph...",
+              success: "Graph loaded!",
+              error: "Failed to load Graph",
+            })
+            .then((gd) => {
+              if (gd != null) {
+                if(gd.nodes.length > 500){
+                  gd.nodes.splice(500);
+                  const nodeSet = new Set(gd.nodes.map(n => n.id));
+                  gd.links = gd.links.filter(e => nodeSet.has(e.source) && nodeSet.has(e.target));
+                  toast("Graph got too large!\nOnly rendering a subset.");
+                }
+                setGraphData(gd);
+              } else {
+                setGraphData(undefined);
+              }
+            })
+            .catch(() => {
+              setGraphData(undefined);
+            })
+            .finally(() => setLoading(false));
+  }
+
+useEffect(() => {
+  if(initialGrapOptions?.id && initialGrapOptions?.type){
+    console.log("Graph got", JSON.stringify(initialGrapOptions),JSON.stringify(options))
+     applyGraph({...options, root: initialGrapOptions.id, rootIsObject: initialGrapOptions.type !== "event"});
+  }
+},[initialGrapOptions?.id,initialGrapOptions?.type])
   useEffect(() => {
     if (
       initialGrapOptions?.id !== undefined &&
@@ -358,7 +396,20 @@ function GraphOptions({
     <div>
       <div className="flex flex-col gap-y-2 mb-4">
         <div className="flex gap-x-1 items-center">
-          <Label className="w-[12ch]">Root ID</Label>
+          <Label className="w-[9ch] cursor-help" title="Entity type (i.e., Object/Event) of the Object/Event to query">Root Type</Label>
+          <ToggleGroup
+            type="single"
+            value={options.rootIsObject ? "object" : "event"}
+            onValueChange={(val: string) => {
+              setOptions({ ...options, rootIsObject: val === "object" });
+            }}
+          >
+            <ToggleGroupItem value="object">Object</ToggleGroupItem>
+            <ToggleGroupItem value="event">Event</ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        <div className="flex gap-x-1 items-center">
+          <Label className="w-[12ch] cursor-help" title="ID of the Object/Event to query">Root ID</Label>
           <datalist id="object-ids">
             {ocelInfo.object_ids.slice(0, 100).map((id) => (
               <option key={id} value={id} />
@@ -379,19 +430,9 @@ function GraphOptions({
               setOptions({ ...options, root: ev.currentTarget.value })
             }
           />
-          <ToggleGroup
-            type="single"
-            value={options.rootIsObject ? "object" : "event"}
-            onValueChange={(val: string) => {
-              setOptions({ ...options, rootIsObject: val === "object" });
-            }}
-          >
-            <ToggleGroupItem value="object">Object</ToggleGroupItem>
-            <ToggleGroupItem value="event">Event</ToggleGroupItem>
-          </ToggleGroup>
         </div>
         <div className="flex gap-x-1 items-center">
-          <Label className="w-[12ch]">Max Distance</Label>
+          <Label className="w-[12ch] cursor-help" title="Maximum distance (i.e., number of hops along E2O/O2O relationship edges) to view">Max. Distance</Label>
           <Input
             type="number"
             placeholder="Max. Distance"
@@ -406,10 +447,10 @@ function GraphOptions({
           />
         </div>
         <div className="flex gap-x-1 items-center">
-          <Label className="w-[12ch]">Maximum Neighbors</Label>
+          <Label className="w-[12ch] cursor-help" title="Maximum number of neighbors (i.e., entities involved through E2O/O2O) to recursively expand. This option prevents polluting the graph with too many nodes.">Max. Neighbors</Label>
           <Input
             type="number"
-            placeholder="Max. Distance"
+            placeholder="Max. Expansion"
             className="max-w-[24ch]"
             value={options.relsSizeIgnoreThreshold}
             onChange={(ev) =>
@@ -420,7 +461,7 @@ function GraphOptions({
             }
           />
         </div>
-        <div className="flex gap-x-1 items-center">
+{/*        <div className="flex gap-x-1 items-center">
           <Label className="w-[12ch]">Spanning Tree</Label>
           <Checkbox
             checked={options.spanningTree}
@@ -429,30 +470,11 @@ function GraphOptions({
             }
           />
         </div>
-      </div>
+*/}      </div>
       <Button
         size="lg"
         disabled={loading}
-        onClick={() => {
-          setLoading(true);
-          void toast
-            .promise(backend["ocel/graph"](options), {
-              loading: "Loading graph...",
-              success: "Graph loaded!",
-              error: "Failed to load Graph",
-            })
-            .then((gd) => {
-              if (gd != null) {
-                setGraphData(gd);
-              } else {
-                setGraphData(undefined);
-              }
-            })
-            .catch(() => {
-              setGraphData(undefined);
-            })
-            .finally(() => setLoading(false));
-        }}
+        onClick={() => applyGraph()}
       >
         Apply
       </Button>

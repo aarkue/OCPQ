@@ -16,7 +16,7 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
-import { BsCheckCircleFill, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml } from "react-icons/bs";
+import { BsCheckCircleFill, BsFileEarmarkArrowUp, BsFileEarmarkBreak, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml, BsRecycle } from "react-icons/bs";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import {
@@ -527,6 +527,10 @@ function InnerApp({ children }: { children?: ReactNode }) {
             const Icon = e.path.endsWith(".json") ? BsFiletypeJson : e.path.endsWith(".xml") ? BsFiletypeXml : BsFiletypeSql;
             toast(<p className="text-md font-medium flex items-center gap-x-1"><Icon size={24} className="text-green-600" />Drop to load as OCEL dataset</p>, { position: "bottom-center", style: { marginBottom: "1rem" }, id: "ocel-drop-hint" });
           }
+          if (e.path.endsWith(".xes") || e.path.endsWith(".xes.gz")) {
+            const Icon = BsFileEarmarkBreak;
+            toast(<p className="text-md font-medium flex items-center gap-x-1"><Icon size={24} className="text-green-600" />Drop to load XES as OCEL dataset</p>, { position: "bottom-center", style: { marginBottom: "1rem" }, id: "ocel-drop-hint" });
+          }
         }
         if (e.type === "drop") {
           setLoading(true);
@@ -587,19 +591,35 @@ function InnerApp({ children }: { children?: ReactNode }) {
     }
     if (file != null) {
       setLoading(true);
-      void toast
-        .promise(backend["ocel/upload"](file), {
-          loading: "Importing OCEL...",
-          success: "Imported OCEL",
-          error: "Failed to import OCEL",
-        })
-        .then((ocelInfo) => {
-          if (ocelInfo != null) {
-            setOcelInfoAndNavigate(ocelInfo);
-          } else {
-            setOcelInfo(undefined);
-          }
-        }).finally(() => setLoading(false));
+      if (backend['ocel/upload-from-xes'] && (file.name.endsWith(".xes") || file.name.endsWith(".xes.gz"))) {
+        void toast
+          .promise(backend["ocel/upload-from-xes"](file), {
+            loading: "Importing XES as OCEL...",
+            success: "Imported XES as OCEL",
+            error: "Failed to import XES as OCEL",
+          })
+          .then((ocelInfo) => {
+            if (ocelInfo != null) {
+              setOcelInfoAndNavigate(ocelInfo);
+            } else {
+              setOcelInfo(undefined);
+            }
+          }).finally(() => setLoading(false));
+      } else {
+        void toast
+          .promise(backend["ocel/upload"](file), {
+            loading: "Importing OCEL...",
+            success: "Imported OCEL",
+            error: "Failed to import OCEL",
+          })
+          .then((ocelInfo) => {
+            if (ocelInfo != null) {
+              setOcelInfoAndNavigate(ocelInfo);
+            } else {
+              setOcelInfo(undefined);
+            }
+          }).finally(() => setLoading(false));
+      }
     }
   }
 
@@ -641,11 +661,11 @@ function InnerApp({ children }: { children?: ReactNode }) {
                 <span className=" font-semibold text-green-700">
                   OCEL loaded
                 </span>
-              <span className="text-sm grid grid-cols-[auto,1fr] text-right gap-x-2 items-baseline">
-                <span className="font-mono">{ocelInfo.num_events}</span> <span className="text-left">Events</span>
-                <span className="font-mono">{ocelInfo.num_objects}</span> <span className="text-left">Objects</span>
+                <span className="text-sm grid grid-cols-[auto,1fr] text-right gap-x-2 items-baseline">
+                  <span className="font-mono">{ocelInfo.num_events}</span> <span className="text-left">Events</span>
+                  <span className="font-mono">{ocelInfo.num_objects}</span> <span className="text-left">Objects</span>
+                </span>
               </span>
-            </span>
             )}
             {ocelInfo != null && (
               <>
@@ -674,32 +694,38 @@ function InnerApp({ children }: { children?: ReactNode }) {
         <div className="px-4 overflow-auto my-4">
           {isAtRoot && (
             <>
-              <h2 className="text-4xl font-semibold">Load a Dataset</h2>
-              <p className="text-muted-foreground mb-2">OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite)</p>
+              <h2 className="text-4xl font-black mb-2">Load a Dataset</h2>
+              <p className="text-xl text-muted-foreground mb-1 ">OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite)</p>
+            <p className="text-sm text-muted-foreground mb-2">XES/XES.GZ files are also supported and are interpreted with the single object type <span className="font-mono italic">Case</span>.</p>
             </>
           )}
           {isAtRoot &&
             filePickerAvailable &&
             backend["ocel/picker"] !== undefined && (
-              <Button
-                disabled={loading}
-                onClick={() => {
-                  setLoading(true);
-                  void toast
-                    .promise(backend["ocel/picker"]!(), {
-                      loading: "Loading OCEL2...",
-                      success: "Imported OCEL2",
-                      error: "Failed to load OCEL2",
-                    })
-                    .then((ocelInfo) => {
-                      setOcelInfoAndNavigate(ocelInfo);
-                    })
-                    .finally(() => setLoading(false));
-                }}
-              >
-                {loading && <Spinner />}
-                Select an OCEL 2.0 File...
-              </Button>
+              <>
+                <Button size="lg"
+                  disabled={loading}
+                  onClick={() => {
+                    setLoading(true);
+                    void toast
+                      .promise(backend["ocel/picker"]!(), {
+                        loading: "Loading OCEL2...",
+                        success: "Imported OCEL2",
+                        error: "Failed to load OCEL2",
+                      })
+                      .then((ocelInfo) => {
+                        setOcelInfoAndNavigate(ocelInfo);
+                      })
+                      .finally(() => setLoading(false));
+                  }}
+                >
+                  {loading && <Spinner />}
+                  Select a file...
+                </Button>
+                <div className="mt-2 italic">
+                  or
+                </div>
+              </>
             )}
           {isAtRoot &&
             showAvailableOcels &&
@@ -817,7 +843,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
                       or drag a file here
                     </p>
                     <p className="text-xs text-gray-500">
-                      Supported: OCEL2-JSON, OCEL2-XML, OCEL2-SQLITE
+                      Supported: OCEL2-JSON, OCEL2-XML, OCEL2-SQLITE, XES/XES.GZ (Interpreted as OCEL)
                     </p>
                   </div>
                   <input disabled={loading}

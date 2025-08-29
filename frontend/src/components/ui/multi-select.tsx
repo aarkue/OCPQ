@@ -111,10 +111,10 @@ const MultiSelect = React.forwardRef<
             onClick={() => {
               setIsPopoverOpen(!isPopoverOpen);
             }}
-            className="flex w-full px-1 py-1 rounded-md border min-h-[2rem] h-auto items-center justify-between bg-inherit hover:bg-card"
+            className="flex w-full max-w-[30rem] px-1 py-1 rounded-md border min-h-[2rem] h-auto items-center justify-between bg-card hover:bg-card"
           >
             {selectedValues.length > 0 ? (
-              <div className="flex justify-between items-center w-full max-h-[15rem] overflow-y-scroll ">
+              <div className="flex justify-between items-center w-full max-h-[15rem] overflow-y-scroll p-4 ">
                 <div className="flex flex-wrap items-center">
                   {selectedValues.map((value) => {
                     const option = options.find((o) => o.value === value);
@@ -127,7 +127,7 @@ const MultiSelect = React.forwardRef<
                         {IconComponent && (
                           <IconComponent className="h-4 w-4 mr-2" />
                         )}
-                        {option?.label}
+                      <div className="max-w-[16rem] truncate">{option?.label}</div>
                         <LuXCircle
                           className="ml-2 h-4 w-4 cursor-pointer"
                           onClick={(

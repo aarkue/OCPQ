@@ -36,28 +36,42 @@ const tauriBackend: BackendProvider = {
     if (path === undefined) {
       path = await dialog.open({
         title: "Select an OCEL2 file",
-        filters: [{ name: "OCEL2", extensions: ["json", "xml", "sqlite", "sqlite3", "db"] }],
+        filters: [{ name: "OCEL2", extensions: ["json", "xml", "sqlite", "sqlite3", "db"] }, { name: "XES", extensions: ["xes", "xes.gz"] }],
       });
     }
     if (typeof path === "string") {
-      const ocelInfo: OCELInfo = await invoke("import_ocel", { path });
-      return ocelInfo;
+      if (path.endsWith(".xes") || path.endsWith(".xes.gz")) {
+        const ocelInfo: OCELInfo = await invoke("import_xes_path_as_ocel", { path });
+        return ocelInfo;
+      } else {
+
+        const ocelInfo: OCELInfo = await invoke("import_ocel", { path });
+        return ocelInfo;
+      }
     }
     throw new Error("No file selected");
   },
   "ocel/upload": async (ocelFile) => {
-    const format = ocelFile.name.endsWith(".json")
-      ? "json"
-      : ocelFile.name.endsWith(".xml")
-        ? "xml"
-        : "sqlite";
-    const bytes = await ocelFile.arrayBuffer();
-    const ocelInfo: OCELInfo = await new Promise((res, rej) => setTimeout(async () => {
-      const ocelInfo: OCELInfo = await invoke("import_ocel_slice", { data: bytes, format });
-      res(ocelInfo);
-    }, 100));
-    return ocelInfo;
-
+    if (ocelFile.name.endsWith(".xes") || ocelFile.name.endsWith(".xes.gz")) {
+      const bytes = await ocelFile.arrayBuffer();
+      const ocelInfo: OCELInfo = await new Promise((res, _rej) => setTimeout(async () => {
+        const ocelInfo: OCELInfo = await invoke("import_xes_slice_as_ocel", { data: bytes, format: ocelFile.name.endsWith(".xes.gz") ? ".xes.gz" : ".xes" });
+        res(ocelInfo);
+      }, 100));
+      return ocelInfo;
+    } else {
+      const format = ocelFile.name.endsWith(".json")
+        ? "json"
+        : ocelFile.name.endsWith(".xml")
+          ? "xml"
+          : "sqlite";
+      const bytes = await ocelFile.arrayBuffer();
+      const ocelInfo: OCELInfo = await new Promise((res, _rej) => setTimeout(async () => {
+        const ocelInfo: OCELInfo = await invoke("import_ocel_slice", { data: bytes, format });
+        res(ocelInfo);
+      }, 100));
+      return ocelInfo;
+    }
   },
 
   "ocel/check-constraints-box": async (tree, measurePerformance) => {
@@ -133,7 +147,7 @@ const tauriBackend: BackendProvider = {
     return update
   },
   "restart": () => {
-  return relaunch()
+    return relaunch()
   },
   "get-version": () => {
     return getVersion()

@@ -88,7 +88,7 @@ export function columnsForBinding(
                 pathname: "/ocel-element",
                 search: `?id=${encodeURIComponent(
                   c.getValue<string>(),
-                )}&type=object`,
+                )}&type=event`,
               }}
               target="_blank"
               onClick={(ev) => {
