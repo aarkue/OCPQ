@@ -2,7 +2,7 @@ use process_mining::ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::structs::{Binding, BindingBox, BindingStep};
-const MAX_NUM_BINDINGS: usize = 109_000_000;
+const MAX_NUM_BINDINGS: usize = 10_000_000;
 /// This can slightly reduce memory usage by filtering out unfitting bindings before collecting into a vec
 /// However, the filters may be checked multiple times
 #[inline(always)]

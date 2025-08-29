@@ -33,7 +33,7 @@ export default function ElementInfoSheet({
           ev.preventDefault();
         }}
       >
-        <div className="absolute right-0 top-10 p-2 z-20">
+        <div className="absolute left-0 -top-11 p-2 z-20">
           {elInfo !== undefined && (
             <AlertHelper
               trigger={

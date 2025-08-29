@@ -12,12 +12,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ocpq_shared::process_mining::{
-    export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
-    import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
-    import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice,
-    ocel::linked_ocel::IndexLinkedOCEL, OCEL,
-};
 use ocpq_shared::{
     binding_box::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
@@ -35,8 +29,18 @@ use ocpq_shared::{
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     ocel_qualifiers::qualifiers::{get_qualifiers_for_event_types, QualifiersForEventType},
     preprocessing::preprocess::get_object_rels_per_type,
+    process_mining::import_xes_file,
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
+};
+use ocpq_shared::{
+    process_mining::{
+        export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
+        import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
+        import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice,
+        import_xes_slice, ocel::linked_ocel::IndexLinkedOCEL, XESImportOptions, OCEL,
+    },
+    trad_event_log::trad_log_to_ocel,
 };
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
@@ -90,6 +94,35 @@ async fn import_ocel_slice(
             return Err("Unknown OCEL format {format}.".to_string());
         }
     };
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
+    let mut state_guard = state.ocel.write().await;
+    *state_guard = Some(locel);
+    Ok(ocel_info)
+}
+
+#[tauri::command(async)]
+async fn import_xes_path_as_ocel(
+    path: &str,
+    state: tauri::State<'_, AppState>,
+) -> Result<OCELInfo, String> {
+    let xes = import_xes_file(path, XESImportOptions::default()).unwrap();
+    let ocel = trad_log_to_ocel(&xes);
+
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
+    let mut state_guard = state.ocel.write().await;
+    *state_guard = Some(locel);
+    Ok(ocel_info)
+}
+#[tauri::command(async)]
+async fn import_xes_slice_as_ocel(
+    data: Vec<u8>,
+    format: &str,
+    state: tauri::State<'_, AppState>,
+) -> Result<OCELInfo, String> {
+    let xes = import_xes_slice(&data, format == ".xes.gz", XESImportOptions::default()).unwrap();
+    let ocel = trad_log_to_ocel(&xes);
     let locel = IndexLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
@@ -404,6 +437,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             import_ocel,
             import_ocel_slice,
+            import_xes_path_as_ocel,
+            import_xes_slice_as_ocel,
             get_current_ocel_info,
             get_event_qualifiers,
             get_object_qualifiers,

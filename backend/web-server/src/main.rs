@@ -18,15 +18,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use ocpq_shared::process_mining::{
-    event_log::ocel::ocel_struct::OCEL,
-    export_ocel_json_to_vec, export_ocel_sqlite_to_vec, export_ocel_xml,
-    import_ocel_sqlite_from_slice, import_ocel_xml_slice,
-    ocel::{
-        linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
-        ocel_struct::{OCELEvent, OCELObject},
-    },
-};
 use ocpq_shared::{
     binding_box::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
@@ -48,6 +39,19 @@ use ocpq_shared::{
     preprocessing::preprocess::get_object_rels_per_type,
     table_export::{export_bindings_to_writer, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
+};
+use ocpq_shared::{
+    process_mining::{
+        event_log::ocel::ocel_struct::OCEL,
+        export_ocel_json_to_vec, export_ocel_sqlite_to_vec, export_ocel_xml,
+        import_ocel_sqlite_from_slice, import_ocel_xml_slice, import_xes_slice,
+        ocel::{
+            linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
+            ocel_struct::{OCELEvent, OCELObject},
+        },
+        EventLog, XESImportOptions,
+    },
+    trad_event_log::{self, trad_log_to_ocel},
 };
 use tower_http::cors::CorsLayer;
 
@@ -91,6 +95,10 @@ async fn main() {
         .route(
             "/ocel/upload-sqlite",
             post(upload_ocel_sqlite).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/ocel/upload-xes-conversion/:format",
+            post(upload_ocel_xes_conversion).layer(DefaultBodyLimit::disable()),
         )
         .route("/ocel/available", get(get_available_ocels))
         .route(
@@ -172,13 +180,28 @@ async fn upload_ocel_json<'a>(
     ocel_bytes: Bytes,
 ) -> (StatusCode, Json<OCELInfo>) {
     let ocel: OCEL = serde_json::from_slice(&ocel_bytes).unwrap();
-    let mut x = state.ocel.write().unwrap();
     let locel = IndexLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
+    let mut x = state.ocel.write().unwrap();
     *x = Some(locel);
     (StatusCode::OK, Json(ocel_info))
 }
 
+async fn upload_ocel_xes_conversion<'a>(
+    State(state): State<AppState>,
+    Path(format): Path<String>,
+    xes_bytes: Bytes,
+) -> (StatusCode, Json<OCELInfo>) {
+    let is_compressed_gz = format == ".xes.gz";
+    let xes = import_xes_slice(&xes_bytes, is_compressed_gz, XESImportOptions::default()).unwrap();
+    let ocel = trad_log_to_ocel(&xes);
+
+    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel_info: OCELInfo = (&locel).into();
+    let mut x = state.ocel.write().unwrap();
+    *x = Some(locel);
+    (StatusCode::OK, Json(ocel_info))
+}
 pub fn with_ocel_from_state<T, F>(State(state): &State<AppState>, f: F) -> Option<T>
 where
     F: FnOnce(&IndexLinkedOCEL) -> T,

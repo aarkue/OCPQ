@@ -626,7 +626,8 @@ export default function VisualEditor(props: VisualEditorProps) {
         getNodeIDByName,
         filterMode,
         showElementInfo: (elInfo) => {
-          setElementInfo(elInfo);
+          console.log('jo',JSON.stringify(elInfo));
+          setElementInfo(elInfo ? {...elInfo} : undefined);
         },
         getVarName: (variable, type) => {
           return {
