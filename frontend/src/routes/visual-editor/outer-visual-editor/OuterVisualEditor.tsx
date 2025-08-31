@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { EventTypeQualifiers, ObjectTypeQualifiers } from "@/types/ocel";
 import clsx from "clsx";
-import { useContext, useEffect, useRef, useState } from "react";
+import { startTransition, useContext, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { CgTrash } from "react-icons/cg";
 import { LuSave } from "react-icons/lu";
@@ -455,10 +455,6 @@ export default function VisualEditorOuter() {
                                   constraints.length,
                                   1,
                                 );
-                                changeIndex(
-                                  constraints.length,
-                                  constraints.length + 1,
-                                );
                                 setConstraints((cs) => [
                                   ...cs,
                                   {
@@ -466,6 +462,12 @@ export default function VisualEditorOuter() {
                                     description: "",
                                   },
                                 ]);
+                                startTransition(() => {
+                                changeIndex(
+                                  constraints.length,
+                                  constraints.length + 1,
+                                );
+                                })
                               }}
                             >
                               <RxPlusCircled className="mr-1" />
