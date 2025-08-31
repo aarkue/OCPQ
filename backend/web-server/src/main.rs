@@ -255,17 +255,18 @@ pub async fn ocel_graph_req<'a>(
 pub async fn check_with_box_tree_req<'a>(
     state: State<AppState>,
     Json(req): Json<CheckWithBoxTreeRequest>,
-) -> (StatusCode, Json<Option<EvaluateBoxTreeResult>>) {
+) -> axum::response::Result<Json<Option<EvaluateBoxTreeResult>>, (StatusCode, String)> {
     let ocel_guard = state.ocel.read().unwrap();
     let ocel = ocel_guard.as_ref();
     if let Some(ocel) = ocel {
-        let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false));
+        let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))
+            .map_err(|s| (StatusCode::BAD_REQUEST, s))?;
         let res_to_ret = res.clone_first_few();
         let mut new_eval_res_state = state.eval_res.write().unwrap();
         *new_eval_res_state = Some(res);
-        return (StatusCode::OK, Json(Some(res_to_ret)));
+        return Ok(Json(Some(res_to_ret)));
     }
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(None))
+    Err((StatusCode::NOT_FOUND, "No OCEL Loaded".to_string()))
 }
 
 pub async fn filter_export_with_box_tree_req<'a>(

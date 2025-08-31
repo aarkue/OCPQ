@@ -74,13 +74,14 @@ pub static CEL_PROGRAM_CACHE: Lazy<RwLock<HashMap<String, Program>>> = Lazy::new
     RwLock::new(m)
 });
 
-pub fn lazy_compile_and_insert_into_cache(cel: &str) {
+pub fn lazy_compile_and_insert_into_cache(cel: &str) -> Result<(), String> {
     let already_in_cache = CEL_PROGRAM_CACHE.read().unwrap().contains_key(cel);
     if !already_in_cache {
-        let program = Program::compile(cel).unwrap();
+        let program = Program::compile(cel).map_err(|e| format!("Failed to compile CEL: {e}"))?;
         let mut w_lock = CEL_PROGRAM_CACHE.write().unwrap();
         w_lock.insert(cel.to_string(), program);
     }
+    Ok(())
 }
 
 pub fn ev_var_to_name(ev_var: &EventVariable) -> String {
@@ -104,7 +105,7 @@ pub fn evaluate_cel<'a>(
     ocel: &'a IndexLinkedOCEL,
 ) -> Result<Value, CELEvalError> {
     // let now = Instant::now();
-    lazy_compile_and_insert_into_cache(cel);
+    lazy_compile_and_insert_into_cache(cel).map_err(|e| CELEvalError::ParseError(e))?;
     let cache_read = CEL_PROGRAM_CACHE.read().unwrap();
     if let Some(p) = cache_read.get(cel) {
         // println!("Program compiled: {:?}", now.elapsed());
@@ -413,14 +414,16 @@ pub fn evaluate_cel<'a>(
         }
         Ok(res?)
     } else {
-        Err(CELEvalError::ParseError)
+        Err(CELEvalError::ParseError(String::from(
+            "Could not parse CEL",
+        )))
     }
 }
 
 #[derive(Debug)]
 pub enum CELEvalError {
     ExecError(ExecutionError),
-    ParseError,
+    ParseError(String),
 }
 
 impl From<ExecutionError> for CELEvalError {
@@ -434,10 +437,12 @@ pub fn check_cel_predicate<'a>(
     binding: &'a Binding,
     child_res: Option<&HashMap<String, Vec<(Binding, Option<ViolationReason>)>>>,
     ocel: &'a IndexLinkedOCEL,
-) -> bool {
+) -> Result<bool, String> {
     match evaluate_cel(cel, binding, child_res, ocel) {
-        Ok(Value::Bool(b)) => b,
-        _ => false,
+        Ok(Value::Bool(b)) => Ok(b),
+        Ok(_) => Err(format!("Got non-bool CEL result!")),
+        Err(CELEvalError::ExecError(e)) => Err(e.to_string()),
+        Err(CELEvalError::ParseError(e)) => Err(e),
     }
 }
 
@@ -446,19 +451,20 @@ pub fn add_cel_label<'a>(
     child_res: Option<&HashMap<String, Vec<(Binding, Option<ViolationReason>)>>>,
     ocel: &'a IndexLinkedOCEL,
     label_fun: &'a LabelFunction,
-) {
+) -> Result<(), String> {
     match evaluate_cel(&label_fun.cel, binding, child_res, ocel) {
         Ok(v) => {
             binding.label_map.insert(label_fun.label.clone(), v.into());
+            Ok(())
         }
         Err(e) => {
             binding
                 .label_map
                 .insert(label_fun.label.clone(), LabelValue::Null);
-            eprintln!(
+            Err(format!(
                 "Error while computing binding label {} with error {e:?}",
                 label_fun.label
-            )
+            ))
         }
     }
 }
@@ -494,14 +500,17 @@ fn string_to_var(s: &str) -> Variable {
 }
 
 pub fn get_vars_in_cel_program(cel: &str) -> HashSet<Variable> {
-    lazy_compile_and_insert_into_cache(cel);
-    let r_lock = CEL_PROGRAM_CACHE.read().unwrap();
-    let p = r_lock.get(cel).unwrap();
-    p.references()
-        .variables()
-        .into_iter()
-        .map(string_to_var)
-        .collect()
+    if lazy_compile_and_insert_into_cache(cel).is_ok() {
+        let r_lock = CEL_PROGRAM_CACHE.read().unwrap();
+        let p = r_lock.get(cel).unwrap();
+        p.references()
+            .variables()
+            .into_iter()
+            .map(string_to_var)
+            .collect()
+    } else {
+        HashSet::default()
+    }
 }
 
 impl From<cel_interpreter::Value> for LabelValue {

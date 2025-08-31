@@ -162,14 +162,24 @@ export function getAPIServerBackendProvider(
         })
       ).json();
     },
-    "ocel/check-constraints-box": async (tree, measurePerformance) => {
-      return await (
-        await fetch(localBackendURL + "/ocel/check-constraints-box", {
-          method: "post",
-          body: JSON.stringify({ tree, measurePerformance }),
-          headers: { "Content-Type": "application/json" },
-        })
-      ).json();
+    "ocel/check-constraints-box": (tree, measurePerformance) => {
+      return new Promise(async (res, rej) => {
+        try {
+          const result = await fetch(localBackendURL + "/ocel/check-constraints-box", {
+            method: "post",
+            body: JSON.stringify({ tree, measurePerformance }),
+            headers: { "Content-Type": "application/json" },
+          });
+          if (result.ok) {
+            res(await result.json())
+          } else {
+            rej(await result.text())
+          }
+        } catch (e) {
+          rej(e)
+        }
+      })
+
     },
     "ocel/export-filter-box": async (tree, exportFormat) => {
       return await (

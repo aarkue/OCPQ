@@ -951,7 +951,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                             </span>
                           </span>
                         ),
-                        error: "Evaluation failed",
+                        error: (e) => <>Evaluation failed<br/>{String(e)}</>,
                       },
                     );
                     console.log(res.bindingsSkipped);

@@ -204,13 +204,13 @@ pub struct BindingBoxTree {
 }
 
 impl BindingBoxTree {
-    pub fn evaluate(&self, ocel: &IndexLinkedOCEL) -> (EvaluationResults, bool) {
+    pub fn evaluate(&self, ocel: &IndexLinkedOCEL) -> Result<(EvaluationResults, bool), String> {
         if let Some(root) = self.nodes.first() {
-            let ((ret, _violation), skipped) = root.evaluate(0, Binding::default(), self, ocel);
+            let ((ret, _violation), skipped) = root.evaluate(0, Binding::default(), self, ocel)?;
             // ret.push((0, Binding::default(), violation));
-            (ret, skipped)
+            Ok((ret, skipped))
         } else {
-            (vec![], false)
+            Ok((vec![], false))
         }
     }
 
@@ -324,10 +324,13 @@ impl BindingBoxTreeNode {
         parent_binding: Binding,
         tree: &BindingBoxTree,
         ocel: &IndexLinkedOCEL,
-    ) -> (
-        (EvaluationResults, Vec<(Binding, Option<ViolationReason>)>),
-        bool,
-    ) {
+    ) -> Result<
+        (
+            (EvaluationResults, Vec<(Binding, Option<ViolationReason>)>),
+            bool,
+        ),
+        String,
+    > {
         let (bbox, children) = match self.clone() {
             BindingBoxTreeNode::Box(b, cs) => (b, cs),
             x => x.to_box(),
@@ -335,7 +338,7 @@ impl BindingBoxTreeNode {
         // match self {
         //     BindingBoxTreeNode::Box(bbox, children) => {
         let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
-            bbox.expand(parent_binding.clone(), ocel);
+            bbox.expand(parent_binding.clone(), ocel)?;
         enum BindingResult {
             FilteredOutBySizeFilter(Binding, EvaluationResults),
             Sat(Binding, EvaluationResults),
@@ -344,7 +347,7 @@ impl BindingBoxTreeNode {
         let expanded_len = expanded.len();
         let it = rayon_cancel::CancelAdapter::new(expanded.into_par_iter());
         let x = it.canceller();
-        let re: Vec<_> = it
+        let re: Vec<BindingResult> = it
             .map(|mut b| {
                 let _passed_size_filter = true;
                 // let mut all_res: EvaluationResults = Vec::new();
@@ -361,7 +364,7 @@ impl BindingBoxTreeNode {
                     // c_name_map.insert(c_name.clone(), c);
                     let ((c_res, violations), _c_skipped) =
                         // Evaluate Child
-                            tree.nodes[*c].evaluate(*c, b.clone(), tree, ocel);
+                            tree.nodes[*c].evaluate(*c, b.clone(), tree, ocel)?;
                     child_res.insert(c_name, violations);
                     if children.len() * c_res.len() * expanded_len > 10_000_000 {
                         x.cancel();
@@ -377,27 +380,29 @@ impl BindingBoxTreeNode {
                     all_res.extend(c_res);
                 }
                 for label_fun in &bbox.labels {
-                    add_cel_label(&mut b, Some(&child_res), ocel, label_fun);
+                    add_cel_label(&mut b, Some(&child_res), ocel, label_fun)?;
                 }
                 for sf in &bbox.size_filters {
-                    if !sf.check(&b, &child_res, ocel) {
+                    if !sf.check(&b, &child_res, ocel)? {
                         // Vec::default to NOT include child results if a size filter filters the parent binding out
                         // Otherwise, pass all_res
-                        return BindingResult::FilteredOutBySizeFilter(b.clone(), Vec::default());
+                        return Ok::<BindingResult, String>(
+                            BindingResult::FilteredOutBySizeFilter(b.clone(), Vec::default()),
+                        );
                     }
                 }
 
                 for (constr_index, constr) in bbox.constraints.iter().enumerate() {
                     let viol = match constr {
                         Constraint::Filter { filter } => {
-                            if filter.check_binding(&b, ocel) {
+                            if filter.check_binding(&b, ocel)? {
                                 None
                             } else {
                                 Some(ViolationReason::ConstraintNotSatisfied(constr_index))
                             }
                         }
                         Constraint::SizeFilter { filter } => {
-                            if filter.check(&b, &child_res, ocel) {
+                            if filter.check(&b, &child_res, ocel)? {
                                 None
                             } else {
                                 Some(ViolationReason::ConstraintNotSatisfied(constr_index))
@@ -480,15 +485,16 @@ impl BindingBoxTreeNode {
                     };
                     if let Some(vr) = viol {
                         all_res.push((own_index, b.clone(), Some(vr)));
-                        return BindingResult::Viol(b, vr, all_res);
+                        return Ok(BindingResult::Viol(b, vr, all_res));
                     }
                 }
                 all_res.push((own_index, b.clone(), None));
-                BindingResult::Sat(b, all_res)
+                Ok(BindingResult::Sat(b, all_res))
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
+        // .collect();
         let recursive_calls_cancelled = x.is_cancelled();
-        (
+        Ok((
             re.into_par_iter()
                 .fold(
                     || (EvaluationResults::new(), Vec::new()),
@@ -518,7 +524,7 @@ impl BindingBoxTreeNode {
                     },
                 ),
             expanding_skipped_bindings || recursive_calls_cancelled,
-        )
+        ))
 
         // let (passed_size_filter, sat, ret) = expanded
         //     .into_par_iter()
@@ -669,7 +675,7 @@ pub enum Filter {
 }
 
 impl Filter {
-    pub fn check_binding(&self, b: &Binding, ocel: &IndexLinkedOCEL) -> bool {
+    pub fn check_binding(&self, b: &Binding, ocel: &IndexLinkedOCEL) -> Result<bool, String> {
         match self {
             Filter::O2E {
                 object,
@@ -680,14 +686,14 @@ impl Filter {
                 let ob = b.get_ob(object, ocel).unwrap();
                 let ev = b.get_ev(event, ocel).unwrap();
 
-                ev.relationships.iter().any(|rel| {
+                Ok(ev.relationships.iter().any(|rel| {
                     rel.object_id == ob.id
                         && if let Some(q) = qualifier {
                             &rel.qualifier == q
                         } else {
                             true
                         }
-                })
+                }))
             }
             Filter::O2O {
                 object,
@@ -697,14 +703,14 @@ impl Filter {
             } => {
                 let ob1 = b.get_ob(object, ocel).unwrap();
                 let ob2 = b.get_ob(other_object, ocel).unwrap();
-                ob1.relationships.iter().any(|rel| {
+                Ok(ob1.relationships.iter().any(|rel| {
                     rel.object_id == ob2.id
                         && if let Some(q) = qualifier {
                             &rel.qualifier == q
                         } else {
                             true
                         }
-                })
+                }))
             }
             Filter::TimeBetweenEvents {
                 from_event: ev_var_1,
@@ -715,13 +721,13 @@ impl Filter {
                 let e1 = b.get_ev(ev_var_1, ocel).unwrap();
                 let e2 = b.get_ev(ev_var_2, ocel).unwrap();
                 let duration_diff = (e2.time - e1.time).num_milliseconds() as f64 / 1000.0;
-                !min_sec.is_some_and(|min_sec| duration_diff < min_sec)
-                    && !max_sec.is_some_and(|max_sec| duration_diff > max_sec)
+                Ok(!min_sec.is_some_and(|min_sec| duration_diff < min_sec)
+                    && !max_sec.is_some_and(|max_sec| duration_diff > max_sec))
             }
             Filter::NotEqual { var_1, var_2 } => {
                 let val_1 = b.get_any_index(var_1);
                 let val_2 = b.get_any_index(var_2);
-                !(val_1.is_none() || val_2.is_none() || val_1 == val_2)
+                Ok(!(val_1.is_none() || val_2.is_none() || val_1 == val_2))
             }
             Filter::EventAttributeValueFilter {
                 event,
@@ -732,20 +738,20 @@ impl Filter {
                 if let Some(e) = e_opt {
                     if attribute_name == "ocel:id" {
                         if let ValueFilter::String { is_in } = value_filter {
-                            return is_in.contains(&e.id);
+                            return Ok(is_in.contains(&e.id));
                         }
-                        return false;
+                        return Ok(false);
                     }
                     if attribute_name == "ocel:time" {
-                        return value_filter.check_value(&OCELAttributeValue::Time(e.time));
+                        return Ok(value_filter.check_value(&OCELAttributeValue::Time(e.time)));
                     }
                     if let Some(attr) = e.attributes.iter().find(|at| &at.name == attribute_name) {
-                        value_filter.check_value(&attr.value)
+                        Ok(value_filter.check_value(&attr.value))
                     } else {
-                        false
+                        Ok(false)
                     }
                 } else {
-                    false
+                    Ok(false)
                 }
             }
             Filter::ObjectAttributeValueFilter {
@@ -758,21 +764,21 @@ impl Filter {
                 if let Some(o) = o_opt {
                     if attribute_name == "ocel:id" {
                         if let ValueFilter::String { is_in } = value_filter {
-                            return is_in.contains(&o.id);
+                            return Ok(is_in.contains(&o.id));
                         }
-                        return false;
+                        return Ok(false);
                     }
                     match at_time {
-                        ObjectValueFilterTimepoint::Always => o
+                        ObjectValueFilterTimepoint::Always => Ok(o
                             .attributes
                             .iter()
                             .filter(|at| &at.name == attribute_name)
-                            .all(|at| value_filter.check_value(&at.value)),
-                        ObjectValueFilterTimepoint::Sometime => o
+                            .all(|at| value_filter.check_value(&at.value))),
+                        ObjectValueFilterTimepoint::Sometime => Ok(o
                             .attributes
                             .iter()
                             .filter(|at| &at.name == attribute_name)
-                            .any(|at| value_filter.check_value(&at.value)),
+                            .any(|at| value_filter.check_value(&at.value))),
                         ObjectValueFilterTimepoint::AtEvent { event } => {
                             if let Some(ev) = b.get_ev(event, ocel) {
                                 // Find last attribute value update _before_ the event occured (or at the same time)
@@ -783,24 +789,24 @@ impl Filter {
                                     .sorted_by_key(|x| x.time)
                                     .last()
                                 {
-                                    value_filter.check_value(&last_val_before.value)
+                                    Ok(value_filter.check_value(&last_val_before.value))
                                 } else {
-                                    false
+                                    Ok(false)
                                 }
                             } else {
-                                false
+                                Ok(false)
                             }
                         }
                     }
                 } else {
-                    false
+                    Ok(false)
                 }
             }
             Filter::BasicFilterCEL { cel } => {
                 // let now = Instant::now();
 
                 // println!("Took {:?}",now.elapsed());
-                check_cel_predicate(cel, b, None, ocel)
+                Ok(check_cel_predicate(cel, b, None, ocel)?)
             }
         }
     }
@@ -919,7 +925,7 @@ impl SizeFilter {
         binding: &Binding,
         child_res: &HashMap<String, Vec<(Binding, Option<ViolationReason>)>>,
         ocel: &IndexLinkedOCEL,
-    ) -> bool {
+    ) -> Result<bool, String> {
         match self {
             SizeFilter::NumChilds {
                 child_name,
@@ -929,12 +935,12 @@ impl SizeFilter {
                 // println!("{child_index} {c} Min: {:?} Max: {:?} Len: {}",min,max,violations.len());
                 if let Some(c_res) = child_res.get(child_name) {
                     if min.is_some_and(|min| c_res.len() < min) {
-                        false
+                        Ok(false)
                     } else {
-                        !max.is_some_and(|max| c_res.len() > max)
+                        Ok(!max.is_some_and(|max| c_res.len() > max))
                     }
                 } else {
-                    false
+                    Ok(false)
                 }
             }
             SizeFilter::NumChildsProj {
@@ -949,17 +955,17 @@ impl SizeFilter {
                         .flat_map(|(b, _)| b.get_any_index(var_name))
                         .collect();
                     if min.is_some_and(|min| set.len() < min) {
-                        false
+                        Ok(false)
                     } else {
-                        !max.is_some_and(|max| set.len() > max)
+                        Ok(!max.is_some_and(|max| set.len() > max))
                     }
                 } else {
-                    false
+                    Ok(false)
                 }
             }
             SizeFilter::BindingSetEqual { child_names } => {
                 if child_names.is_empty() {
-                    true
+                    Ok(true)
                 } else if let Some(c_res) = child_res.get(&child_names[0]) {
                     let set: HashSet<_> = c_res.iter().map(|(binding, _)| binding).collect();
                     for other_c in child_names.iter().skip(1) {
@@ -967,22 +973,22 @@ impl SizeFilter {
                             let set2: HashSet<_> =
                                 c2_res.iter().map(|(binding, _)| binding).collect();
                             if set != set2 {
-                                return false;
+                                return Ok(false);
                             }
                         } else {
-                            return false;
+                            return Ok(false);
                         }
                     }
-                    true
+                    Ok(true)
                 } else {
-                    false
+                    Ok(false)
                 }
             }
             SizeFilter::BindingSetProjectionEqual {
                 child_name_with_var_name,
             } => {
                 if child_name_with_var_name.is_empty() {
-                    true
+                    Ok(true)
                 } else if let Some(c_res) = child_res.get(&child_name_with_var_name[0].0) {
                     let set: HashSet<_> = c_res
                         .iter()
@@ -1009,19 +1015,19 @@ impl SizeFilter {
                                 })
                                 .collect();
                             if set != set2 {
-                                return false;
+                                return Ok(false);
                             }
                         } else {
-                            return false;
+                            return Ok(false);
                         }
                     }
-                    true
+                    Ok(true)
                 } else {
-                    false
+                    Ok(false)
                 }
             }
             SizeFilter::AdvancedCEL { cel } => {
-                check_cel_predicate(cel, binding, Some(child_res), ocel)
+                Ok(check_cel_predicate(cel, binding, Some(child_res), ocel)?)
             }
         }
     }
@@ -1141,12 +1147,12 @@ impl Display for Binding {
 
 impl Display for ObjectVariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ob_{}", self.0)
+        write!(f, "o{}", self.0 + 1)
     }
 }
 
 impl Display for EventVariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ev_{}", self.0)
+        write!(f, "e{}", self.0 + 1)
     }
 }

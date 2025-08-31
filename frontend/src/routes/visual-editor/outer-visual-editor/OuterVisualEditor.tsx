@@ -41,6 +41,7 @@ import AutoDiscoveryButton from "./AutoDiscovery";
 import { TbTrash } from "react-icons/tb";
 import AutoSizer from "react-virtualized-auto-sizer";
 import TotalViolationInfo from "../TotalViolationInfo";
+import { VisualEditorContext } from "../helper/VisualEditorContext";
 const LOCALSTORAGE_SAVE_KEY_DATA = "oced-declare-data";
 const LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META = "oced-declare-meta";
 
@@ -203,6 +204,7 @@ export default function VisualEditorOuter() {
           onClick={() => {
             changeIndex(index);
             setShowConstraintSelection(false);
+            
           }}
           className={clsx(
             "w-full h-full block whitespace-nowrap overflow-hidden text-ellipsis px-2 text-left",
@@ -368,7 +370,7 @@ export default function VisualEditorOuter() {
                         >
                           <DialogContent className="flex flex-col max-h-full justify-between">
                             <DialogHeader>
-                              <DialogTitle>Select Constraint</DialogTitle>
+                              <DialogTitle>Select Query</DialogTitle>
                             </DialogHeader>
                             <div className="h-[50vh] w-full">
                               <AutoSizer>

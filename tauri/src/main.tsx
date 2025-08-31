@@ -24,6 +24,7 @@ import ReactDOM from "react-dom/client";
 
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { EvaluateBoxTreeResult } from "$/types/generated/EvaluateBoxTreeResult";
 
 
 const tauriBackend: BackendProvider = {
@@ -74,8 +75,17 @@ const tauriBackend: BackendProvider = {
     }
   },
 
-  "ocel/check-constraints-box": async (tree, measurePerformance) => {
-    return await invoke("check_with_box_tree", { req: { tree, measurePerformance } });
+  "ocel/check-constraints-box": (tree, measurePerformance) => {
+    console.log("Called once");
+    return new Promise(async (res, rej) => {
+      try {
+        const r = await invoke<EvaluateBoxTreeResult>("check_with_box_tree", { req: { tree, measurePerformance } });
+        res(r);
+      } catch (e) {
+        console.log(e);
+        rej(e);
+      }
+    })
   },
   "ocel/event-qualifiers": async () => {
     return await invoke<EventTypeQualifiers>("get_event_qualifiers");
