@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { EventTypeQualifiers, ObjectTypeQualifiers } from "@/types/ocel";
 import clsx from "clsx";
-import { useContext, useEffect, useRef, useState } from "react";
+import { startTransition, useContext, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { CgTrash } from "react-icons/cg";
 import { LuSave } from "react-icons/lu";
@@ -41,6 +41,7 @@ import AutoDiscoveryButton from "./AutoDiscovery";
 import { TbTrash } from "react-icons/tb";
 import AutoSizer from "react-virtualized-auto-sizer";
 import TotalViolationInfo from "../TotalViolationInfo";
+import { VisualEditorContext } from "../helper/VisualEditorContext";
 const LOCALSTORAGE_SAVE_KEY_DATA = "oced-declare-data";
 const LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META = "oced-declare-meta";
 
@@ -203,6 +204,7 @@ export default function VisualEditorOuter() {
           onClick={() => {
             changeIndex(index);
             setShowConstraintSelection(false);
+            
           }}
           className={clsx(
             "w-full h-full block whitespace-nowrap overflow-hidden text-ellipsis px-2 text-left",
@@ -368,7 +370,7 @@ export default function VisualEditorOuter() {
                         >
                           <DialogContent className="flex flex-col max-h-full justify-between">
                             <DialogHeader>
-                              <DialogTitle>Select Constraint</DialogTitle>
+                              <DialogTitle>Select Query</DialogTitle>
                             </DialogHeader>
                             <div className="h-[50vh] w-full">
                               <AutoSizer>
@@ -453,10 +455,6 @@ export default function VisualEditorOuter() {
                                   constraints.length,
                                   1,
                                 );
-                                changeIndex(
-                                  constraints.length,
-                                  constraints.length + 1,
-                                );
                                 setConstraints((cs) => [
                                   ...cs,
                                   {
@@ -464,6 +462,12 @@ export default function VisualEditorOuter() {
                                     description: "",
                                   },
                                 ]);
+                                startTransition(() => {
+                                changeIndex(
+                                  constraints.length,
+                                  constraints.length + 1,
+                                );
+                                })
                               }}
                             >
                               <RxPlusCircled className="mr-1" />

@@ -171,7 +171,7 @@ async fn check_with_box_tree(
 ) -> Result<EvaluateBoxTreeResult, String> {
     match state.ocel.read().await.as_ref() {
         Some(ocel) => {
-            let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false));
+            let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))?;
             let res_to_ret: EvaluateBoxTreeResult = res.clone_first_few();
             *state.eval_res.write().await = Some(res);
             Ok(res_to_ret)

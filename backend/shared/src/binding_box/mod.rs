@@ -107,7 +107,7 @@ pub fn evaluate_box_tree(
     tree: BindingBoxTree,
     ocel: &IndexLinkedOCEL,
     measure_performance: bool,
-) -> EvaluateBoxTreeResult {
+) -> Result<EvaluateBoxTreeResult, String> {
     if measure_performance {
         let n = 10;
         let mut eval_times = Vec::new();
@@ -121,7 +121,7 @@ pub fn evaluate_box_tree(
         serde_json::to_writer_pretty(BufWriter::new(tree_json_file), &tree).unwrap();
         for _ in 0..n {
             let start = Instant::now();
-            let (evaluation_results_flat, bindings_skipped) = tree.evaluate(ocel);
+            let (evaluation_results_flat, bindings_skipped) = tree.evaluate(ocel)?;
             if bindings_skipped {
                 eprintln!("Evaluation skipped bindings! Reported times are inaccurate!");
             }
@@ -159,7 +159,7 @@ pub fn evaluate_box_tree(
         );
     }
     let now = Instant::now();
-    let (evaluation_results_flat, bindings_skipped) = tree.evaluate(ocel);
+    let (evaluation_results_flat, bindings_skipped) = tree.evaluate(ocel)?;
     println!("Tree Evaluated in {:?}", now.elapsed());
     if bindings_skipped {
         println!("[!!!] Query yielded too many results. Some bindings were skipped. Reported counts are inaccurate!");
@@ -190,7 +190,7 @@ pub fn evaluate_box_tree(
         now.elapsed(),
         evaluation_results.len()
     );
-    EvaluateBoxTreeResult {
+    Ok(EvaluateBoxTreeResult {
         evaluation_results,
         object_ids: ocel
             .get_ocel_ref()
@@ -205,12 +205,12 @@ pub fn evaluate_box_tree(
             .map(|o| o.id.clone())
             .collect(),
         bindings_skipped,
-    }
+    })
 }
 
-pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Option<OCEL> {
+pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Result<OCEL, String> {
     let now = Instant::now();
-    let (evaluation_results_flat, skipped_bindings) = tree.evaluate(ocel);
+    let (evaluation_results_flat, skipped_bindings) = tree.evaluate(ocel)?;
     println!("Tree Evaluated in {:?}", now.elapsed());
     if skipped_bindings {
         println!("Bindings were skipped!");
@@ -452,5 +452,5 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Opt
     println!("Filtering (excl. export) took {:?}", filter_now.elapsed());
     export_ocel_json_path(&filtered_ocel, "filtered-ocel.json").unwrap();
 
-    Some(filtered_ocel)
+    Ok(filtered_ocel)
 }

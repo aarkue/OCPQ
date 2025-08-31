@@ -79,10 +79,10 @@ import {
 } from "@/components/ui/context-menu";
 import { getAvailableChildNamesWithEdges } from "./helper/child-names";
 
-function isEditorElementTarget(el: HTMLElement | EventTarget | null) {
+function isEditorElementTarget(el: HTMLElement | EventTarget | null,isInitial = true): boolean {
   return (
-    el === document.body ||
-    (el !== null && "className" in el && el.className?.includes("react-flow"))
+    (isInitial && el === document.body) ||
+    (el !== null && "className" in el && (el.className?.includes("react-flow") || isEditorElementTarget(el.parentElement,false)))
   );
 }
 
@@ -476,10 +476,10 @@ export default function VisualEditor(props: VisualEditorProps) {
     // }
 
     function pasteListener(ev: ClipboardEvent) {
+      console.log("paste", ev);
       if (!isEditorElementTarget(ev.target)) {
         return;
       }
-      console.log(ev);
       if (ev.clipboardData != null) {
         // For debugging: Print all clipboard data items
         // [...ev.clipboardData.items].forEach((ci) =>
@@ -626,8 +626,8 @@ export default function VisualEditor(props: VisualEditorProps) {
         getNodeIDByName,
         filterMode,
         showElementInfo: (elInfo) => {
-          console.log('jo',JSON.stringify(elInfo));
-          setElementInfo(elInfo ? {...elInfo} : undefined);
+          console.log('jo', JSON.stringify(elInfo));
+          setElementInfo(elInfo ? { ...elInfo } : undefined);
         },
         getVarName: (variable, type) => {
           return {
@@ -706,6 +706,7 @@ export default function VisualEditor(props: VisualEditorProps) {
       </ContextMenu>
       <ReactFlow
         className="react-flow"
+        tabIndex={1}
         onInit={(flow) => {
           initialized.current = true;
           if (initialized.current) {
@@ -951,7 +952,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                             </span>
                           </span>
                         ),
-                        error: "Evaluation failed",
+                        error: (e) => <>Evaluation failed<br />{String(e)}</>,
                       },
                     );
                     console.log(res.bindingsSkipped);
