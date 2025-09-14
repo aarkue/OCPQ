@@ -179,8 +179,11 @@ function OcelEventViewer({
       className={`block p-1 bg-white text-left`}
     >
       <h4 className="font-semibold text-2xl">{event.id}</h4>
-      <span className="text-gray-600 text-xl block mb-2">
+      <span className="text-gray-800 text-xl block">
         Type: {event.type}
+      </span>
+      <span className="text-gray-800 text-xl block">
+      Time: <span className="font-medium font-mono">{event.time}</span>
       </span>
       <ul className="text-left text-xl space-y-1 ">
         {type?.attributes.map((attr) => (
