@@ -24,6 +24,6 @@ csv = "1.3.0"
 rust_xlsxwriter = {version = "0.80.0", features = ["chrono"]}
 ordered-float = {version = "4.4.0", features = ["default","serde"]}
 anyhow = "1.0.95"
-rust_slurm = { git = "https://github.com/aarkue/rust-slurm", features = ["ssh"], version = "0.1.1"}
+slurry = { git = "https://github.com/aarkue/slurry", features = ["ssh"], version = "0.1.1"}
 tokio = { version = "1.43", features = ["full"] }
 rayon-cancel = "1.0.0"

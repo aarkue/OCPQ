@@ -3567,7 +3567,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "rayon-cancel",
- "rust_slurm",
+ "slurry",
  "rust_xlsxwriter",
  "serde",
  "serde_json",
@@ -4936,7 +4936,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_slurm"
+name = "slurry"
 version = "0.1.1"
 source = "git+https://github.com/aarkue/rust-slurm#aabb27b288b4cb4f3dd6687ef72d82a9b511fe28"
 dependencies = [

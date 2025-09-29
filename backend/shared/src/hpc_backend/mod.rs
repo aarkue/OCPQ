@@ -1,12 +1,12 @@
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Error;
-use rust_slurm::{
+use slurry::{
     self,
-    jobs_management::{JobFilesToUpload, JobLocalForwarding, JobOptions},
+    job_management::{JobFilesToUpload, JobLocalForwarding, JobOptions},
     login_with_cfg,
 };
-pub use rust_slurm::{jobs_management::JobStatus, Client, ConnectionConfig};
+pub use slurry::{job_management::JobStatus, Client, ConnectionConfig};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 use ts_rs::TS;
@@ -49,7 +49,7 @@ pub async fn submit_hpc_job(
             relay_addr: options.relay_addr,
         }),
     };
-    rust_slurm::jobs_management::submit_job(client, job_options).await
+    slurry::job_management::submit_job(client, job_options).await
 }
 
 fn hour_float_to_slurm_time(hours: f32) -> String {
@@ -60,7 +60,7 @@ fn hour_float_to_slurm_time(hours: f32) -> String {
 }
 
 pub async fn get_job_status(client: Arc<Client>, job_id: String) -> Result<JobStatus, Error> {
-    rust_slurm::jobs_management::get_job_status(client.as_ref(), &job_id).await
+    slurry::job_management::get_job_status(client.as_ref(), &job_id).await
 }
 
 // #[derive(TS)]
@@ -77,5 +77,5 @@ pub async fn start_port_forwarding(
     local_addr: &str,
     remote_addr: &str,
 ) -> Result<JoinHandle<()>, Error> {
-    rust_slurm::ssh_port_forwarding(client, local_addr, remote_addr).await
+    slurry::ssh_port_forwarding(client, local_addr, remote_addr).await
 }
