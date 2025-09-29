@@ -105,7 +105,7 @@ pub fn evaluate_cel<'a>(
     ocel: &'a IndexLinkedOCEL,
 ) -> Result<Value, CELEvalError> {
     // let now = Instant::now();
-    lazy_compile_and_insert_into_cache(cel).map_err(|e| CELEvalError::ParseError(e))?;
+    lazy_compile_and_insert_into_cache(cel).map_err(CELEvalError::ParseError)?;
     let cache_read = CEL_PROGRAM_CACHE.read().unwrap();
     if let Some(p) = cache_read.get(cel) {
         // println!("Program compiled: {:?}", now.elapsed());
@@ -440,7 +440,7 @@ pub fn check_cel_predicate<'a>(
 ) -> Result<bool, String> {
     match evaluate_cel(cel, binding, child_res, ocel) {
         Ok(Value::Bool(b)) => Ok(b),
-        Ok(_) => Err(format!("Got non-bool CEL result!")),
+        Ok(_) => Err("Got non-bool CEL result!".to_string()),
         Err(CELEvalError::ExecError(e)) => Err(e.to_string()),
         Err(CELEvalError::ParseError(e)) => Err(e),
     }

@@ -66,7 +66,7 @@ pub fn get_expected_relation_count(
         })
         .sum();
     // println!("{res} for {bound_by:?}");
-    Some((res as i32))
+    Some(res as i32)
 }
 impl BindingStep {
     /// Get a binding order from a binding box

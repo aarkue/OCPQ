@@ -7,7 +7,7 @@ pub mod expand_step;
 #[cfg(test)]
 pub mod test;
 
-use std::{collections::HashSet, env::remove_var, fs::File, io::BufWriter, time::Instant};
+use std::{collections::HashSet, fs::File, io::BufWriter, time::Instant};
 
 use chrono::DateTime;
 use itertools::Itertools;
@@ -245,8 +245,7 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Res
     let mut e2o_rels_included: HashSet<(EventIndex, ObjectIndex, Option<String>)> =
         if assume_all_included {
             ocel.get_all_evs_ref()
-                .map(|e| ocel.get_e2o(e).map(|r| (*e, *r.1, Some(r.0.to_string()))))
-                .flatten()
+                .flat_map(|e| ocel.get_e2o(e).map(|r| (*e, *r.1, Some(r.0.to_string()))))
                 .collect()
         } else {
             HashSet::new()
@@ -256,8 +255,7 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Res
     let mut o2o_rels_included: HashSet<(ObjectIndex, ObjectIndex, Option<String>)> =
         if assume_all_included {
             ocel.get_all_obs_ref()
-                .map(|o| ocel.get_o2o(o).map(|r| (*o, *r.1, Some(r.0.to_string()))))
-                .flatten()
+                .flat_map(|o| ocel.get_o2o(o).map(|r| (*o, *r.1, Some(r.0.to_string()))))
                 .collect()
         } else {
             HashSet::new()

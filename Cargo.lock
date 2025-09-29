@@ -3567,11 +3567,11 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "rayon-cancel",
- "rust_slurm",
  "rust_xlsxwriter",
  "serde",
  "serde_json",
  "serde_with",
+ "slurry",
  "tokio",
  "ts-rs",
  "uuid",
@@ -4936,22 +4936,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_slurm"
-version = "0.1.1"
-source = "git+https://github.com/aarkue/rust-slurm#aabb27b288b4cb4f3dd6687ef72d82a9b511fe28"
-dependencies = [
- "anyhow",
- "async-ssh2-tokio",
- "chrono",
- "glob",
- "rayon",
- "serde",
- "serde_json",
- "structdiff",
- "tokio",
-]
-
-[[package]]
 name = "rust_xlsxwriter"
 version = "0.80.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5414,6 +5398,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "slurry"
+version = "0.1.7"
+source = "git+https://github.com/aarkue/slurry#50425d6f31da75a26fa28c4cd16dc2ea70c1f385"
+dependencies = [
+ "anyhow",
+ "async-ssh2-tokio",
+ "chrono",
+ "glob",
+ "rayon",
+ "serde",
+ "serde_json",
+ "structdiff",
+ "tokio",
 ]
 
 [[package]]

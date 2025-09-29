@@ -49,9 +49,9 @@ use ocpq_shared::{
             linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
             ocel_struct::{OCELEvent, OCELObject},
         },
-        EventLog, XESImportOptions,
+        XESImportOptions,
     },
-    trad_event_log::{self, trad_log_to_ocel},
+    trad_event_log::trad_log_to_ocel,
 };
 use tower_http::cors::CorsLayer;
 

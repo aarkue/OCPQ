@@ -16,7 +16,7 @@ use process_mining::{
 fn xes_att_to_ocel_attr(attribute: &AttributeValue) -> OCELAttributeValue {
     match attribute {
         AttributeValue::String(s) => OCELAttributeValue::String(s.clone()),
-        AttributeValue::Date(date_time) => OCELAttributeValue::Time(date_time.clone()),
+        AttributeValue::Date(date_time) => OCELAttributeValue::Time(*date_time),
         AttributeValue::Int(i) => OCELAttributeValue::Integer(*i),
         AttributeValue::Float(f) => OCELAttributeValue::Float(*f),
         AttributeValue::Boolean(b) => OCELAttributeValue::Boolean(*b),
@@ -66,11 +66,10 @@ pub fn trad_log_to_ocel(log: &EventLog) -> OCEL {
             .collect();
 
         for attr in &attributes {
-            if case_object_type
+            if !case_object_type
                 .attributes
                 .iter()
-                .find(|a| a.name == attr.name)
-                .is_none()
+                .any(|a| a.name == attr.name)
             {
                 case_object_type.attributes.push(OCELTypeAttribute {
                     name: attr.name.to_string(),
@@ -113,7 +112,7 @@ pub fn trad_log_to_ocel(log: &EventLog) -> OCEL {
 
             for attr in &attributes {
                 if let Some(x) = event_type_set.get_mut(event_type) {
-                    if x.attributes.iter().find(|a| a.name == attr.name).is_none() {
+                    if !x.attributes.iter().any(|a| a.name == attr.name) {
                         x.attributes.push(OCELTypeAttribute {
                             name: attr.name.to_string(),
                             value_type: OCELAttributeType::from(&attr.value).to_type_string(),
@@ -130,7 +129,7 @@ pub fn trad_log_to_ocel(log: &EventLog) -> OCEL {
                     .and_then(|t| t.value.try_as_date())
                     .cloned()
                     .unwrap_or_default(),
-                attributes: attributes,
+                attributes,
                 relationships: vec![OCELRelationship {
                     object_id: object_id.clone(),
                     qualifier: "case".to_string(),
