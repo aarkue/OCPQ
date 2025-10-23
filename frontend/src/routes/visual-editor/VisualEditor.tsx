@@ -415,13 +415,13 @@ export default function VisualEditor(props: VisualEditorProps) {
           await navigator.clipboard.writeText(
             JSON.stringify(selectedRef.current),
           );
-          toast("Copied selection as plain JSON!", {
+          toast("Copied selection!", {
             icon: <LuClipboardCopy />,
           });
         } catch (e) {
           console.error(e);
         }
-      } else if ((ev.ctrlKey || ev.altKey) && ev.key === "a") {
+      } else if ((ev.ctrlKey || ev.metaKey || ev.altKey) && ev.key === "a") {
         ev.preventDefault();
         ev.stopPropagation();
         instance.setNodes((nodes) =>
@@ -445,7 +445,10 @@ export default function VisualEditor(props: VisualEditorProps) {
       ev.preventDefault();
       if (ev.clipboardData !== null) {
         const data = JSON.stringify(selectedRef.current);
-        ev.clipboardData.setData("application/json+ocpq-flow", data);
+          await navigator.clipboard.writeText(
+            JSON.stringify(selectedRef.current),
+          );
+        // ev.clipboardData.setData("application/json+ocpq-flow", data);
       }
       toast("Copied selection!", { icon: <LuClipboardCopy /> });
     }
