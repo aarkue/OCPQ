@@ -157,9 +157,10 @@ export default function OcelGraphViewer({
   }
   return (
     <div className="text-lg text-left w-full h-full">
-      <div className="flex h-full w-full items-start gap-x-1 ">
+      <div className="flex h-full w-full items-start gap-x-1">
         <GraphOptions options={options} setOptions={setOptions} initialGrapOptions={initialGrapOptions}
           setGraphData={(gd) => {
+            prevGraphDataRef.current = undefined;
             graphRef.current!.d3Force("link")!.distance(10);
 
             if (gd === undefined) {
@@ -169,7 +170,7 @@ export default function OcelGraphViewer({
             }
           }}
         />
-        <div className="border w-full h-full overflow-hidden relative" ref={containerRef} tabIndex={-1}>
+        <div className="border-2 border-dashed w-full h-full overflow-hidden relative" ref={containerRef} tabIndex={-1}>
           <Button disabled={prevGraphDataRef.current === undefined}
             title="Undo last expansion"
             size="icon"
@@ -220,9 +221,9 @@ export default function OcelGraphViewer({
               const canvas =
                 ev.currentTarget.parentElement?.querySelector("canvas");
               if (canvas != null) {
-                const url = canvas.toBlob((blob) => {
+                canvas.toBlob((blob) => {
                   if (blob !== null) {
-                    backend["download-blob"](blob, "force-graph.png");
+                    backend["download-blob"](blob, "ocel-graph.png");
                   }
                 }, "image/png");
               }
@@ -462,99 +463,101 @@ function GraphOptions({
   }, [initialGrapOptions]);
   const [loading, setLoading] = useState(false);
   return (
-    <div>
-      <div className="flex flex-col gap-y-2 mb-4">
-        <div className="flex gap-x-1 items-center">
-          <Label className="w-[9ch] cursor-help" title="Entity type (i.e., Object/Event) of the Object/Event to query">Root Type</Label>
-          <ToggleGroup
-            type="single"
-            value={options.rootIsObject ? "object" : "event"}
-            onValueChange={(val: string) => {
-              setOptions({ ...options, rootIsObject: val === "object" });
-            }}
-          >
-            <ToggleGroupItem value="object">Object</ToggleGroupItem>
-            <ToggleGroupItem value="event">Event</ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-        <div className="flex gap-x-1 items-center">
-          <Label className="w-[12ch] cursor-help" title="ID of the Object/Event to query">Root ID</Label>
-          <datalist id="object-ids">
-            {ocelInfo.object_ids.slice(0, 100).map((id) => (
-              <option key={id} value={id} />
-            ))}
-          </datalist>
-          <datalist id="event-ids">
-            {ocelInfo.event_ids.slice(0, 100).map((id) => (
-              <option key={id} value={id} />
-            ))}
-          </datalist>
-          <Input
-            list={options.rootIsObject ? "object-ids" : "event-ids"}
-            className="max-w-[24ch]"
+    <div className="max-h-full overflow-y-auto px-2">
+      <div className="h-fit">
+        <h3 className="font-semibold mb-1"> Relationship Graph </h3>
+        <div className="flex flex-col gap-y-1 mb-4">
+          <div className="flex gap-x-1 items-center">
+            <Label className="w-[9ch] cursor-help" title="Entity type (i.e., Object/Event) of the Object/Event to query">Root Type</Label>
+            <ToggleGroup
+              type="single"
+              value={options.rootIsObject ? "object" : "event"}
+              onValueChange={(val: string) => {
+                setOptions({ ...options, rootIsObject: val === "object" });
+              }}
+            >
+              <ToggleGroupItem value="object">Object</ToggleGroupItem>
+              <ToggleGroupItem value="event">Event</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+          <div className="flex gap-x-1 items-center">
+            <Label className="w-[12ch] cursor-help" title="ID of the Object/Event to query">Root ID</Label>
+            <datalist id="object-ids">
+              {ocelInfo.object_ids.slice(0, 100).map((id) => (
+                <option key={id} value={id} />
+              ))}
+            </datalist>
+            <datalist id="event-ids">
+              {ocelInfo.event_ids.slice(0, 100).map((id) => (
+                <option key={id} value={id} />
+              ))}
+            </datalist>
+            <Input
+              list={options.rootIsObject ? "object-ids" : "event-ids"}
+              className="max-w-[24ch]"
 
-            onKeyDown={(ev) => {
-              if (ev.key === "Enter") {
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter") {
 
-                applyGraph()
+                  applyGraph()
+                }
               }
-            }
-            }
-            placeholder="Root Object/Event ID"
-            type="text"
-            value={options.root}
-            onChange={(ev) =>
-              setOptions({ ...options, root: ev.currentTarget.value })
-            }
-          />
+              }
+              placeholder="Root Object/Event ID"
+              type="text"
+              value={options.root}
+              onChange={(ev) =>
+                setOptions({ ...options, root: ev.currentTarget.value })
+              }
+            />
+          </div>
+          <div className="flex gap-x-1 items-center">
+            <Label className="w-[12ch] cursor-help" title="Maximum distance (i.e., number of hops along E2O/O2O relationship edges) to view">Max. Distance</Label>
+            <Input
+              type="number"
+              placeholder="Max. Distance"
+              className="max-w-[24ch]"
+              value={options.maxDistance}
+              onChange={(ev) =>
+                setOptions({
+                  ...options,
+                  maxDistance: ev.currentTarget.valueAsNumber,
+                })
+              }
+            />
+          </div>
+          <div className="flex gap-x-1 items-center">
+            <Label className="w-[12ch] cursor-help" title="Maximum number of neighbors (i.e., entities involved through E2O/O2O) to recursively expand. This option prevents polluting the graph with too many nodes.">Max. Neighbors</Label>
+            <Input
+              type="number"
+              placeholder="Max. Expansion"
+              className="max-w-[24ch]"
+              value={options.relsSizeIgnoreThreshold}
+              onChange={(ev) =>
+                setOptions({
+                  ...options,
+                  relsSizeIgnoreThreshold: ev.currentTarget.valueAsNumber,
+                })
+              }
+            />
+          </div>
+          <Button
+            size="lg"
+            disabled={loading}
+            onClick={() => applyGraph()}
+          >
+            Apply
+          </Button>
         </div>
-        <div className="flex gap-x-1 items-center">
-          <Label className="w-[12ch] cursor-help" title="Maximum distance (i.e., number of hops along E2O/O2O relationship edges) to view">Max. Distance</Label>
-          <Input
-            type="number"
-            placeholder="Max. Distance"
-            className="max-w-[24ch]"
-            value={options.maxDistance}
-            onChange={(ev) =>
-              setOptions({
-                ...options,
-                maxDistance: ev.currentTarget.valueAsNumber,
-              })
-            }
-          />
-        </div>
-        <div className="flex gap-x-1 items-center">
-          <Label className="w-[12ch] cursor-help" title="Maximum number of neighbors (i.e., entities involved through E2O/O2O) to recursively expand. This option prevents polluting the graph with too many nodes.">Max. Neighbors</Label>
-          <Input
-            type="number"
-            placeholder="Max. Expansion"
-            className="max-w-[24ch]"
-            value={options.relsSizeIgnoreThreshold}
-            onChange={(ev) =>
-              setOptions({
-                ...options,
-                relsSizeIgnoreThreshold: ev.currentTarget.valueAsNumber,
-              })
-            }
-          />
-        </div>
-        </div>
-      <Button
-        size="lg"
-        disabled={loading}
-        onClick={() => applyGraph()}
-      >
-        Apply
-      </Button>
-
-      <p className="text-sm mt-2 border border-blue-200 px-2 py-1 rounded-sm bg-blue-50/80 text-wrap max-w-sm">
-        <span className="font-bold inline-flex items-center gap-x-1"><PiInfoBold className="inline text-blue-600" size={18} /> Legend & Hints</span><br />
-        Events are shown as as squares and objects as circles in the graph.
-        Hovering over an edge between two nodes reveals the direction of the relation as well as the qualifier.
-        <br />
-        Click on an node to expand its relations.
-        Right-click a node to copy its ID to the clipboard.
-      </p>
+        <p className="text-xs mt-2 border border-blue-200 px-2 py-1 rounded-sm bg-blue-50/80 text-wrap max-w-sm">
+          <span className="font-bold inline-flex items-center gap-x-1 text-sm"><PiInfoBold className="inline text-blue-600" size={18} /> Legend & Hints</span><br />
+          Events are shown as as squares and objects as circles in the graph.
+          Hovering over an edge between two nodes reveals the direction of the relation as well as the qualifier.
+          <br />
+          Click on an node to expand its relations.
+          Right-click a node to copy its ID to the clipboard.
+        </p>
+      </div>
     </div>
   );
 }

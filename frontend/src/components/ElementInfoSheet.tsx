@@ -27,7 +27,7 @@ export default function ElementInfoSheet({
     >
       <SheetContent
         side="bottom"
-        className="h-[40vh] flex flex-col"
+        className="h-[40vh] flex flex-col pb-1"
         overlay={false}
         onInteractOutside={(ev) => {
           ev.preventDefault();
@@ -128,10 +128,6 @@ export default function ElementInfoSheet({
             />
           )}
         </div>
-        {/* <SheetHeader> */}
-        {/* <SheetTitle className="-mt-4">Element Info</SheetTitle> */}
-        {/* <SheetDescription></SheetDescription> */}
-        {/* </SheetHeader> */}
         {elInfo !== undefined && (
           <OcelElementInfo type={elInfo?.type} req={elInfo.req} />
         )}

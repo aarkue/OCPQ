@@ -38,6 +38,11 @@
   -webkit-transform: translateZ(0) scale(1, 1);
 }
 
+
+.scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
 /* Below: Fixes Monaco transparent bug in linux webview (gecko?) */
 /* .monaco-editor .view-lines {
   @apply bg-white

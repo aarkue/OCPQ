@@ -226,10 +226,11 @@ export default function NewVariableChooser({
                   ? "Event Variable"
                   : "Object Variable"}
               </AlertDialogTitle>
-              <div className="text-sm text-gray-700 pt-4 grid grid-cols-[1fr,2fr] gap-x-2 gap-y-1.5">
+              <div className="text-sm text-gray-700 pt-4 grid grid-cols-[1fr,3fr] gap-x-2 gap-y-1.5">
                 <Label>Variable</Label>
                 <Label>
-                  {alertState?.variant === "event" ? "Event" : "Object"} Types
+                  {alertState?.variant === "event" ? "Event" : "Object"} Types<br/>
+                  <span className="text-xs font-normal">Multiple types are considered with OR-semantics (e.g., an <span className="font-bold text-blue-600">A</span> or <span className="font-bold text-purple-600">B</span> {alertState.variant === "event" ? <>event</> : <>object</>}).</span>
                 </Label>
                 <Combobox
                   options={

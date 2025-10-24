@@ -57,9 +57,9 @@ export default function OcelElementInfo({
   }, [info]);
 
   return (
-    <div className="text-lg text-left h-full w-full">
-      <div className="h-full grid grid-cols-[1fr,2fr] justify-center gap-x-4 w-full">
-        <div className="h-full overflow-auto w-full border-r-2" ref={overflowDiv}>
+    <div className="text-lg text-left h-full">
+      <div className="grid grid-cols-[1fr,2fr] justify-center gap-x-4 w-full h-full">
+        <div className="w-full h-full border-r-2 overflow-auto" ref={overflowDiv}>
           {info?.object != null && (
             <OcelObjectViewer
               object={info.object}
@@ -81,17 +81,17 @@ export default function OcelElementInfo({
             <div className="text-4xl font-bold text-red-700">Not Found</div>
           )}
         </div>
-      <div className="w-full">
-        
-        {info !== null &&
-        <OcelGraphViewer
-          initialGrapOptions={{
-            type,
-            id: (type === "event" ? info?.event : info?.object)?.id ?? req.id,
-          }}
-        />
-      }
-      </div>
+        <div className="w-full h-full overflow-hidden">
+
+          {info !== null &&
+            <OcelGraphViewer
+              initialGrapOptions={{
+                type,
+                id: (type === "event" ? info?.event : info?.object)?.id ?? req.id,
+              }}
+            />
+          }
+        </div>
       </div>
     </div>
   );
@@ -130,34 +130,35 @@ function OcelObjectViewer({
 }) {
   return (
     <div
-      className={`block p-1 bg-white text-left`}
+      className={`block h-full p-1 bg-white text-left`}
     >
       <h4 className="font-semibold text-2xl">{object.id}</h4>
       <span className="text-gray-600 text-xl block mb-2">
         Type: {object.type}
       </span>
-      <ul className="text-left text-xl -space-y-2">
+      <ul className="text-left text-xl space-y-1">
         {type?.attributes.map((attr) => (
           <li key={attr.name}>
             <div className="flex gap-x-1 items-center w-full">
-              <span className="flex justify-center -mt-1 w-8">
-                {/* {attr.name} */}
-                <IconForDataType dtype={attr.type} />
-              </span>
-              <span className="font-mono">{attr.name}:</span>{" "}
-              <span className="font-mono text-blue-700 w-full overflow-hidden inline-block">
+              <div className="flex self-start">
+                <span className="flex justify-center -mt-1 w-8">
+                  <IconForDataType dtype={attr.type} />
+                </span>
+                <div className="font-mono self-start">{attr.name}:</div>
+              </div>
+              <div className="font-mono text-blue-700 w-full flex flex-wrap overflow-hidden">
                 {object.attributes
                   .filter((a) => a.name === attr.name)
                   .map((a) => (
-                    <span
+                    <div
                       key={a.time}
-                      className="mr-4 border p-0.5 m-0.5 rounded-sm inline-block w-fit max-w-full truncate"
+                      className="mr-4 text-base border p-0.5 rounded-sm w-fit max-w-full truncate"
                       title={`${a.value} at ${a.time}`}
                     >
                       {String(a.value)}
-                    </span>
+                    </div>
                   ))}
-              </span>
+              </div>
             </div>
           </li>
         ))}
@@ -183,7 +184,7 @@ function OcelEventViewer({
         Type: {event.type}
       </span>
       <span className="text-gray-800 text-xl block">
-      Time: <span className="font-medium font-mono">{event.time}</span>
+        Time: <span className="font-medium font-mono">{event.time}</span>
       </span>
       <ul className="text-left text-xl space-y-1 ">
         {type?.attributes.map((attr) => (
