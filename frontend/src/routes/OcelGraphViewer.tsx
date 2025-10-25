@@ -1,7 +1,6 @@
 import { OcelInfoContext } from "@/App";
 import { BackendProviderContext } from "@/BackendProviderContext";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -15,10 +14,9 @@ import ForceGraph2D, {
   type NodeObject,
 } from "react-force-graph-2d";
 import toast from "react-hot-toast";
-import { CgUndo } from "react-icons/cg";
-import { LuAsterisk, LuClipboardCopy, LuUndo, LuUndo2 } from "react-icons/lu";
+import { LuClipboardCopy, LuUndo2 } from "react-icons/lu";
 import { MdOutlineZoomInMap } from "react-icons/md";
-import { PiInfoBold, PiInfoFill } from "react-icons/pi";
+import { PiInfoBold } from "react-icons/pi";
 import { TbFocusCentered } from "react-icons/tb";
 
 import AutoSizer from "react-virtualized-auto-sizer";
@@ -83,8 +81,8 @@ export default function OcelGraphViewer({
 
   useEffect(() => {
     setTimeout(() => {
-      graphRef.current?.zoomToFit();
-      // graphRef.current?.zoomToFit(200, 100);
+      // graphRef.current?.zoomToFit();
+      graphRef.current?.zoomToFit(200, 100);
     }, 300);
   }, [data]);
 
@@ -161,7 +159,23 @@ export default function OcelGraphViewer({
         <GraphOptions options={options} setOptions={setOptions} initialGrapOptions={initialGrapOptions}
           setGraphData={(gd) => {
             prevGraphDataRef.current = undefined;
-            graphRef.current!.d3Force("link")!.distance(10);
+            const link = graphRef.current!.d3Force("link")!;
+            const charge =
+              graphRef.current!.d3Force("charge")!;
+
+              // link.distance(100);
+              // link.strength(0.6);
+              charge.strength(-5000);
+              // charge.distanceMax(500);
+              // charge.distanceMin(10);
+
+            // graphRef.current!.d3Force("link")!.distance(300);
+
+            // graphRef.current!.d3Force('charge')!.strength(-1);
+            // graphRef.current!.d3Force('charge')!.distanceMax(1010);
+            // graphRef.current!.d3Force('charge')!.distanceMin(110);
+
+            console.log(graphRef.current!.d3Force);
 
             if (gd === undefined) {
               setGraphData({ nodes: [], links: [] });
@@ -239,14 +253,18 @@ export default function OcelGraphViewer({
                   graphData={data}
                   width={width}
                   height={height}
+                  // d3AlphaMin={0.01}
+                  // d3AlphaDecay={0.025}
+                  warmupTicks={5}
+                  // cooldownTicks={100}
                   nodeAutoColorBy={"type"}
                   linkColor={() => "#d6d6d6"}
                   backgroundColor="white"
-                  linkWidth={(link) => (highlightLinks.has(link) ? 5 : 2)}
+                  linkWidth={(link) => (highlightLinks.has(link) ? 4 : 3)}
                   linkDirectionalParticleColor={() => "#556166"}
                   linkDirectionalParticles={4}
                   linkDirectionalParticleWidth={(link) =>
-                    highlightLinks.has(link) ? 4 : 0
+                    highlightLinks.has(link) ? 8 : 0
                   }
                   onNodeHover={handleNodeHover}
                   onLinkHover={handleLinkHover}
@@ -259,24 +277,25 @@ export default function OcelGraphViewer({
                     } (${"time" in x ? "Event" : "Object"})</span></div>`
                   }
                   nodeCanvasObject={(node, ctx) => {
+
                     if (node.x === undefined || node.y === undefined) {
                       return;
                     }
                     const isFirstNode = node.id === graphData?.nodes[0].id;
-                    let width = 4;
-                    let height = 4;
+                    let width = 40;
+                    let height = 40;
                     const fillStyle = isFirstNode
                       ? node.color
                       : node.color + "74";
-                    ctx.lineWidth = isFirstNode ? 0.4 : 0.2;
+                    ctx.lineWidth = 10 * (isFirstNode ? 0.4 : 0.2);
                     ctx.strokeStyle = highlightNodes.has(node)
                       ? "black"
                       : isFirstNode
                         ? "#515151"
                         : node.color;
                     if ("time" in node) {
-                      width = 7;
-                      height = 7;
+                      width = 70;
+                      height = 70;
                       ctx.beginPath();
                       ctx.fillStyle = "white";
                       ctx.roundRect(
@@ -314,11 +333,10 @@ export default function OcelGraphViewer({
                     // Maybe because of the very small font size?
 
                     // if ((window as any).__TAURI__ === undefined) {
-                    let fontSize = 1;
-                    ctx.font
-                    ctx.font = `${fontSize}px Inter, system-ui, Avenir, Helvetica, Arial, sans-serif`;
+                    let fontSize = 10;
+                    ctx.font = `${fontSize}px Inter`;
                     const label = node.id;
-                    const maxLength = 13;
+                    const maxLength = 12;
                     const text =
                       label.length > maxLength
                         ? label.substring(0, maxLength - 3) + "..."
@@ -327,8 +345,9 @@ export default function OcelGraphViewer({
 
                     ctx.textAlign = "center";
                     ctx.textBaseline = "bottom";
+                    ctx.fontKerning = "none";
                     ctx.fillText(text, node.x, node.y);
-                    fontSize = 0.8;
+                    fontSize = 8;
                     ctx.font = `${fontSize}px Inter, system-ui, Avenir, Helvetica, Arial, sans-serif`;
                     ctx.fillStyle = "#3f3f3f";
                     const typeText =
