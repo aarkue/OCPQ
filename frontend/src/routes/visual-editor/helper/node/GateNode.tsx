@@ -1,19 +1,19 @@
 import AlertHelper from "@/components/AlertHelper";
+import { Combobox } from "@/components/ui/combobox";
+import { Handle, Node, Position, type NodeProps } from "@xyflow/react";
+import clsx from "clsx";
 import { useContext } from "react";
 import { TbTrash } from "react-icons/tb";
-import { Handle, Position, type NodeProps } from "reactflow";
 import { VisualEditorContext } from "../VisualEditorContext";
 import type { GateNodeData } from "../types";
-import ViolationIndicator from "./ViolationIndicator";
-import { Combobox } from "@/components/ui/combobox";
-import clsx from "clsx";
 import { getViolationStyles } from "../violation-styles";
+import ViolationIndicator from "./ViolationIndicator";
 
 export default function EventTypeNode({
   data,
   id,
   selected,
-}: NodeProps<GateNodeData>) {
+}: NodeProps<Node<GateNodeData>>) {
   const { violationsPerNode, onNodeDataChange } =
     useContext(VisualEditorContext);
 
@@ -52,9 +52,9 @@ export default function EventTypeNode({
                   data.type === "not"
                     ? [{ value: "not", label: "not (¬)" }]
                     : [
-                        { value: "and", label: "and (∧)" },
-                        { value: "or", label: "or (∨)" },
-                      ]
+                      { value: "and", label: "and (∧)" },
+                      { value: "or", label: "or (∨)" },
+                    ]
                 }
                 onChange={(value: string) => {
                   setD({

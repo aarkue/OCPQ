@@ -20,12 +20,12 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
-import { EdgeLabelRenderer, getBezierPath, type EdgeProps } from "reactflow";
+import { Edge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
 import QuantifiedObjectEdge from "./QuantifiedObjectEdge";
 import { VisualEditorContext } from "./VisualEditorContext";
 import type { EventTypeLinkData } from "./types";
 
-export default function EventTypeLink(props: EdgeProps<EventTypeLinkData>) {
+export default function EventTypeLink(props: EdgeProps<Edge<EventTypeLinkData>>) {
   const {
     id,
     sourceX,

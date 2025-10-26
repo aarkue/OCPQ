@@ -18,7 +18,7 @@ import {
 import clsx from "clsx";
 import { memo, useContext, useState } from "react";
 import { LuTrash } from "react-icons/lu";
-import { Handle, Position, type NodeProps } from "reactflow";
+import { Handle, Position, type NodeProps, Node } from "@xyflow/react";
 import { VisualEditorContext } from "../VisualEditorContext";
 import FilterChooser from "../box/FilterChooser";
 import LabelFunctionChooser from "../box/LabelFunctionChooser";
@@ -28,7 +28,7 @@ import { getViolationStyles } from "../violation-styles";
 import SituationIndicator from "./SituationIndicator";
 import ViolationIndicator from "./ViolationIndicator";
 export default memo(EventTypeNode);
-function EventTypeNode({ data, id, selected }: NodeProps<EventTypeNodeData>) {
+function EventTypeNode({ data, id, selected }: NodeProps<Node<EventTypeNodeData>>) {
   const { violationsPerNode, onNodeDataChange } =
     useContext(VisualEditorContext);
 

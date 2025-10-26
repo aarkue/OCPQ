@@ -5,6 +5,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  QueryClient,
+  QueryClientProvider
+} from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   createContext,
@@ -16,7 +20,7 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
-import { BsCheckCircleFill, BsFileEarmarkArrowUp, BsFileEarmarkBreak, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml, BsRecycle } from "react-icons/bs";
+import { BsCheckCircleFill, BsFileEarmarkBreak, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml } from "react-icons/bs";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import {
@@ -61,7 +65,10 @@ const VALID_OCEL_MIME_TYPES = [
   "application/vnd.sqlite3",
   "application/vnd.sqlite",
 ];
+
 export const OcelInfoContext = createContext<OCELInfo | undefined>(undefined);
+
+const queryClient = new QueryClient()
 
 function App() {
   const [backendMode, setBackendMode] = useState<"local" | "hpc">("local");
@@ -112,6 +119,8 @@ function App() {
     }
   }, [backendMode]);
   return (
+
+    <QueryClientProvider client={queryClient}>
     <BackendProviderContext.Provider value={innerBackend}>
       <InnerApp>
         <AlertDialog
@@ -449,6 +458,7 @@ function App() {
       /> */}
       </InnerApp>
     </BackendProviderContext.Provider>
+        </QueryClientProvider>
   );
 }
 
@@ -679,6 +689,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
                 >
                   Queries & Constraints
                 </MenuLink>
+                <MenuLink to={"/oc-declare"}>OC-DECLARE</MenuLink>
               </>
             )}
             <br />

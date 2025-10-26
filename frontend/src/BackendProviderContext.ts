@@ -233,7 +233,6 @@ export function getAPIServerBackendProvider(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options),
       });
-      console.log({ res });
       if (res.ok) {
         return await res.json();
       } else {
@@ -246,7 +245,6 @@ export function getAPIServerBackendProvider(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(specifier),
       });
-      console.log({ res });
       if (res.ok) {
         return await res.json();
       } else {
@@ -259,7 +257,6 @@ export function getAPIServerBackendProvider(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(specifier),
       });
-      console.log({ res });
       if (res.ok) {
         return await res.json();
       } else {
@@ -304,11 +301,9 @@ export function getAPIServerBackendProvider(
       const dataURL = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.setAttribute("download", fileName);
-      // a.setAttribute("target", "_blank");
       a.setAttribute("href", dataURL);
       document.body.appendChild(a);
       a.click();
-      // console.log(a);
       document.body.removeChild(a);
       setTimeout(() => {
         URL.revokeObjectURL(dataURL);

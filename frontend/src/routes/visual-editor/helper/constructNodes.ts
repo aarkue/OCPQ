@@ -18,7 +18,7 @@ import type {
   EventTypeNodeData,
   GateNodeData,
 } from "./types";
-import { type Node, type Edge, MarkerType } from "reactflow";
+import { type Node, type Edge, MarkerType } from "@xyflow/react";
 import {
   EVENT_TYPE_LINK_TYPE,
   EVENT_TYPE_NODE_TYPE,

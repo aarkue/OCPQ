@@ -3,8 +3,8 @@ import ELK, {
   type ElkNode,
 } from "elkjs/lib/elk.bundled.js";
 import { useCallback } from "react";
-import { type Edge, useReactFlow, type Node } from "reactflow";
-import type { EventTypeNodeData, GateNodeData } from "./types";
+import { type Edge, useReactFlow, type Node } from "@xyflow/react";
+import type { EventTypeLinkData, EventTypeNodeData, GateNodeData } from "./types";
 const elk = new ELK();
 // void (async () => {
 //   console.log(
@@ -23,7 +23,7 @@ const defaultOptions = {
 };
 
 export const useLayoutedElements = () => {
-  const { getNodes, setNodes, getEdges, fitView } = useReactFlow();
+  const { getNodes, setNodes, getEdges, fitView } = useReactFlow<Node<EventTypeNodeData | GateNodeData>,Edge<EventTypeLinkData>>();
 
   const getLayoutedElements = useCallback(
     (options: any, fitViewAfter: boolean = true) => {
