@@ -50,13 +50,17 @@ pub async fn load_ocel_file_req(
     State(state): State<AppState>,
     Json(payload): Json<LoadOcel>,
 ) -> (StatusCode, Json<Option<OCELInfo>>) {
-    match load_ocel_file_to_state(&payload.name, &state) {
+    match load_ocel_file_to_state(&payload.name, &state, false) {
         Some(ocel_info) => (StatusCode::OK, Json(Some(ocel_info))),
         None => (StatusCode::BAD_REQUEST, Json(None)),
     }
 }
 
-pub fn load_ocel_file_to_state(name: &str, state: &AppState) -> Option<OCELInfo> {
+pub fn load_ocel_file_to_state(
+    name: &str,
+    state: &AppState,
+    ignore_errors: bool,
+) -> Option<OCELInfo> {
     match load_ocel_file(name) {
         Ok(ocel) => {
             let locel = IndexLinkedOCEL::from_ocel(ocel);
@@ -66,7 +70,9 @@ pub fn load_ocel_file_to_state(name: &str, state: &AppState) -> Option<OCELInfo>
             Some(ocel_info)
         }
         Err(e) => {
-            eprintln!("Error importing OCEL: {e:?}");
+            if !ignore_errors {
+                eprintln!("Error importing OCEL: {e:?}");
+            }
             None
         }
     }

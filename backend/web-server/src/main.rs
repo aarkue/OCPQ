@@ -78,9 +78,8 @@ async fn main() {
     // .allow_headers([CONTENT_TYPE])
     // .allow_origin(tower_http::cors::Any);
 
-    load_ocel_file_to_state(DEFAULT_OCEL_FILE, &state);
+    load_ocel_file_to_state(DEFAULT_OCEL_FILE, &state, true);
 
-    // build our application with a single route
     let app = Router::new()
         .route("/ocel/load", post(load_ocel_file_req))
         .route("/ocel/info", get(get_loaded_ocel_info))
