@@ -78,14 +78,7 @@ import {
   ContextMenuItem,
 } from "@/components/ui/context-menu";
 import { getAvailableChildNamesWithEdges } from "./helper/child-names";
-import EventTypeLink from "./helper/EventTypeLink";
-
-function isEditorElementTarget(el: HTMLElement | EventTarget | null,isInitial = true): boolean {
-  return (
-    (isInitial && el === document.body) ||
-    (el !== null && "className" in el && (el.className?.includes("react-flow") || isEditorElementTarget(el.parentElement,false)))
-  );
-}
+import { isEditorElementTarget } from "@/lib/flow-helper";
 
 interface VisualEditorProps {
   ocelInfo: OCELInfo;

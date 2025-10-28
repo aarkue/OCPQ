@@ -43,9 +43,9 @@
     "react-hot-toast": "^2.4.1",
     "react-icons": "^4.11.0",
     "react-router-dom": "^6.18.0",
-    "reactflow": "^11.10.1",
     "tailwind-merge": "^2.0.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "@xyflow/react": "^12.4.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",

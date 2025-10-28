@@ -19,7 +19,7 @@ const defaultOptions = {
     "elk.direction": "RIGHT",
     // "elk.algorithm": "stress",
     "elk.algorithm": "mrtree",
-    "elk.spacing.nodeNode": "235",
+    "elk.spacing.nodeNode": "200",
 };
 
 export function useLayoutedElements<N extends Record<string, unknown>>() {
@@ -51,6 +51,7 @@ export async function applyLayoutToNodes<N extends Record<string, unknown>>(
     options: Partial<LayoutOptions> = {},
 ) {
     const layoutOptions = { ...defaultOptions, ...options };
+    console.log(edges,nodes);
     const graph = {
         id: "root",
         layoutOptions,

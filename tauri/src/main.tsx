@@ -99,6 +99,15 @@ const tauriBackend: BackendProvider = {
       { options }
     );
   },
+  "ocel/discover-oc-declare": async (options) => {
+    return await invoke(
+      "auto_discover_oc_declare",
+      { options }
+    );
+  },
+  "ocel/evaluate-oc-declare-arcs": async (arcs) => {
+    return await invoke("evaluate_oc_declare_arcs",{arcs})
+  },
   "ocel/export-bindings": async (nodeIndex, options) => {
     const res: undefined = await invoke("export_bindings_table", { nodeIndex, options });
     return undefined;

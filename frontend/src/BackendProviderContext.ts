@@ -16,6 +16,8 @@ import type {
   OCELObject,
   ObjectTypeQualifiers,
 } from "./types/ocel";
+import { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
+import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;
@@ -60,6 +62,8 @@ export type BackendProvider = {
   "check-for-updates"?: () => Promise<UpdateInfo | null>,
   "restart"?: () => Promise<void>,
   "get-version"?: () => Promise<string>,
+  "ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>,
+  "ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>,
 };
 
 export type UpdateInfo = {
@@ -103,6 +107,8 @@ export const ErrorBackendContext: BackendProvider = {
   "hpc/start": warnForNoBackendProvider,
   "hpc/job-status": warnForNoBackendProvider,
   "download-blob": warnForNoBackendProvider,
+  "ocel/discover-oc-declare": warnForNoBackendProvider,
+  "ocel/evaluate-oc-declare-arcs": warnForNoBackendProvider,
 };
 
 export const BackendProviderContext =
@@ -224,6 +230,24 @@ export function getAPIServerBackendProvider(
           method: "post",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(autoDiscoveryOptions),
+        })
+      ).json();
+    },
+    "ocel/discover-oc-declare": async (options) => {
+      return await (
+        await fetch(localBackendURL + "/ocel/discover-oc-declare", {
+          method: "post",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(options),
+        })
+      ).json();
+    },
+    "ocel/evaluate-oc-declare-arcs": async (arcs) => {
+      return await (
+        await fetch(localBackendURL + "/ocel/evaluate-oc-declare-arcs", {
+          method: "post",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(arcs),
         })
       ).json();
     },

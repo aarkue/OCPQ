@@ -37,6 +37,7 @@ use ocpq_shared::{
         get_qualifiers_for_event_types, QualifierAndObjectType, QualifiersForEventType,
     },
     preprocessing::preprocess::get_object_rels_per_type,
+    process_mining::object_centric::oc_declare::{self, OCDeclareArc},
     table_export::{export_bindings_to_writer, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
@@ -117,6 +118,14 @@ async fn main() {
         .route(
             "/ocel/discover-constraints",
             post(auto_discover_constraints_handler),
+        )
+        .route(
+            "/ocel/discover-oc-declare",
+            post(auto_discover_oc_declare_handler),
+        )
+        .route(
+            "/ocel/evaluate-oc-declare-arcs",
+            post(evaluate_oc_declare_arcs_handler),
         )
         .route(
             "/ocel/export-bindings",
@@ -304,6 +313,26 @@ pub async fn auto_discover_constraints_handler<'a>(
     }))
 }
 
+pub async fn auto_discover_oc_declare_handler(
+    state: State<AppState>,
+    Json(req): Json<oc_declare::OCDeclareDiscoveryOptions>,
+) -> Json<Option<Vec<OCDeclareArc>>> {
+    Json(with_ocel_from_state(&state, |ocel| {
+        let locel = oc_declare::preprocess_ocel(ocel.get_ocel_ref().clone());
+        oc_declare::discover_behavior_constraints(&locel, req)
+    }))
+}
+pub async fn evaluate_oc_declare_arcs_handler(
+    state: State<AppState>,
+    Json(req): Json<Vec<oc_declare::OCDeclareArc>>,
+) -> Json<Option<Vec<f64>>> {
+    Json(with_ocel_from_state(&state, |ocel| {
+        let locel = oc_declare::preprocess_ocel(ocel.get_ocel_ref().clone());
+        req.iter()
+            .map(|arc| arc.get_for_all_evs_perf(&locel))
+            .collect()
+    }))
+}
 pub async fn export_bindings_table(
     state: State<AppState>,
     Json((node_index, table_options)): Json<(usize, TableExportOptions)>,

@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { startTransition, useEffect, useRef, useState } from "react";
 import { RxPlusCircled } from "react-icons/rx";
 import { TbTrash } from "react-icons/tb";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { FixedSizeList, ListChildComponentProps } from "react-window";
 import { ConstraintInfo } from "../visual-editor/helper/types";
@@ -18,38 +18,26 @@ export default function OCDeclareListPage() {
     const [constraints, setConstraints] = useState<ConstraintInfo[]>(parseLocalStorageValue(localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META) ?? "[]"));
     const [deletePromptForIndex, setDeletePromptForIndex] = useState<number>();
 
-    function saveData() {
-        // if (
-        //   currentInstanceAndData.instance !== undefined &&
-        //   activeIndex !== undefined &&
-        //   currentInstanceAndData.getter !== undefined
-        // ) {
-        //   // First, save current data
-        //   const prevOtherData = currentInstanceAndData.getter();
-        //   prevDataRef.current[activeIndex] = {
-        //     flowJson: currentInstanceAndData.instance.toObject(),
-        //     violations: prevOtherData?.violations,
-        //   };
-        // }
-
+    function saveData(constraintsMeta = constraints, dataRef = prevDataRef) {
+        localStorage.setItem(
+            OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META,
+            JSON.stringify(constraintsMeta),
+        );
         if (prevDataRef.current !== undefined) {
-            console.log(JSON.stringify(prevDataRef.current));
             localStorage.setItem(
                 OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA,
                 JSON.stringify(
-                    prevDataRef.current.map((x) => ({ ...x, violations: undefined })),
+                    dataRef.current.map((x) => ({ ...x, violations: undefined })),
                 ),
             );
         }
-        localStorage.setItem(
-            OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META,
-            JSON.stringify(constraints),
-        );
     }
 
     useEffect(() => {
         saveData();
     }, [constraints])
+
+    const navigate = useNavigate();
 
     return <div className="text-left h-full overflow-hidden">
 
@@ -62,19 +50,15 @@ export default function OCDeclareListPage() {
                     constraints.length,
                     1,
                 );
-                setConstraints((cs) => [
-                    ...cs,
+                const newIndex = constraints.length;
+                saveData([
+                    ...constraints,
                     {
-                        name: `New Constraint (${cs.length + 1})`,
+                        name: `New Constraint (${newIndex + 1})`,
                         description: "",
                     },
-                ]);
-                startTransition(() => {
-                    // changeIndex(
-                    //     constraints.length,
-                    //     constraints.length + 1,
-                    // );
-                })
+                ])
+                navigate(`/oc-declare/${newIndex}`);
             }}
         >
             <RxPlusCircled className="mr-1" />

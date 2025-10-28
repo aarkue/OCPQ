@@ -104,7 +104,7 @@ export function OCDeclareFlowNode({
       style={{ borderColor: objectColor }}>
         <div className={clsx("border text-center border-transparent flex items-center min-h-[2rem] w-[calc(100%-1rem)]  drag-handle__custom group-hover:border-dashed group-hover:border-gray-300/50 z-2", connection.inProgress && "pointer-events-none")}>
 
-          <div contentEditable={editMode} ref={contentEditableDiv} className='w-full text-xs pointer-events-auto leading-tight'
+          <div contentEditable={editMode} ref={contentEditableDiv} className='w-full text-xs pointer-events-auto leading-tight h-full min-h-[2rem] content-center'
             suppressContentEditableWarning={true}
             tabIndex={1}
             onKeyDownCapture={(ev) => {

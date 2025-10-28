@@ -29,7 +29,7 @@ use ocpq_shared::{
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     ocel_qualifiers::qualifiers::{get_qualifiers_for_event_types, QualifiersForEventType},
     preprocessing::preprocess::get_object_rels_per_type,
-    process_mining::import_xes_file,
+    process_mining::{import_xes_file, object_centric::oc_declare},
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
@@ -236,6 +236,39 @@ async fn auto_discover_constraints(
         None => Err("No OCEL loaded".to_string()),
     }
 }
+#[tauri::command(async)]
+async fn auto_discover_oc_declare(
+    options: oc_declare::OCDeclareDiscoveryOptions,
+    state: State<'_, AppState>,
+) -> Result<Vec<oc_declare::OCDeclareArc>, String> {
+    match state.ocel.read().await.as_ref() {
+        Some(ocel) => {
+            let locel = oc_declare::preprocess_ocel(ocel.get_ocel_ref().clone());
+            Ok(oc_declare::discover_behavior_constraints(&locel, options))
+        }
+        None => Err("No OCEL loaded".to_string()),
+    }
+}
+
+#[tauri::command(async)]
+async fn evaluate_oc_declare_arcs(
+    arcs: Vec<oc_declare::OCDeclareArc>,
+    state: State<'_, AppState>,
+) -> Result<Vec<f64>, String> {
+    match state.ocel.read().await.as_ref() {
+        Some(ocel) => {
+            let locel = oc_declare::preprocess_ocel(ocel.get_ocel_ref().clone());
+            let res = arcs
+                .iter()
+                .map(|arc| arc.get_for_all_evs_perf(&locel))
+                .collect();
+            Ok(res)
+        }
+
+        None => Err("No OCEL loaded".to_string()),
+    }
+}
+
 #[tauri::command(async)]
 async fn export_bindings_table(
     node_index: usize,
@@ -452,7 +485,9 @@ fn main() {
             login_to_hpc_tauri,
             start_hpc_job_tauri,
             get_hpc_job_status_tauri,
-            get_initial_files
+            get_initial_files,
+            auto_discover_oc_declare,
+            evaluate_oc_declare_arcs
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

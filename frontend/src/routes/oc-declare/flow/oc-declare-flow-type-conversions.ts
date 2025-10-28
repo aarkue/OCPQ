@@ -1,36 +1,35 @@
 
-
 export function translateArcInfo(data: CustomEdgeType['data']): [OCDeclareArcType, [number | null, number | null]] {
     switch (data!.type) {
         case "ef":
             return ["EF", data?.cardinality ?? [1, null]]
         case "ef-rev":
-            return ["EFREV", data?.cardinality ?? [1, null]]
+            return ["EP", data?.cardinality ?? [1, null]]
         case "nef":
             return ["EF", [0, 0]]
         case "nef-rev":
-            return ["EFREV", [0, 0]]
-        case "ass":
-            return ["ASS", data?.cardinality ?? [1, null]]
+            return ["EP", [0, 0]]
+        case "as":
+            return ["AS", data?.cardinality ?? [1, null]]
         case "df": return ["DF", data?.cardinality ?? [1, null]]
-        case "df-rev": return ["DFREV", data?.cardinality ?? [1, null]]
+        case "df-rev": return ["DP", data?.cardinality ?? [1, null]]
         case "ndf": return ["DF", [0, 0]]
-        case "ndf-rev": return ["DFREV", [0, 0]]
+        case "ndf-rev": return ["DP", [0, 0]]
     };
 
 }
 
 export function translateArcTypeFromRsToTs(arcType: OCDeclareArcType): EdgeType {
     switch (arcType) {
-        case "ASS":
-            return "ass"
+        case "AS":
+            return "as"
         case "EF":
             return "ef"
-        case "EFREV":
+        case "EP":
             return "ef-rev"
         case "DF":
             return "df"
-        case "DFREV":
+        case "DP":
             return "df-rev"
     }
 
@@ -50,13 +49,13 @@ export function flowEdgeToOCDECLARE(e: CustomEdgeType, flow: ReactFlowInstance<A
 
 
 import { v4 as uuidv4 } from 'uuid';
-import { getMarkersForEdge } from './OCDeclareFlowEditor'
+import { applyLayoutToNodes } from "./automatic-layout";
 import { ActivityNodeType, CustomEdgeType, EdgeType } from './oc-declare-flow-types'
-import { OCDeclareArc } from '../types/OCDeclareArc'
-import { ReactFlowInstance } from '@xyflow/react'
-import { applyLayoutToNodes } from './automatic-layout'
-import { OCDeclareNode } from '../types/OCDeclareNode'
 import { OCDeclareArcType } from '../types/OCDeclareArcType'
+import { ReactFlowInstance } from '@xyflow/react'
+import { OCDeclareArc } from '../types/OCDeclareArc'
+import { getMarkersForEdge } from './OCDeclareFlowEditor'
+import { OCDeclareNode } from '../types/OCDeclareNode'
 // import { ObjectTypeAssociation } from "crates/shared/bindings/ObjectTypeAssociation";
 export async function addArcsToFlow(discoverdArcs: OCDeclareArc[], flow: ReactFlowInstance<ActivityNodeType, CustomEdgeType>) {
     const nodeNameToIDs: Record<string, string> = {};
@@ -106,7 +105,6 @@ export async function addArcsToFlow(discoverdArcs: OCDeclareArc[], flow: ReactFl
 // }
 
 function lookupIDOrCreateNode(node: OCDeclareNode, nodeIDMap: Record<string, string>, nodes: ActivityNodeType[]): string {
-
     let isObject: ActivityNodeType['data']['isObject'] = undefined;
     if (typeof node === "object") {
         node = (node as { activity: string }).activity;
@@ -116,7 +114,7 @@ function lookupIDOrCreateNode(node: OCDeclareNode, nodeIDMap: Record<string, str
     } else if (node.includes("<exit> ")) {
         isObject = "exit";
     }
-    if (nodeIDMap[node] == undefined) {
+    if (Math.random() > 0.7 || nodeIDMap[node] == undefined) {
         const id = uuidv4();
         nodes.push({ id: id, type: "activity", position: { x: 0, y: 0 }, data: { isObject, type: node.replace("<init> ", "").replace("<exit> ", "") } })
         nodeIDMap[node] = id;

@@ -14,7 +14,7 @@ export const ALL_EDGE_TYPES = [
     "df-rev",
     "ndf",
     "ndf-rev",
-    "ass"] as const;
+    "as"] as const;
 export type EdgeType = typeof ALL_EDGE_TYPES[number];
 export type CustomEdgeData = { type: EdgeType, objectTypes: OCDeclareArcLabel, cardinality?: [number | null, number | null], violationInfo?: { violationPercentage: number } };
 export type CustomEdgeType = Edge<CustomEdgeData>;
