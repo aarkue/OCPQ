@@ -2,4 +2,4 @@
 import type { EventVariable } from "./EventVariable";
 import type { ObjectVariable } from "./ObjectVariable";
 
-export type Variable = { Event: EventVariable } | { Object: ObjectVariable };
+export type Variable = { "Event": EventVariable } | { "Object": ObjectVariable };

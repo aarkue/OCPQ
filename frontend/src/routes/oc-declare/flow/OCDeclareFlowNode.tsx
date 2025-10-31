@@ -2,8 +2,9 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { getRandomStringColor } from '@/lib/random-colors';
 import { Handle, NodeProps, Position, useConnection, useReactFlow } from '@xyflow/react';
 import clsx from 'clsx';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityNodeType } from './oc-declare-flow-types';
+import { InfoSheetContext } from '@/InfoSheet';
 const OBJECT_INIT = "<init>";
 const OBJECT_EXIT = "<exit>";
 export function OCDeclareFlowNode({
@@ -17,6 +18,7 @@ export function OCDeclareFlowNode({
 
   const connection = useConnection();
   const flow = useReactFlow();
+  const {setInfoSheetState} = useContext(InfoSheetContext);
 
   const isTarget = connection.inProgress && connection.fromNode.id !== id;
   function applyNameEdit(
@@ -25,7 +27,7 @@ export function OCDeclareFlowNode({
       | React.MouseEvent<HTMLDivElement, MouseEvent>,
   ) {
     const objectMode = ev.currentTarget.innerText.includes(OBJECT_INIT) ? "init" : ev.currentTarget.innerText.includes(OBJECT_EXIT) ? "exit" : undefined;
-    const newLabel = ev.currentTarget.innerText.replace("\n", "").replace(OBJECT_INIT + " ", "").replace(OBJECT_EXIT + " ","");
+    const newLabel = ev.currentTarget.innerText.replace("\n", "").replace(OBJECT_INIT + " ", "").replace(OBJECT_EXIT + " ", "");
     setEditMode(false);
     setNodes((nodes) => {
       const newNodes = [...nodes];
@@ -68,21 +70,13 @@ export function OCDeclareFlowNode({
       <ContextMenuContent>
         <ContextMenuItem className='' onClick={(ev) => {
           ev.stopPropagation();
-          // contentEditableDiv.current?.focus();
-
-          // setEditMode(true);
-          // setTimeout(() => {
-          //   contentEditableDiv.current?.focus();
-          // },200)
           setEditMode(true);
-          // editType(contentEditableDiv.current!);
-          // contentEditableDiv.current?.dispatchEvent(new MouseEvent("dblclick", {
-          //   bubbles: true,
-          //   clientX: ev.clientX,
-          //   clientY: ev.clientY,
-          // }))
-          // flow.deleteElements({nodes: [{id}]});
         }}>Edit Type</ContextMenuItem>
+        <ContextMenuItem className='' onClick={(ev) => {
+          ev.stopPropagation();
+          setInfoSheetState({type: "activity-frequencies", activity: data.type})
+          // setEditMode(true);
+        }}>View Statistics</ContextMenuItem>
         <ContextMenuItem className='text-red-600 hover:focus:text-red-500' onClick={(ev) => {
           ev.stopPropagation();
           flow.deleteElements({ nodes: [{ id }] });
@@ -152,7 +146,7 @@ export function OCDeclareFlowNode({
               position: "relative",
             }}
           >
-            {(data.isObject  === "init" ? "<init> " : data.isObject === "exit" ? "<exit> " : "") + data.type}
+            {(data.isObject === "init" ? "<init> " : data.isObject === "exit" ? "<exit> " : "") + data.type}
           </div>
         </div>
         {!connection.inProgress && (

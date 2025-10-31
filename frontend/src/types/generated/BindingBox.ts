@@ -7,13 +7,4 @@ import type { LabelFunction } from "./LabelFunction";
 import type { ObjectVariable } from "./ObjectVariable";
 import type { SizeFilter } from "./SizeFilter";
 
-export type BindingBox = {
-  newEventVars: { [key: EventVariable]: Array<string> };
-  newObjectVars: { [key: ObjectVariable]: Array<string> };
-  filters: Array<Filter>;
-  sizeFilters: Array<SizeFilter>;
-  constraints: Array<Constraint>;
-  evVarLabels?: { [key: EventVariable]: FilterLabel };
-  obVarLabels?: { [key: EventVariable]: FilterLabel };
-  labels?: Array<LabelFunction>;
-};
+export type BindingBox = { newEventVars: { [key: EventVariable]: Array<string> }, newObjectVars: { [key: ObjectVariable]: Array<string> }, filters: Array<Filter>, sizeFilters: Array<SizeFilter>, constraints: Array<Constraint>, evVarLabels?: { [key: EventVariable]: FilterLabel }, obVarLabels?: { [key: EventVariable]: FilterLabel }, labels?: Array<LabelFunction>, };

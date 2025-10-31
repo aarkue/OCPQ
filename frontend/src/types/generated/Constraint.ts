@@ -2,11 +2,4 @@
 import type { Filter } from "./Filter";
 import type { SizeFilter } from "./SizeFilter";
 
-export type Constraint =
-  | { type: "Filter"; filter: Filter }
-  | { type: "SizeFilter"; filter: SizeFilter }
-  | { type: "SAT"; child_names: Array<string> }
-  | { type: "ANY"; child_names: Array<string> }
-  | { type: "NOT"; child_names: Array<string> }
-  | { type: "OR"; child_names: Array<string> }
-  | { type: "AND"; child_names: Array<string> };
+export type Constraint = { "type": "Filter", filter: Filter, } | { "type": "SizeFilter", filter: SizeFilter, } | { "type": "SAT", child_names: Array<string>, } | { "type": "ANY", child_names: Array<string>, } | { "type": "NOT", child_names: Array<string>, } | { "type": "OR", child_names: Array<string>, } | { "type": "AND", child_names: Array<string>, };

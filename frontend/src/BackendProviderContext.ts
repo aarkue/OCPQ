@@ -18,6 +18,7 @@ import type {
 } from "./types/ocel";
 import { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
 import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
+import { ActivityStatistics } from "./types/generated/ActivityStatistics";
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;
@@ -64,6 +65,8 @@ export type BackendProvider = {
   "get-version"?: () => Promise<string>,
   "ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>,
   "ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>,
+  "ocel/get-activity-statistics": (activity: string) => Promise<ActivityStatistics>,
+  "ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<number[]>,
 };
 
 export type UpdateInfo = {
@@ -109,6 +112,8 @@ export const ErrorBackendContext: BackendProvider = {
   "download-blob": warnForNoBackendProvider,
   "ocel/discover-oc-declare": warnForNoBackendProvider,
   "ocel/evaluate-oc-declare-arcs": warnForNoBackendProvider,
+  "ocel/get-activity-statistics": warnForNoBackendProvider,
+  "ocel/get-oc-declare-edge-statistics": warnForNoBackendProvider,
 };
 
 export const BackendProviderContext =
@@ -314,6 +319,31 @@ export function getAPIServerBackendProvider(
     "hpc/job-status": async (jobID) => {
       const res = await fetch(localBackendURL + `/hpc/job-status/${jobID}`, {
         method: "get",
+      });
+      if (res.ok) {
+        return await res.json();
+      } else {
+        throw Error(await res.text());
+      }
+    },
+    "ocel/get-activity-statistics": async (activity) => {
+      const res = await fetch(localBackendURL + `/ocel/get-activity-statistics`, {
+        method: "post",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(activity)
+      });
+      if (res.ok) {
+        return await res.json();
+      } else {
+        throw Error(await res.text());
+      }
+
+    },
+    "ocel/get-oc-declare-edge-statistics": async (edge) => {
+      const res = await fetch(localBackendURL + `/ocel/get-oc-declare-edge-statistics`, {
+        method: "post",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(edge)
       });
       if (res.ok) {
         return await res.json();

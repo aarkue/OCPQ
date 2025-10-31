@@ -5,16 +5,16 @@ import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
 export type ActivityNodeData = { type: string, isObject?: "init" | "exit" };
 export type ActivityNodeType = Node<ActivityNodeData, 'activity'>;
 export const ALL_EDGE_TYPES = [
-    // "ass",
+    "as",
     "ef",
     "ef-rev",
-    "nef",
-    "nef-rev",
     "df",
     "df-rev",
+    "nef",
+    "nef-rev",
     "ndf",
     "ndf-rev",
-    "as"] as const;
+] as const;
 export type EdgeType = typeof ALL_EDGE_TYPES[number];
 export type CustomEdgeData = { type: EdgeType, objectTypes: OCDeclareArcLabel, cardinality?: [number | null, number | null], violationInfo?: { violationPercentage: number } };
 export type CustomEdgeType = Edge<CustomEdgeData>;

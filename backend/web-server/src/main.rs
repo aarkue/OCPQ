@@ -32,6 +32,7 @@ use ocpq_shared::{
         get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
         ConnectionConfig, JobStatus, OCPQJobOptions,
     },
+    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     ocel_qualifiers::qualifiers::{
         get_qualifiers_for_event_types, QualifierAndObjectType, QualifiersForEventType,
@@ -126,6 +127,14 @@ async fn main() {
         .route(
             "/ocel/evaluate-oc-declare-arcs",
             post(evaluate_oc_declare_arcs_handler),
+        )
+        .route(
+            "/ocel/get-activity-statistics",
+            post(get_activity_statistics_handler),
+        )
+        .route(
+            "/ocel/get-oc-declare-edge-statistics",
+            post(get_oc_declare_edge_statistics_handler),
         )
         .route(
             "/ocel/export-bindings",
@@ -331,6 +340,22 @@ pub async fn evaluate_oc_declare_arcs_handler(
         req.iter()
             .map(|arc| arc.get_for_all_evs_perf(&locel))
             .collect()
+    }))
+}
+pub async fn get_activity_statistics_handler(
+    state: State<AppState>,
+    Json(req): Json<String>,
+) -> Json<Option<ActivityStatistics>> {
+    Json(with_ocel_from_state(&state, |ocel| {
+        get_activity_statistics(ocel, &req)
+    }))
+}
+pub async fn get_oc_declare_edge_statistics_handler(
+    state: State<AppState>,
+    Json(req): Json<OCDeclareArc>,
+) -> Json<Option<Vec<i64>>> {
+    Json(with_ocel_from_state(&state, |ocel| {
+        get_edge_stats(ocel, &req)
     }))
 }
 pub async fn export_bindings_table(
