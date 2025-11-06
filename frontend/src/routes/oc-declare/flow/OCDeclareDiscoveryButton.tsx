@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import MultiSelect from "@/components/ui/multi-select";
 import { OcelInfoContext } from "@/App";
 import { Switch } from "@/components/ui/switch";
+import { OCDeclareArcType } from "../types/OCDeclareArcType";
+import { ALL_EDGE_TYPES } from "./oc-declare-flow-types";
 
 export type OCDeclareDiscoveryOptions = {
   noise_threshold: number,
@@ -18,7 +20,12 @@ export type OCDeclareDiscoveryOptions = {
   acts_to_use?: string[] | undefined,
   counts_for_generation: [number | null, number | null],
   counts_for_filter: [number | null, number | null],
+  reduction: "None" | "Lossless" | "Lossy",
+  considered_arrow_types: OCDeclareArcType[],
 
+}
+const DEFAULT_OC_DECLARE_DISCOVERY_OPTIONS: OCDeclareDiscoveryOptions = {
+  noise_threshold: 0.2, o2o_mode: "None", counts_for_generation: [1, null], counts_for_filter: [1, 20], reduction: "Lossless", considered_arrow_types: ["AS", "EF", "EP", "DP", "DF"]
 }
 export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { onConstraintsDiscovered: (arcs: OCDeclareArc[]) => unknown }) {
   const backend = useContext(BackendProviderContext);
@@ -28,7 +35,7 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
     wasCancelledRef.current = true;
     toast.dismiss("oc-declare-discovery");
   }} trigger={<Button size="default" className="font-semibold"> <RiRobot2Line className="mr-1" />  Auto Discover...</Button>}
-    initialData={{ noise_threshold: 0.2, o2o_mode: "None", counts_for_generation: [1, null], counts_for_filter: [1, 20] } satisfies OCDeclareDiscoveryOptions as OCDeclareDiscoveryOptions}
+    initialData={{ ...DEFAULT_OC_DECLARE_DISCOVERY_OPTIONS }}
     title="Auto-Discover OC-DECLARE Constraints"
     content={({ data, setData }) => <div className="flex flex-col gap-y-4">
       <Label className="flex flex-col gap-y-1">
@@ -43,6 +50,26 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
             {(["None", "Direct", "Reversed", "Bidirectional"] satisfies OCDeclareDiscoveryOptions['o2o_mode'][]).map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
+      </Label>
+      <Label className="flex flex-col gap-y-1">
+        Reduction
+        <Select value={data.reduction} defaultValue={data.reduction} onValueChange={(v) => setData({ ...data, reduction: v as OCDeclareDiscoveryOptions['reduction'] })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {(["None", "Lossless", "Lossy"] satisfies OCDeclareDiscoveryOptions['reduction'][]).map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label className="flex flex-col gap-y-1">
+        Arrow Types
+        <MultiSelect
+          options={[{ value: "AS", label: "AS" }, { value: "EF", label: "EF" }, { value: "EP", label: "EP" }, { value: "DF", label: "DF" }, { value: "DP", label: "DP" }] satisfies { value: OCDeclareArcType, label: any }[]}
+          placeholder={""}
+          defaultValue={data.considered_arrow_types}
+          onValueChange={(value: string[]) => {
+            setData({ ...data, considered_arrow_types: value as OCDeclareArcType[] })
+          }}
+        />
       </Label>
       {ocelInfo?.event_types && <Label className="flex flex-col gap-y-1">
         Activities

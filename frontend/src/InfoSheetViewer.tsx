@@ -266,7 +266,7 @@ function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
 
     const scaledData = durationStats.data.map(v => v / divisor);
     const plotData = binData(scaledData, 25);
-    const hovertemplate = `<b>Range (${unit}):</b> %{customdata}<br><b>Count (Percent):</b> %{y:.2f}%<extra></extra>`;
+    const hovertemplate = `<b>Range:</b> %{customdata} ${unit}<br><b>Frequency:</b> %{y:.2f}%<extra></extra>`;
 
     return { plotData, unit, hovertemplate };
   }, [durationStats.data]);
@@ -287,23 +287,13 @@ function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
       ticksuffix: '%',
       rangemode: 'tozero',
       range: [0, null],
-      fixedrange: true,
+      // fixedrange: true,
     },
     xaxis: {
       // title: { text: `Duration (${unit})` },
       ticksuffix: ` ${unit}`
     },
     bargap: 0,
-    legend: {
-      orientation: 'h',
-      yanchor: 'bottom',
-      y: 0.9,
-      xanchor: 'right',
-      x: 1,
-      bgcolor: 'rgba(255, 255, 255, 0.8)',
-      bordercolor: '#fafafa',
-      borderwidth: 1,
-    },
     margin: {
       l: 40,
       r: 40,
@@ -333,9 +323,11 @@ function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
             marker: {
               color: plotData.x,
               colorscale: 'YlOrRd',
-              showscale: true,
+              // showscale: true,
               reversescale: isReversed,
               colorbar: {
+                orientation: 'v',
+                outlinewidth: 0,
                 title: {
                   text: unit,
                   side: 'right'
