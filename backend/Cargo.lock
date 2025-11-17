@@ -2240,7 +2240,7 @@ dependencies = [
 [[package]]
 name = "process_mining"
 version = "0.3.25"
-source = "git+https://github.com/aarkue/rust4pm?branch=feat%2Fkuzudb#f8dc82c72b3ad3bc0a74f7b356ccaea22bd02444"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat%2Foc-declare#b6a4b020b87a62e7979cd77167170d22bea3e316"
 dependencies = [
  "chrono",
  "flate2",

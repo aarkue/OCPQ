@@ -4,12 +4,12 @@ import type {
   EventTypeNodeData,
   GateNodeData,
 } from "@/routes/visual-editor/helper/types";
-import type { ReactFlowJsonObject } from "reactflow";
+import type { ReactFlowJsonObject, Node, Edge, } from "@xyflow/react";
 
 export type FlowAndViolationData = {
   flowJson: ReactFlowJsonObject<
-    EventTypeNodeData | GateNodeData,
-    EventTypeLinkData
+    Node<EventTypeNodeData | GateNodeData>,
+    Edge<EventTypeLinkData>
   >;
   violations?: EvaluationResPerNodes;
 };

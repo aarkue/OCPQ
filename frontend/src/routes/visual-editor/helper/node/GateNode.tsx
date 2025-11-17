@@ -1,19 +1,19 @@
 import AlertHelper from "@/components/AlertHelper";
+import { Combobox } from "@/components/ui/combobox";
+import { Handle, Node, Position, type NodeProps } from "@xyflow/react";
+import clsx from "clsx";
 import { useContext } from "react";
 import { TbTrash } from "react-icons/tb";
-import { Handle, Position, type NodeProps } from "reactflow";
 import { VisualEditorContext } from "../VisualEditorContext";
 import type { GateNodeData } from "../types";
-import ViolationIndicator from "./ViolationIndicator";
-import { Combobox } from "@/components/ui/combobox";
-import clsx from "clsx";
 import { getViolationStyles } from "../violation-styles";
+import ViolationIndicator from "./ViolationIndicator";
 
 export default function EventTypeNode({
   data,
   id,
   selected,
-}: NodeProps<GateNodeData>) {
+}: NodeProps<Node<GateNodeData>>) {
   const { violationsPerNode, onNodeDataChange } =
     useContext(VisualEditorContext);
 
@@ -26,7 +26,7 @@ export default function EventTypeNode({
     <div
       title={data.type}
       className={clsx(
-        "border-2 shadow-lg z-10 flex flex-col items-center justify-center pt-1.5 py-0.5 px-0.5 rounded-md relative min-w-[8rem] min-h-[5rem] font-mono text-4xl font-bold",
+        "border-2 shadow-lg z-10 flex flex-col items-center justify-center pt-1.5 py-0.5 px-0.5 rounded-md relative min-w-32 min-h-20 font-mono text-4xl font-bold",
         getViolationStyles(violations),
         selected && "border-dashed",
       )}
@@ -52,9 +52,9 @@ export default function EventTypeNode({
                   data.type === "not"
                     ? [{ value: "not", label: "not (¬)" }]
                     : [
-                        { value: "and", label: "and (∧)" },
-                        { value: "or", label: "or (∨)" },
-                      ]
+                      { value: "and", label: "and (∧)" },
+                      { value: "or", label: "or (∨)" },
+                    ]
                 }
                 onChange={(value: string) => {
                   setD({
@@ -75,7 +75,7 @@ export default function EventTypeNode({
         />
 
         <Handle
-          className="!w-3 !h-3"
+          className="w-3! h-3!"
           position={Position.Top}
           type="target"
           id={id + "-target"}
@@ -83,7 +83,7 @@ export default function EventTypeNode({
         {data.type === "not" && (
           <>
             <Handle
-              className="!w-3 !h-3"
+              className="w-3! h-3!"
               position={Position.Bottom}
               type="source"
               id={id + "-source"}
@@ -94,13 +94,13 @@ export default function EventTypeNode({
         {data.type !== "not" && (
           <>
             <Handle
-              className="!w-3 !h-3 mt-9"
+              className="w-3! h-3! mt-9"
               position={Position.Left}
               type="source"
               id={id + "-left-source"}
             />
             <Handle
-              className="!w-3 !h-3 mt-9"
+              className="w-3! h-3! mt-9"
               position={Position.Right}
               type="source"
               id={id + "-right-source"}

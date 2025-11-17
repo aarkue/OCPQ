@@ -44,6 +44,7 @@ type AlertHelperProps<T> =
       onSubmit: (
         data: T,
         ev: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+        closedBefore: boolean,
       ) => Promise<unknown>;
     };
 
@@ -74,8 +75,8 @@ export default function AlertHelper<T>(props: AlertHelperProps<T>) {
             close={() => setOpen(false)}
           />
         </div>
-        <AlertDialogFooter className="!justify-between">
-          <AlertDialogCancel className="!mr-full !ml-0">
+        <AlertDialogFooter className="justify-between!">
+          <AlertDialogCancel className="!mr-full ml-0!">
             Cancel
           </AlertDialogCancel>
           {props.submitAction !== undefined && (
@@ -86,7 +87,7 @@ export default function AlertHelper<T>(props: AlertHelperProps<T>) {
                   ev.preventDefault();
                   setLoading(true);
                   void props
-                    .onSubmit(data, ev)
+                    .onSubmit(data, ev,open === false)
                     .then(() => {
                       setLoading(false);
                       setOpen(false);

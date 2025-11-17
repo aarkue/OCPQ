@@ -18,7 +18,7 @@ import {
 import clsx from "clsx";
 import { memo, useContext, useState } from "react";
 import { LuTrash } from "react-icons/lu";
-import { Handle, Position, type NodeProps } from "reactflow";
+import { Handle, Position, type NodeProps, Node } from "@xyflow/react";
 import { VisualEditorContext } from "../VisualEditorContext";
 import FilterChooser from "../box/FilterChooser";
 import LabelFunctionChooser from "../box/LabelFunctionChooser";
@@ -28,7 +28,7 @@ import { getViolationStyles } from "../violation-styles";
 import SituationIndicator from "./SituationIndicator";
 import ViolationIndicator from "./ViolationIndicator";
 export default memo(EventTypeNode);
-function EventTypeNode({ data, id, selected }: NodeProps<EventTypeNodeData>) {
+function EventTypeNode({ data, id, selected }: NodeProps<Node<EventTypeNodeData>>) {
   const { violationsPerNode, onNodeDataChange } =
     useContext(VisualEditorContext);
 
@@ -45,7 +45,7 @@ function EventTypeNode({ data, id, selected }: NodeProps<EventTypeNodeData>) {
       }}>
         <div
           className={clsx(
-            "border-2 shadow-lg z-10 flex flex-col py-1 pb-2 px-0.5 rounded-md relative min-h-[5rem] w-[15rem]",
+            "border-2 shadow-lg z-10 flex flex-col py-1 pb-2 px-0.5 rounded-md relative min-h-20 w-60",
             getViolationStyles(violations, data.box.constraints.length === 0),
             selected && "border-dashed",
           )}
@@ -88,14 +88,14 @@ function EventTypeNode({ data, id, selected }: NodeProps<EventTypeNodeData>) {
           </div>
           <div>
             <Handle
-              className="!w-3 !h-3"
+              className="w-3! h-3!"
               position={Position.Top}
               type="target"
               id={id + "-target"}
             />
 
             <Handle
-              className="!w-3 !h-3"
+              className="w-3! h-3!"
               position={Position.Bottom}
               type="source"
               id={id + "-source"}

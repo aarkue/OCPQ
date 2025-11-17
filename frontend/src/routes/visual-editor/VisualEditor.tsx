@@ -7,7 +7,7 @@ import {
   type ReactNode,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import ReactFlow, {
+import {ReactFlow,
   Background,
   Controls,
   MarkerType,
@@ -16,7 +16,7 @@ import ReactFlow, {
   type Connection,
   type Edge,
   type Node,
-} from "reactflow";
+} from "@xyflow/react";
 
 import { BackendProviderContext } from "@/BackendProviderContext";
 import AlertHelper from "@/components/AlertHelper";
@@ -43,8 +43,8 @@ import {
 import { PiPlayFill } from "react-icons/pi";
 import { RxReset } from "react-icons/rx";
 import { TbFileExport, TbLogicAnd, TbPlus, TbSquare } from "react-icons/tb";
-import "reactflow/dist/style.css";
-import type { EventTypeQualifiers, OCELInfo, OCELType } from "../../types/ocel";
+import "@xyflow/react/dist/style.css";
+import type { OCELInfo, OCELType } from "../../types/ocel";
 import ViolationDetailsSheet from "./ViolationDetailsSheet";
 import { FlowContext } from "./helper/FlowContext";
 import { applyLayoutToNodes } from "./helper/LayoutFlow";
@@ -78,17 +78,12 @@ import {
   ContextMenuItem,
 } from "@/components/ui/context-menu";
 import { getAvailableChildNamesWithEdges } from "./helper/child-names";
-
-function isEditorElementTarget(el: HTMLElement | EventTarget | null,isInitial = true): boolean {
-  return (
-    (isInitial && el === document.body) ||
-    (el !== null && "className" in el && (el.className?.includes("react-flow") || isEditorElementTarget(el.parentElement,false)))
-  );
-}
+import { isEditorElementTarget } from "@/lib/flow-helper";
+import EventTypeLink from "./helper/EventTypeLink";
+import { v4 } from "uuid";
 
 interface VisualEditorProps {
   ocelInfo: OCELInfo;
-  eventTypeQualifiers: EventTypeQualifiers;
   children?: ReactNode;
   constraintInfo: ConstraintInfo;
 }
@@ -96,7 +91,7 @@ interface VisualEditorProps {
 export default function VisualEditor(props: VisualEditorProps) {
   const { setInstance, registerOtherDataGetter, otherData, flushData } =
     useContext(FlowContext);
-  const instance = useReactFlow();
+  const instance = useReactFlow<Node<EventTypeNodeData|GateNodeData>,Edge<EventTypeLinkData>>();
 
   const [violationDetails, setViolationDetails] = useState<{
     id: string;
@@ -156,7 +151,7 @@ export default function VisualEditor(props: VisualEditorProps) {
   const [isEvaluationLoading, setEvaluationLoading] = useState(false);
 
   const isValidConnection = useCallback(
-    ({ source, sourceHandle, target, targetHandle }: Edge | Connection) => {
+    ({ source, sourceHandle, target, targetHandle }: Edge<EventTypeLinkData> | Connection) => {
       const edges = instance.getEdges();
       if (
         source === null ||
@@ -261,20 +256,21 @@ export default function VisualEditor(props: VisualEditorProps) {
     ): OCELType[] => {
       const edges = instance.getEdges();
       let node = instance.getNode(nodeID) as
-        | Node<EventTypeNodeData>
+        | Node<EventTypeNodeData|GateNodeData>
         | undefined;
       while (
         node != null &&
-        !(
+        (
+        !("box" in node.data)  || !(
           variable in
           (type === "event"
             ? node.data.box.newEventVars
             : node.data.box.newObjectVars)
         )
-      ) {
+      )) {
         node = instance.getNode(getParentNodeID(node.id, edges) ?? "-");
       }
-      if (node != null) {
+      if (node != null && "box" in node.data) {
         if (type === "event") {
           const etypes = node.data.box.newEventVars[variable];
           return props.ocelInfo.event_types.filter((et) =>
@@ -343,7 +339,7 @@ export default function VisualEditor(props: VisualEditorProps) {
     nodes: Node<EventTypeNodeData | GateNodeData>[],
     edges: Edge<EventTypeLinkData>[],
   ) {
-    const idPrefix = Date.now() + `-p-${Math.floor(Math.random() * 1000)}-`;
+    const idPrefix = v4() + '-';
 
     const nodeRect = nodes.length > 0 ? nodes[0].position : { x: 0, y: 0 };
     const { x, y } = instance.screenToFlowPosition(mousePos.current);
@@ -547,7 +543,7 @@ export default function VisualEditor(props: VisualEditorProps) {
         return [
           ...nodes,
           {
-            id: Math.random() + "-" + Date.now(),
+            id: v4(),
             type: EVENT_TYPE_NODE_TYPE,
             position: {
               x: pos.x - NODE_TYPE_SIZE[EVENT_TYPE_NODE_TYPE].width / 2,
@@ -707,7 +703,7 @@ export default function VisualEditor(props: VisualEditorProps) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-      <ReactFlow
+      <ReactFlow<Node<EventTypeNodeData | GateNodeData>, Edge<EventTypeLinkData>>
         className="react-flow"
         tabIndex={1}
         onInit={(flow) => {
@@ -721,8 +717,8 @@ export default function VisualEditor(props: VisualEditorProps) {
         minZoom={0.33}
         edgeTypes={edgeTypes}
         nodeTypes={nodeTypes}
-        defaultNodes={otherData?.nodes ?? []}
-        defaultEdges={otherData?.edges ?? []}
+        defaultNodes={otherData?.nodes ?? [] as Node<EventTypeNodeData | GateNodeData>[]}
+        defaultEdges={otherData?.edges ?? [] as Edge<EventTypeLinkData>[]}
         isValidConnection={isValidConnection}
         onContextMenu={(ev) => {
           const trigger = !ev.isDefaultPrevented();
@@ -889,7 +885,7 @@ export default function VisualEditor(props: VisualEditorProps) {
               className="absolute right-1.5 bottom-1.5"
             />
           </Button>
-          <div className="flex flex-col items-center gap-y-1 min-w-[3rem] min-h-[5rem]">
+          <div className="flex flex-col items-center gap-y-1 min-w-12 min-h-20">
             <label className="flex flex-col text-sm">
               Filter
               <Switch

@@ -151,7 +151,7 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
                           extra column. The object/event ID can also be included
                           as a column (on by default).
                         </p>
-                        <div className="grid grid-cols-[auto,1fr] gap-x-2 gap-y-2 items-center">
+                        <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-2 items-center">
                           <Label>Format</Label>
                           <Combobox
                             options={[

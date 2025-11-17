@@ -3,8 +3,4 @@
 import { Binding } from "./Binding";
 import { ViolationReason } from "./ViolationReason";
 
-export type EvaluationResultWithCount = {
-  situations: Array<[Binding, ViolationReason | null]>;
-  situationCount: number;
-  situationViolatedCount: number;
-};
+export type EvaluationResultWithCount = { situations: Array<[Binding, ViolationReason | null]>, situationCount: number, situationViolatedCount: number, };

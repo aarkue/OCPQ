@@ -22,6 +22,9 @@ pub mod preprocessing {
 }
 pub mod cel;
 pub mod table_export;
+pub mod oc_declare {
+    pub mod statistics;
+}
 
 pub mod hpc_backend;
 #[derive(Debug, Serialize, Deserialize)]

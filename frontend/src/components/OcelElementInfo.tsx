@@ -58,7 +58,7 @@ export default function OcelElementInfo({
 
   return (
     <div className="text-lg text-left h-full">
-      <div className="grid grid-cols-[1fr,2fr] justify-center gap-x-4 w-full h-full">
+      <div className="grid grid-cols-[1fr_2fr] justify-center gap-x-4 w-full h-full">
         <div className="w-full h-full border-r-2 overflow-auto" ref={overflowDiv}>
           {info?.object != null && (
             <OcelObjectViewer

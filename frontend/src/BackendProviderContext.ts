@@ -16,6 +16,9 @@ import type {
   OCELObject,
   ObjectTypeQualifiers,
 } from "./types/ocel";
+import { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
+import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
+import { ActivityStatistics } from "./types/generated/ActivityStatistics";
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;
@@ -60,6 +63,10 @@ export type BackendProvider = {
   "check-for-updates"?: () => Promise<UpdateInfo | null>,
   "restart"?: () => Promise<void>,
   "get-version"?: () => Promise<string>,
+  "ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>,
+  "ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>,
+  "ocel/get-activity-statistics": (activity: string) => Promise<ActivityStatistics>,
+  "ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<number[]>,
 };
 
 export type UpdateInfo = {
@@ -103,6 +110,10 @@ export const ErrorBackendContext: BackendProvider = {
   "hpc/start": warnForNoBackendProvider,
   "hpc/job-status": warnForNoBackendProvider,
   "download-blob": warnForNoBackendProvider,
+  "ocel/discover-oc-declare": warnForNoBackendProvider,
+  "ocel/evaluate-oc-declare-arcs": warnForNoBackendProvider,
+  "ocel/get-activity-statistics": warnForNoBackendProvider,
+  "ocel/get-oc-declare-edge-statistics": warnForNoBackendProvider,
 };
 
 export const BackendProviderContext =
@@ -227,13 +238,30 @@ export function getAPIServerBackendProvider(
         })
       ).json();
     },
+    "ocel/discover-oc-declare": async (options) => {
+      return await (
+        await fetch(localBackendURL + "/ocel/discover-oc-declare", {
+          method: "post",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(options),
+        })
+      ).json();
+    },
+    "ocel/evaluate-oc-declare-arcs": async (arcs) => {
+      return await (
+        await fetch(localBackendURL + "/ocel/evaluate-oc-declare-arcs", {
+          method: "post",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(arcs),
+        })
+      ).json();
+    },
     "ocel/graph": async (options) => {
       const res = await fetch(localBackendURL + "/ocel/graph", {
         method: "post",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options),
       });
-      console.log({ res });
       if (res.ok) {
         return await res.json();
       } else {
@@ -246,7 +274,6 @@ export function getAPIServerBackendProvider(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(specifier),
       });
-      console.log({ res });
       if (res.ok) {
         return await res.json();
       } else {
@@ -259,7 +286,6 @@ export function getAPIServerBackendProvider(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(specifier),
       });
-      console.log({ res });
       if (res.ok) {
         return await res.json();
       } else {
@@ -300,15 +326,38 @@ export function getAPIServerBackendProvider(
         throw Error(await res.text());
       }
     },
+    "ocel/get-activity-statistics": async (activity) => {
+      const res = await fetch(localBackendURL + `/ocel/get-activity-statistics`, {
+        method: "post",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(activity)
+      });
+      if (res.ok) {
+        return await res.json();
+      } else {
+        throw Error(await res.text());
+      }
+
+    },
+    "ocel/get-oc-declare-edge-statistics": async (edge) => {
+      const res = await fetch(localBackendURL + `/ocel/get-oc-declare-edge-statistics`, {
+        method: "post",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(edge)
+      });
+      if (res.ok) {
+        return await res.json();
+      } else {
+        throw Error(await res.text());
+      }
+    },
     "download-blob": async (blob, fileName) => {
       const dataURL = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.setAttribute("download", fileName);
-      // a.setAttribute("target", "_blank");
       a.setAttribute("href", dataURL);
       document.body.appendChild(a);
       a.click();
-      // console.log(a);
       document.body.removeChild(a);
       setTimeout(() => {
         URL.revokeObjectURL(dataURL);

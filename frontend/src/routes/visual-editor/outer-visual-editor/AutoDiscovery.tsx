@@ -24,6 +24,7 @@ import type {
   DiscoverConstraintsRequest,
   DiscoverConstraintsRequestWrapper,
 } from "../helper/types";
+import { v4 } from "uuid";
 
 export default function AutoDiscoveryButton({
   ocelInfo,
@@ -550,7 +551,7 @@ export default function AutoDiscoveryButton({
                   0,
                   0,
                   0,
-                  Date.now() + " - " + index,
+                  v4()
                 );
                 await applyLayoutToNodes(ns, es);
                 prevDataRef.current[index] = {

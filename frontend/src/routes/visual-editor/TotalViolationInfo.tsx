@@ -10,7 +10,7 @@ import {
   getViolationTextColor,
 } from "./helper/violation-styles";
 import { PiPlayFill } from "react-icons/pi";
-import type { ReactFlowJsonObject } from "reactflow";
+import type { ReactFlowJsonObject, Node, Edge } from "@xyflow/react";
 
 export default function TotalViolationInfo({
   violations,
@@ -18,7 +18,7 @@ export default function TotalViolationInfo({
 }: {
   violations: EvaluationResPerNodes | undefined;
   flowJSON:
-    | ReactFlowJsonObject<EventTypeNodeData | GateNodeData, EventTypeLinkData>
+    | ReactFlowJsonObject<Node<EventTypeNodeData | GateNodeData>, Edge<EventTypeLinkData>>
     | undefined;
 }) {
   const rootNodes =
@@ -46,7 +46,7 @@ export default function TotalViolationInfo({
   return (
     <div
       className={clsx(
-        "rounded w-full h-[3.5rem] overflow-hidden",
+        "rounded w-full h-14 overflow-hidden",
         isNaN(percentage) && "text-gray-700",
         !isNaN(percentage) && "font-bold border-2",
         !isNaN(percentage) &&

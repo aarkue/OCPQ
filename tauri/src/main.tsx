@@ -1,8 +1,9 @@
+import "$/globals.css";
+import "$/index.css";
 import {
   type BackendProvider,
   BackendProviderContext,
 } from "$/BackendProviderContext";
-import "$/index.css";
 import { MainRouterProvider } from "$/router";
 import type { DiscoverConstraintsResponse } from "$/routes/visual-editor/helper/types";
 import { BindingBoxTree } from "$/types/generated/BindingBoxTree";
@@ -98,6 +99,22 @@ const tauriBackend: BackendProvider = {
       "auto_discover_constraints",
       { options }
     );
+  },
+  "ocel/discover-oc-declare": async (options) => {
+    return await invoke(
+      "auto_discover_oc_declare",
+      { options }
+    );
+  },
+  "ocel/evaluate-oc-declare-arcs": async (arcs) => {
+    return await invoke("evaluate_oc_declare_arcs", { arcs })
+  },
+  "ocel/get-oc-declare-edge-statistics": async (arc) => {
+    return await invoke("get_oc_declare_edge_statistics", { arc })
+
+  },
+  "ocel/get-activity-statistics": async (activity) => {
+    return await invoke("get_oc_declare_activity_statistics",{activity})
   },
   "ocel/export-bindings": async (nodeIndex, options) => {
     const res: undefined = await invoke("export_bindings_table", { nodeIndex, options });

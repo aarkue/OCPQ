@@ -32,11 +32,13 @@ use ocpq_shared::{
         get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
         ConnectionConfig, JobStatus, OCPQJobOptions,
     },
+    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     ocel_qualifiers::qualifiers::{
         get_qualifiers_for_event_types, QualifierAndObjectType, QualifiersForEventType,
     },
     preprocessing::preprocess::get_object_rels_per_type,
+    process_mining::object_centric::oc_declare::{self, OCDeclareArc},
     table_export::{export_bindings_to_writer, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
@@ -78,9 +80,8 @@ async fn main() {
     // .allow_headers([CONTENT_TYPE])
     // .allow_origin(tower_http::cors::Any);
 
-    load_ocel_file_to_state(DEFAULT_OCEL_FILE, &state);
+    load_ocel_file_to_state(DEFAULT_OCEL_FILE, &state, true);
 
-    // build our application with a single route
     let app = Router::new()
         .route("/ocel/load", post(load_ocel_file_req))
         .route("/ocel/info", get(get_loaded_ocel_info))
@@ -118,6 +119,22 @@ async fn main() {
         .route(
             "/ocel/discover-constraints",
             post(auto_discover_constraints_handler),
+        )
+        .route(
+            "/ocel/discover-oc-declare",
+            post(auto_discover_oc_declare_handler),
+        )
+        .route(
+            "/ocel/evaluate-oc-declare-arcs",
+            post(evaluate_oc_declare_arcs_handler),
+        )
+        .route(
+            "/ocel/get-activity-statistics",
+            post(get_activity_statistics_handler),
+        )
+        .route(
+            "/ocel/get-oc-declare-edge-statistics",
+            post(get_oc_declare_edge_statistics_handler),
         )
         .route(
             "/ocel/export-bindings",
@@ -305,6 +322,40 @@ pub async fn auto_discover_constraints_handler<'a>(
     }))
 }
 
+pub async fn auto_discover_oc_declare_handler(
+    state: State<AppState>,
+    Json(req): Json<oc_declare::OCDeclareDiscoveryOptions>,
+) -> Json<Option<Vec<OCDeclareArc>>> {
+    Json(with_ocel_from_state(&state, |locel| {
+        oc_declare::discover_behavior_constraints(&locel, req)
+    }))
+}
+pub async fn evaluate_oc_declare_arcs_handler(
+    state: State<AppState>,
+    Json(req): Json<Vec<oc_declare::OCDeclareArc>>,
+) -> Json<Option<Vec<f64>>> {
+    Json(with_ocel_from_state(&state, |locel| {
+        req.iter()
+            .map(|arc| arc.get_for_all_evs_perf(&locel))
+            .collect()
+    }))
+}
+pub async fn get_activity_statistics_handler(
+    state: State<AppState>,
+    Json(req): Json<String>,
+) -> Json<Option<ActivityStatistics>> {
+    Json(with_ocel_from_state(&state, |ocel| {
+        get_activity_statistics(ocel, &req)
+    }))
+}
+pub async fn get_oc_declare_edge_statistics_handler(
+    state: State<AppState>,
+    Json(req): Json<OCDeclareArc>,
+) -> Json<Option<Vec<i64>>> {
+    Json(with_ocel_from_state(&state, |ocel| {
+        get_edge_stats(ocel, &req)
+    }))
+}
 pub async fn export_bindings_table(
     state: State<AppState>,
     Json((node_index, table_options)): Json<(usize, TableExportOptions)>,
