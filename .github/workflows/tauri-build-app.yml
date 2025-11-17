@@ -45,7 +45,9 @@ jobs:
           gir1.2-javascriptcoregtk-4.1=2.44.0-2 \
           gir1.2-webkit2-4.1=2.44.0-2 \
           xdg-utils
-
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
         with:
