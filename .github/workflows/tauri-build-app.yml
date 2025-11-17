@@ -62,12 +62,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-          cache: 'npm' # Set this to npm, yarn or pnpm.
-          cache-dependency-path: './tauri/package-lock.json'
+          cache: 'pnpm' # Set this to npm, yarn or pnpm.
+          cache-dependency-path: './tauri/pnpm-lock.json'
 
       - name: Install frontend dependencies
         # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
-        run: npm install && cd ../frontend && npm install # Change this to npm, yarn or pnpm.
+        run: pnpm install && cd ../frontend && pnpm install # Change this to npm, yarn or pnpm.
       - name: import Apple Developer Certificate
         if: matrix.platform == 'macos-latest'
         # Prevents keychain from locking automatically for 3600 seconds.
