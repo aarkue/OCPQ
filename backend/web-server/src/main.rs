@@ -326,8 +326,7 @@ pub async fn auto_discover_oc_declare_handler(
     state: State<AppState>,
     Json(req): Json<oc_declare::OCDeclareDiscoveryOptions>,
 ) -> Json<Option<Vec<OCDeclareArc>>> {
-    Json(with_ocel_from_state(&state, |ocel| {
-        let locel = oc_declare::preprocess_ocel(ocel.get_ocel_ref().clone());
+    Json(with_ocel_from_state(&state, |locel| {
         oc_declare::discover_behavior_constraints(&locel, req)
     }))
 }
@@ -335,8 +334,7 @@ pub async fn evaluate_oc_declare_arcs_handler(
     state: State<AppState>,
     Json(req): Json<Vec<oc_declare::OCDeclareArc>>,
 ) -> Json<Option<Vec<f64>>> {
-    Json(with_ocel_from_state(&state, |ocel| {
-        let locel = oc_declare::preprocess_ocel(ocel.get_ocel_ref().clone());
+    Json(with_ocel_from_state(&state, |locel| {
         req.iter()
             .map(|arc| arc.get_for_all_evs_perf(&locel))
             .collect()

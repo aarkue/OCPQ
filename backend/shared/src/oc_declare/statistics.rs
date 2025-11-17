@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use process_mining::{
     object_centric::oc_declare::{
-        perf::{get_evs_with_objs_perf, get_for_ev_perf},
-        OCDeclareArc, OCDeclareArcType,
+        perf::get_evs_with_objs_perf, OCDeclareArc, OCDeclareArcType, EXIT_EVENT_PREFIX,
+        INIT_EVENT_PREFIX,
     },
     ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
 };
@@ -18,6 +18,27 @@ pub struct ActivityStatistics {
 }
 
 pub fn get_activity_statistics(locel: &IndexLinkedOCEL, activity: &str) -> ActivityStatistics {
+    if activity.starts_with(INIT_EVENT_PREFIX) || activity.starts_with(EXIT_EVENT_PREFIX) {
+        let ob_type = if activity.starts_with(INIT_EVENT_PREFIX) {
+            &activity[INIT_EVENT_PREFIX.len() + 1..activity.len()]
+        } else {
+            &activity[INIT_EVENT_PREFIX.len() + 1..activity.len()]
+        };
+        return ActivityStatistics {
+            num_evs_per_ot_type: vec![(
+                ob_type.to_string(),
+                vec![1; locel.get_obs_of_type(ob_type).count()],
+            )]
+            .into_iter()
+            .collect(),
+            num_obs_of_ot_per_ev: vec![(
+                ob_type.to_string(),
+                vec![1; locel.get_obs_of_type(ob_type).count()],
+            )]
+            .into_iter()
+            .collect(),
+        };
+    }
     // Number of activity events per object (of a type)
     let mut num_evs_per_type: HashMap<String, Vec<usize>> = HashMap::new();
     let mut relevant_object_types = HashSet::new();
@@ -61,25 +82,29 @@ pub fn get_activity_statistics(locel: &IndexLinkedOCEL, activity: &str) -> Activ
 }
 
 pub fn get_edge_stats(locel: &IndexLinkedOCEL, arc: &OCDeclareArc) -> Vec<i64> {
-    locel
-        .get_evs_of_type(arc.from.as_str())
-        .flat_map(|ev_index| {
-            let ev_time = locel[ev_index].time;
-            arc.label
-                .get_bindings(ev_index, locel)
-                .flat_map(move |binding| {
-                    let mut target_ev_iterator =
-                        get_evs_with_objs_perf(&binding, locel, arc.to.as_str()).filter(|ev2| {
-                            match arc.arc_type {
-                                OCDeclareArcType::EF | OCDeclareArcType::DF => ev_index < ev2,
-                                OCDeclareArcType::EP | OCDeclareArcType::DP => ev_index > ev2,
-                                OCDeclareArcType::AS => true,
-                            }
-                        });
-                    target_ev_iterator
-                        .next()
-                        .map(|ev2| (locel[ev2].time - ev_time).num_milliseconds())
-                })
-        })
-        .collect()
+    process_mining::object_centric::oc_declare::TriggerEvent::get_all_trigger_evs(
+        locel,
+        arc.from.as_str(),
+    )
+    .iter()
+    .flat_map(|ev_index| {
+        let ev_time = ev_index.get_timestamp(locel);
+        arc.label
+            .get_bindings(ev_index, locel)
+            .flat_map(move |binding| {
+                let target_ev_iterator = get_evs_with_objs_perf(&binding, locel, arc.to.as_str())
+                    .filter(|ev2| {
+                        let ev2_time = ev2.get_timestamp(locel);
+                        match arc.arc_type {
+                            OCDeclareArcType::EF | OCDeclareArcType::DF => ev_time < ev2_time,
+                            OCDeclareArcType::EP | OCDeclareArcType::DP => ev_time > ev2_time,
+                            OCDeclareArcType::AS => true,
+                        }
+                    });
+                // First event (could also implement this for last, or all matching target events)
+                let first_ev = target_ev_iterator.min_by_key(|e| e.get_timestamp(locel));
+                first_ev.map(|ev2| (ev2.get_timestamp(locel) - ev_time).num_milliseconds())
+            })
+    })
+    .collect()
 }

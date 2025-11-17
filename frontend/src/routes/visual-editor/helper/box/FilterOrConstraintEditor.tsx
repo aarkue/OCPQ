@@ -904,9 +904,9 @@ export function FilterOrConstraintDisplay<
           />
           <pre
             className={clsx(
-              "text-[0.5rem] overflow-ellipsis overflow-hidden leading-tight font-semibold",
+              "text-[0.5rem] text-ellipsis overflow-hidden leading-tight font-semibold",
               !(compact ?? false) && " break-all whitespace-normal",
-              compact === true && "whitespace-nowrap max-w-[5rem]",
+              compact === true && "whitespace-nowrap max-w-20",
             )}
             title={value.cel}
           >
@@ -1006,7 +1006,7 @@ export function FilterOrConstraintDisplay<
       );
     case "EventAttributeValueFilter":
       return (
-        <div className="font-normal text-sm whitespace-nowrap max-w-full w-full overflow-hidden overflow-ellipsis">
+        <div className="font-normal text-sm whitespace-nowrap max-w-full w-full overflow-hidden text-ellipsis">
           <EvVarName eventVar={value.event} />
           <span className="font-light">
             .
@@ -1020,7 +1020,7 @@ export function FilterOrConstraintDisplay<
       );
     case "ObjectAttributeValueFilter":
       return (
-        <div className="font-normal text-sm whitespace-nowrap max-w-full w-full overflow-hidden overflow-ellipsis">
+        <div className="font-normal text-sm whitespace-nowrap max-w-full w-full overflow-hidden text-ellipsis">
           <ObVarName obVar={value.object} />
           <span className="whitespace-nowrap font-light text-xs w-full">
             .
@@ -1290,7 +1290,7 @@ function AttributeValueFilterSelector({
                   }}
                 />
                 <Button
-                  className="shrink-0 w-[1.5rem] h-[1.5rem]"
+                  className="shrink-0 w-6 h-6"
                   size="icon"
                   variant="outline"
                   onClick={() => {

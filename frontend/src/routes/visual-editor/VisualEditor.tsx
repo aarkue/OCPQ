@@ -79,6 +79,8 @@ import {
 } from "@/components/ui/context-menu";
 import { getAvailableChildNamesWithEdges } from "./helper/child-names";
 import { isEditorElementTarget } from "@/lib/flow-helper";
+import EventTypeLink from "./helper/EventTypeLink";
+import { v4 } from "uuid";
 
 interface VisualEditorProps {
   ocelInfo: OCELInfo;
@@ -89,7 +91,7 @@ interface VisualEditorProps {
 export default function VisualEditor(props: VisualEditorProps) {
   const { setInstance, registerOtherDataGetter, otherData, flushData } =
     useContext(FlowContext);
-  const instance = useReactFlow<Node<EventTypeNodeData|GateNodeData>>();
+  const instance = useReactFlow<Node<EventTypeNodeData|GateNodeData>,Edge<EventTypeLinkData>>();
 
   const [violationDetails, setViolationDetails] = useState<{
     id: string;
@@ -149,7 +151,7 @@ export default function VisualEditor(props: VisualEditorProps) {
   const [isEvaluationLoading, setEvaluationLoading] = useState(false);
 
   const isValidConnection = useCallback(
-    ({ source, sourceHandle, target, targetHandle }: Edge | Connection) => {
+    ({ source, sourceHandle, target, targetHandle }: Edge<EventTypeLinkData> | Connection) => {
       const edges = instance.getEdges();
       if (
         source === null ||
@@ -337,7 +339,7 @@ export default function VisualEditor(props: VisualEditorProps) {
     nodes: Node<EventTypeNodeData | GateNodeData>[],
     edges: Edge<EventTypeLinkData>[],
   ) {
-    const idPrefix = Date.now() + `-p-${Math.floor(Math.random() * 1000)}-`;
+    const idPrefix = v4() + '-';
 
     const nodeRect = nodes.length > 0 ? nodes[0].position : { x: 0, y: 0 };
     const { x, y } = instance.screenToFlowPosition(mousePos.current);
@@ -541,7 +543,7 @@ export default function VisualEditor(props: VisualEditorProps) {
         return [
           ...nodes,
           {
-            id: Math.random() + "-" + Date.now(),
+            id: v4(),
             type: EVENT_TYPE_NODE_TYPE,
             position: {
               x: pos.x - NODE_TYPE_SIZE[EVENT_TYPE_NODE_TYPE].width / 2,
@@ -883,7 +885,7 @@ export default function VisualEditor(props: VisualEditorProps) {
               className="absolute right-1.5 bottom-1.5"
             />
           </Button>
-          <div className="flex flex-col items-center gap-y-1 min-w-[3rem] min-h-[5rem]">
+          <div className="flex flex-col items-center gap-y-1 min-w-12 min-h-20">
             <label className="flex flex-col text-sm">
               Filter
               <Switch

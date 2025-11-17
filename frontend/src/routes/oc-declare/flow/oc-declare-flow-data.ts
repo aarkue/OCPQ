@@ -7,3 +7,6 @@ export type OCDeclareFlowData = {
    CustomEdgeType
   >;
 };
+
+
+export type OCDeclareMetaData = {name: string, id: string, description?: string}

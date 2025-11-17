@@ -1,4 +1,4 @@
-@import url("./globals.css");
+/* @import "tailwindcss"; */
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
@@ -22,6 +22,8 @@
     background-color: #ffffff;
   }
 }
+
+
 
 .reset-handles .react-flow__handle {
   position: unset !important;

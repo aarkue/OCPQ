@@ -69,7 +69,7 @@ export function columnsForBinding(
                 });
               }}
               rel="noreferrer"
-              className="max-w-[10rem] w-fit align-top whitespace-nowrap inline-block text-ellipsis overflow-hidden underline decoration decoration-blue-500/60 hover:decoration-blue-500"
+              className="max-w-40 w-fit align-top whitespace-nowrap inline-block text-ellipsis overflow-hidden underline decoration decoration-blue-500/60 hover:decoration-blue-500"
             >
               {c.getValue<string>()}
             </Link>

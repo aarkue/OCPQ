@@ -109,7 +109,7 @@ export default function FilterChooser({
                   }}
                 />
                 <Label className="mb-1">CEL Script</Label>
-                <div className="max-h-[10rem]">
+                <div className="max-h-40">
                   <Suspense
                     fallback={
                       <div>
@@ -200,9 +200,9 @@ function LabelFunctionItem({
         <LabelLabel label={labelFun.label} className="text-[0.5rem]" />
         <pre
           className={clsx(
-            " text-[0.5rem] overflow-ellipsis overflow-hidden leading-tight font-medium text-muted-foreground",
+            " text-[0.5rem] text-ellipsis overflow-hidden leading-tight font-medium text-muted-foreground",
             !(compact ?? false) && " break-all whitespace-normal",
-            compact && "whitespace-nowrap max-w-[5rem]",
+            compact && "whitespace-nowrap max-w-20",
           )}
           title={labelFun.cel}
         >

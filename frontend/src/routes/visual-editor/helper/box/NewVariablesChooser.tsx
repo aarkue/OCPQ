@@ -92,7 +92,7 @@ export default function NewVariableChooser({
           <LuPlus size={10} />
         </Button>
       </div>
-      <ul className="w-full text-left text-sm min-h-[0.5rem]">
+      <ul className="w-full text-left text-sm min-h-2">
         {Object.entries(box.newObjectVars).map(([obVar, obTypes]) => (
           <li key={obVar} className="flex items-baseline gap-x-0.5">
             <VariableLabelToggle
@@ -127,7 +127,7 @@ export default function NewVariableChooser({
               )}
               {(ocelInfo.object_types.length <= 1 || ocelInfo.object_types.length !== obTypes.length) && (
                 <span
-                  className="ml-1 max-w-[13ch] shrink overflow-ellipsis overflow-hidden inline-block whitespace-pre text-left"
+                  className="ml-1 max-w-[13ch] shrink text-ellipsis overflow-hidden inline-block whitespace-pre text-left"
                   title={obTypes.join(",\n")}
                 >
                   {obTypes.join(",\n")}
@@ -158,7 +158,7 @@ export default function NewVariableChooser({
           <LuPlus size={10} />
         </Button>
       </div>
-      <ul className="w-full text-left text-sm min-h-[0.5rem]">
+      <ul className="w-full text-left text-sm min-h-2">
         {Object.entries(box.newEventVars).map(([evVar, evTypes]) => (
           <li key={evVar} className="flex items-baseline gap-x-0.5">
             <VariableLabelToggle
@@ -193,7 +193,7 @@ export default function NewVariableChooser({
               )}
               {(ocelInfo.event_types.length <= 1 || ocelInfo.event_types.length !== evTypes.length) && (
                 <span
-                  className="ml-1 max-w-36 shrink overflow-ellipsis overflow-hidden inline-block whitespace-pre text-left"
+                  className="ml-1 max-w-36 shrink text-ellipsis overflow-hidden inline-block whitespace-pre text-left"
                   title={evTypes.join(",\n")}
                 >
                   {evTypes.join(",\n")}
@@ -226,7 +226,7 @@ export default function NewVariableChooser({
                   ? "Event Variable"
                   : "Object Variable"}
               </AlertDialogTitle>
-              <div className="text-sm text-gray-700 pt-4 grid grid-cols-[1fr,3fr] gap-x-2 gap-y-1.5">
+              <div className="text-sm text-gray-700 pt-4 grid grid-cols-[1fr_3fr] gap-x-2 gap-y-1.5">
                 <Label>Variable</Label>
                 <Label>
                   {alertState?.variant === "event" ? "Event" : "Object"} Types<br/>

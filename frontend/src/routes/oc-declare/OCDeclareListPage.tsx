@@ -2,35 +2,24 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META, OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA, parseLocalStorageValue } from "@/lib/local-storage";
 import clsx from "clsx";
-import { startTransition, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { RxPlusCircled } from "react-icons/rx";
 import { TbTrash } from "react-icons/tb";
 import { Link, useNavigate } from "react-router-dom";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { FixedSizeList, ListChildComponentProps } from "react-window";
-import { ConstraintInfo } from "../visual-editor/helper/types";
-import { OCDeclareFlowData } from "./flow/oc-declare-flow-data";
+import { v4 } from "uuid";
+import { OCDeclareMetaData } from "./flow/oc-declare-flow-data";
 
 export default function OCDeclareListPage() {
-  const prevDataRef = useRef<OCDeclareFlowData[]>(parseLocalStorageValue(
-    localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA) ?? "[]",
-  ));
-  const [constraints, setConstraints] = useState<ConstraintInfo[]>(parseLocalStorageValue(localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META) ?? "[]"));
-  const [deletePromptForIndex, setDeletePromptForIndex] = useState<number>();
+  const [constraints, setConstraints] = useState<OCDeclareMetaData[]>(parseLocalStorageValue(localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META) ?? "[]"));
+  const [deletePromptForIndex, setDeletePromptForIndex] = useState<{ index: number } | 'ALL'>();
 
-  function saveData(constraintsMeta = constraints, dataRef = prevDataRef) {
+  function saveData(constraintsMeta = constraints) {
     localStorage.setItem(
       OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META,
       JSON.stringify(constraintsMeta),
     );
-    if (prevDataRef.current !== undefined) {
-      localStorage.setItem(
-        OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA,
-        JSON.stringify(
-          dataRef.current.map((x) => ({ ...x, violations: undefined })),
-        ),
-      );
-    }
   }
 
   useEffect(() => {
@@ -39,31 +28,31 @@ export default function OCDeclareListPage() {
 
   const navigate = useNavigate();
 
-  return <div className="text-left h-full overflow-hidden">
+  return <div className="text-left h-full overflow-hidden flex flex-col">
 
-    <h2 className="text-3xl font-black bg-clip-text text-transparent tracking-tighter bg-gradient-to-t from-orange-400 to-pink-600">OC-DECLARE</h2>
+    <h2 className="text-3xl font-black bg-clip-text text-transparent tracking-tighter bg-linear-to-t from-orange-400 to-pink-600">OC-DECLARE</h2>
     <h4 className="font-medium text-lg tracking-tight">Object-Centric Declarative Constraints</h4>
-    <Button
+    <div className="flex justify-between items-center mb-1">
+      
+    <Button className="cursor-pointer"
       // size="lg"
       onClick={() => {
-        prevDataRef.current.splice(
-          constraints.length,
-          1,
-        );
-        const newIndex = constraints.length;
+        const newID = v4();
         saveData([
           ...constraints,
           {
-            name: `New Constraint (${newIndex + 1})`,
-            description: "",
+            name: `New Constraint (${constraints.length + 1})`,
+            id: newID,
           },
         ])
-        navigate(`/oc-declare/${newIndex}`);
+        navigate(`/oc-declare/${newID}`);
       }}
     >
       <RxPlusCircled className="mr-1" />
       Add
     </Button>
+  <Button variant='destructive' onClick={() => setDeletePromptForIndex('ALL')}>Delete All...</Button>
+  </div>
     <AlertDialog
       open={deletePromptForIndex !== undefined}
       onOpenChange={(o) => {
@@ -74,18 +63,18 @@ export default function OCDeclareListPage() {
     >
       <AlertDialogContent className="flex flex-col max-h-full justify-between">
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete OC-DECLARE Constraint</AlertDialogTitle>
+          <AlertDialogTitle>Delete {deletePromptForIndex === 'ALL' ? 'all' : ''} OC-DECLARE Constraint{deletePromptForIndex === 'ALL' ? 's' : ''}</AlertDialogTitle>
         </AlertDialogHeader>
         <div className="text-base text-gray-700 max-h-full overflow-auto px-2">
-          {deletePromptForIndex !== undefined && (
+          {deletePromptForIndex !== undefined && deletePromptForIndex !== 'ALL' && (
             <>
               <span className="">
                 Constraint:{" "}
                 <span className="font-semibold">
-                  {(constraints[deletePromptForIndex]?.name)
+                  {(constraints[deletePromptForIndex.index]?.name)
                     .length > 0
-                    ? constraints[deletePromptForIndex]?.name
-                    : `Constraint ${deletePromptForIndex + 1}`}
+                    ? constraints[deletePromptForIndex.index]?.name
+                    : `Constraint ${deletePromptForIndex.index + 1}`}
                 </span>
               </span>
               <br />
@@ -99,12 +88,18 @@ export default function OCDeclareListPage() {
           <AlertDialogAction
             onClick={() => {
               if (deletePromptForIndex === undefined) return;
-              prevDataRef.current.splice(deletePromptForIndex, 1);
+              if (deletePromptForIndex === 'ALL') {
+                constraints.forEach(c => localStorage.removeItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + c.id));
+                setConstraints([])
+                return;
+              }
+              const deleteId = constraints[deletePromptForIndex.index];
               setConstraints((constraints) => {
                 const newConstraints = [...constraints];
-                newConstraints.splice(deletePromptForIndex, 1);
+                newConstraints.splice(deletePromptForIndex.index, 1);
                 return newConstraints;
               });
+              localStorage.removeItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + deleteId);
             }}
           >
             Delete
@@ -112,7 +107,7 @@ export default function OCDeclareListPage() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    <div className="h-full overflow-auto py-2">
+    <div className="h-full overflow-auto">
       <AutoSizer>
         {({ height, width }) => (
           <FixedSizeList
@@ -134,7 +129,7 @@ export default function OCDeclareListPage() {
                   <ConstraintMetaInfo
                     constraint={c}
                     index={index}
-                    onDelete={() => setDeletePromptForIndex(index)}
+                    onDelete={() => setDeletePromptForIndex({index})}
                   />
                 </div>
               );
@@ -151,7 +146,7 @@ function ConstraintMetaInfo({
   index,
   onDelete
 }: {
-  constraint: ConstraintInfo;
+  constraint: OCDeclareMetaData;
   index: number;
   onDelete: () => unknown;
 }) {
@@ -163,12 +158,7 @@ function ConstraintMetaInfo({
         "bg-blue-200 border-blue-300 font-semibold",
       )}
     >
-      <Link to={`/oc-declare/${index}`}
-        onClick={() => {
-          // changeIndex(index);
-          // setShowConstraintSelection(false);
-
-        }}
+      <Link to={`/oc-declare/${constraint.id}`}
         className={clsx(
           "w-full h-full block whitespace-nowrap overflow-hidden text-ellipsis px-2 text-left",
         )}
@@ -186,7 +176,7 @@ function ConstraintMetaInfo({
             : `Constraint ${index + 1}`}
         </h4>
         <p className="text-xs font-light text-gray-700">
-          {constraint.description !== ""
+          {constraint.description
             ? constraint.description
             : "No description"}
         </p>

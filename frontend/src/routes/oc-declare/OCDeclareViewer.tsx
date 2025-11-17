@@ -1,12 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META, OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA, parseLocalStorageValue } from "@/lib/local-storage";
 import { Link, useParams } from "react-router-dom";
-import { ConstraintInfo } from "../visual-editor/helper/types";
-import { IoArrowBack, IoPencil, IoPencilSharp } from "react-icons/io5";
+import { IoArrowBack } from "react-icons/io5";
 import OCDeclareFlowEditor from "./flow/OCDeclareFlowEditor";
-import { OCDeclareFlowData } from "./flow/oc-declare-flow-data";
-import { PiEngineLight, PiGenderMaleLight } from "react-icons/pi";
-import { BsPencil } from "react-icons/bs";
+import { OCDeclareFlowData, OCDeclareMetaData } from "./flow/oc-declare-flow-data";
 import { LuPencil } from "react-icons/lu";
 import { useRef, useState } from "react";
 import AlertHelper from "@/components/AlertHelper";
@@ -16,29 +13,17 @@ import { ReactFlowInstance } from "@xyflow/react";
 import { ActivityNodeType, CustomEdgeType } from "./flow/oc-declare-flow-types";
 import { addArcsToFlow } from "./flow/oc-declare-flow-type-conversions";
 
-function parseIndexFromID(id: string | undefined) {
-  if (typeof id === "string") {
-    const index = parseInt(id);
-    if (isNaN(index)) {
-      return null;
-    } else {
-      return index;
-    }
-  }
-  return null
-}
 export default function OCDeclareViewer() {
 
   const { id } = useParams();
-  const index = parseIndexFromID(id);
 
-  const meta = parseLocalStorageValue<ConstraintInfo[]>(localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META) ?? "[]");
-  // const [meta,setMeta] = useState();
-  const data = parseLocalStorageValue<OCDeclareFlowData[]>(localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA) ?? "[]")
-  const [metaInfo, setMetaInfo] = useState(index !== null && index >= 0 && index < meta.length ? meta[index] : undefined);
+  const meta = parseLocalStorageValue<OCDeclareMetaData[]>(localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META) ?? "[]");
+  const data = parseLocalStorageValue<OCDeclareFlowData>(localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + id) ?? "[]")
+  const metaIndex = meta.findIndex(x => x.id === id);
+  const [metaInfo, setMetaInfo] = useState(metaIndex !== undefined ? meta[metaIndex] : undefined);
   const flowRef = useRef<ReactFlowInstance<ActivityNodeType, CustomEdgeType>>();
 
-  if (index == null || metaInfo === undefined) {
+  if (id == null || metaInfo === undefined) {
     return <div className=" text-left">
       <h2 className="font-black text-2xl text-red-500">Unknown OC-DECLARE Model</h2>
       <p className="mt-2 mb-4">The requested OC-DECLARE model does not exist. Maybe it was deleted?
@@ -52,8 +37,8 @@ export default function OCDeclareViewer() {
   }
   function updateMetaInfo(newMetaInfo: typeof metaInfo) {
     setMetaInfo(newMetaInfo);
-    if (newMetaInfo && index !== null) {
-      meta[index] = newMetaInfo;
+    if (newMetaInfo && metaIndex !== null) {
+      meta[metaIndex] = newMetaInfo;
       localStorage.setItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META, JSON.stringify(meta));
     }
 
@@ -88,18 +73,20 @@ export default function OCDeclareViewer() {
       <div className="ml-auto">
         <OCDeclareDiscoveryButton onConstraintsDiscovered={(constraints) => {
           console.log(`Got ${constraints.length} constraints`)
-          if(flowRef.current){
-            
-          addArcsToFlow(constraints,flowRef.current)
+          if (flowRef.current) {
+
+            addArcsToFlow(constraints, flowRef.current)
           }
 
         }} />
       </div>
     </div>
-    <OCDeclareFlowEditor initialFlowJson={data[index]?.flowJson} onChange={(value) => {
-      data[index] = { flowJson: value };
-      localStorage.setItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA, JSON.stringify(data));
-    }} onInit={(ref) => flowRef.current = ref} />
+    <div className="w-full h-full border">
+
+      <OCDeclareFlowEditor initialFlowJson={data.flowJson} onChange={(value) => {
+        localStorage.setItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + id, JSON.stringify({ flowJson: value } satisfies OCDeclareFlowData));
+      }} onInit={(ref) => flowRef.current = ref} />
+    </div>
 
   </div>
 }

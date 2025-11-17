@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityNodeType } from './oc-declare-flow-types';
 import { InfoSheetContext } from '@/InfoSheet';
+import { MdBarChart } from 'react-icons/md';
 const OBJECT_INIT = "<init>";
 const OBJECT_EXIT = "<exit>";
 export function OCDeclareFlowNode({
@@ -18,7 +19,7 @@ export function OCDeclareFlowNode({
 
   const connection = useConnection();
   const flow = useReactFlow();
-  const {setInfoSheetState} = useContext(InfoSheetContext);
+  const { setInfoSheetState } = useContext(InfoSheetContext);
 
   const isTarget = connection.inProgress && connection.fromNode.id !== id;
   function applyNameEdit(
@@ -70,35 +71,39 @@ export function OCDeclareFlowNode({
       <ContextMenuContent>
         <ContextMenuItem className='' onClick={(ev) => {
           ev.stopPropagation();
-          setEditMode(true);
-        }}>Edit Type</ContextMenuItem>
+          setInfoSheetState({ type: "activity-frequencies", activity: data.isObject === "init" ? "<init> " + data.type : data.isObject === "exit" ? "<exit> " + data.type : data.type })
+        }}>
+
+          <MdBarChart className='size-4 mr-1' />
+          View Statistics</ContextMenuItem>
         <ContextMenuItem className='' onClick={(ev) => {
           ev.stopPropagation();
-          setInfoSheetState({type: "activity-frequencies", activity: data.type})
-          // setEditMode(true);
-        }}>View Statistics</ContextMenuItem>
+          setEditMode(true);
+        }}>Edit Type</ContextMenuItem>
         <ContextMenuItem className='text-red-600 hover:focus:text-red-500' onClick={(ev) => {
           ev.stopPropagation();
           flow.deleteElements({ nodes: [{ id }] });
         }}>Delete Node</ContextMenuItem>
       </ContextMenuContent>
-    </ContextMenu><div onContextMenu={(ev) => {
-      ev.stopPropagation();
+    </ContextMenu><div onContextMenuCapture={(ev) => {
+      console.log(ev);
       if (contextMenuTriggerRef.current && !editMode) {
-        ev.preventDefault();
         contextMenuTriggerRef.current.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
+          cancelable: true,
           clientX: ev.clientX,
           clientY: ev.clientY,
         }),);
+      ev.preventDefault();
+      // ev.stopPropagation();
       }
     }}
-      // w-[4rem] and h-[2rem] for small demo images
-      className={clsx(false && "!h-[2rem] !min-h-[2rem] !w-[4rem] hidden", "group border-2  w-[7rem] py-1 px-1 flex items-center justify-center relative min-h-[3.66rem] h-fit bg-white rounded group", !data.isObject && "border-[var(--arrow-primary)]", selected && "shadow-lg")}
+      // w-16 and h-8 for small demo images
+      className={clsx(false && "h-8! min-h-8! w-16! hidden", "group border-2  w-28 py-1 px-1 flex items-center justify-center relative min-h-[3.66rem] h-fit bg-white rounded group", !data.isObject && "border-(--arrow-primary)", selected && "shadow-lg")}
       style={{ borderColor: objectColor }}>
-        <div className={clsx("border text-center border-transparent flex items-center min-h-[2rem] w-[calc(100%-1rem)]  drag-handle__custom group-hover:border-dashed group-hover:border-gray-300/50 z-2", connection.inProgress && "pointer-events-none")}>
+        <div className={clsx("border text-center border-transparent flex items-center min-h-8 w-[calc(100%-1rem)]  drag-handle__custom group-hover:border-dashed group-hover:border-gray-300/50 z-2", connection.inProgress && "pointer-events-none")}>
 
-          <div contentEditable={editMode} ref={contentEditableDiv} className='w-full text-xs pointer-events-auto leading-tight h-full min-h-[2rem] content-center'
+          <div contentEditable={editMode} ref={contentEditableDiv} className='w-full text-xs pointer-events-auto leading-tight h-full min-h-8 content-center'
             suppressContentEditableWarning={true}
             tabIndex={1}
             onKeyDownCapture={(ev) => {
@@ -172,7 +177,7 @@ export function OCDeclareFlowNode({
 //   if (actInfo == undefined) {
 //     return null;
 //   }
-//   return <div className='absolute -right-0.5 translate-x-full text-[5pt] bg-white z-[99] px-1 rounded-sm border'>
+//   return <div className='absolute -right-0.5 translate-x-full text-[5pt] bg-white z-99 px-1 rounded-sm border'>
 //     <ul className='list-disc pl-1'>
 //       {Object.entries(actInfo).map(([key, value]) => <li key={key} style={{ color: getRandomStringColor(key) }}>
 //         <span className={clsx(value.max > 1 && "font-bold")}>{key}</span>: <MinMaxDisplayWithSugar {...value} rangeMode />

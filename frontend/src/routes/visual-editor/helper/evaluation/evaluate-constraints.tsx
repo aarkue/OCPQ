@@ -1,5 +1,5 @@
 import type { BindingBoxTree } from "@/types/generated/BindingBoxTree";
-import type { Edge, Node } from "reactflow";
+import type { Edge, Node } from "@xyflow/react";
 import type {
   EventTypeLinkData,
   EventTypeNodeData,

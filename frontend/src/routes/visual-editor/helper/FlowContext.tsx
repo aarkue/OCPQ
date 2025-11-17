@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { Edge, Node, ReactFlowInstance, Viewport } from "reactflow";
+import type { Edge, Node, ReactFlowInstance, Viewport } from "@xyflow/react";
 import type {
   EvaluationResPerNodes,
   EventTypeLinkData,
@@ -7,8 +7,12 @@ import type {
   GateNodeData,
 } from "./types";
 
+type TypedFlowInstance = 
+ReactFlowInstance<Node<EventTypeNodeData | GateNodeData>,Edge<EventTypeLinkData>>;
+
 export const FlowContext = createContext<{
-  instance: ReactFlowInstance | undefined;
+
+  instance:  TypedFlowInstance | undefined;
   registerOtherDataGetter: (
     getter: () =>
       | {
@@ -16,7 +20,7 @@ export const FlowContext = createContext<{
         }
       | undefined,
   ) => unknown;
-  setInstance: (i: ReactFlowInstance | undefined) => unknown;
+  setInstance: (i: TypedFlowInstance | undefined) => unknown;
   otherData:
     | {
         violations?: EvaluationResPerNodes;

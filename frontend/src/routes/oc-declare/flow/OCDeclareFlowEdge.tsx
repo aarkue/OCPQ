@@ -18,11 +18,11 @@ import { getRandomStringColor } from "@/lib/random-colors";
 import { ContextMenuArrow } from '@radix-ui/react-context-menu';
 import { LuArrowLeft, LuArrowRight, LuArrowLeftRight, LuHash, LuShapes, LuXCircle, LuTrendingUp } from 'react-icons/lu';
 import React, { Fragment, useContext, useEffect, useMemo, useState } from "react";
-import asSvg from "../icons/as.svg?url";
-import dfSvg from "../icons/df.svg?url";
-import dpSvg from "../icons/dp.svg?url";
-import efSvg from "../icons/ef.svg?url";
-import epSvg from "../icons/ep.svg?url";
+const asSvg = "/as.svg";
+const dfSvg = "/df.svg";
+const dpSvg = "/dp.svg";
+const efSvg = "/ef.svg";
+const epSvg = "/ep.svg";
 const DISTANCE_FACTOR = 16;
 const interactionWidth = 20;
 
@@ -151,7 +151,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
               fill="none"
               //   strokeOpacity={0}
               strokeWidth={interactionWidth}
-              className={clsx("react-flow__edge-interaction stroke-transparent hover:stroke-gray-400/5", selected && "!stroke-gray-400/10 hover:!stroke-gray-400/15")}
+              className={clsx("react-flow__edge-interaction stroke-transparent hover:stroke-gray-400/5", selected && "stroke-gray-400/10! hover:stroke-gray-400/15!")}
             />
           )}
         </ContextMenuTrigger>
@@ -159,6 +159,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
           <ContextMenuItem onClick={() => {
             setInfoSheetState({type: "edge-duration-statistics", edge: flowEdgeToOCDECLARE(edge,flow)})
           }}>
+            <MdBarChart   className='size-4 mr-1'/>
             View Statistics
             </ContextMenuItem>
 
@@ -173,7 +174,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
                   flow.updateEdge(id, { data: { ...data, type: et }, ...getMarkersForEdge(et, id) })
                 }}>
 
-                  <span className="w-[3rem]">{getArcTypeDisplayName(et)}</span> <span className="inline-block relative">
+                  <span className="w-12">{getArcTypeDisplayName(et)}</span> <span className="inline-block relative">
                     {et.includes("n") && <span className={clsx("absolute top-1/2 -translate-y-1/2 tracking-[-1pt] text-xs", !et.includes("rev") && "right-[20%]", et.includes("rev") && "right-[0%]")}>//</span>}
                     <img src={ArrowSVGs[et]} className="size-5 scale-150 ml-3" />
                   </span>
@@ -230,7 +231,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
       </ContextMenu>
       <EdgeLabelRenderer>
         <EdgeLabel transform={`translate(${modifiedPos.targetX}px,${modifiedPos.targetY}px)  translate(-50%, -50%)  rotate(${Math.round(slopeDegreeReal)}deg) translate(-50%,0)  translate(-8pt,-7pt) ${Math.abs(slopeDegreeReal) >= 90 ? "scale(-1,-1)" : ""}`} label={<span className="text-gray-500 font-medium">
-          <div className="gap-x-1 flex !text-[8.5pt]">
+          <div className="gap-x-1 flex text-[8.5pt]!">
             {/* <ShowAllObjectTypeAssociationsOfType type="each" associations={data.objectTypes.each} colors={allInvolvedObjectTypesWithColor} /> */}
             <ShowAllObjectTypeAssociationsOfType type="all" associations={data.objectTypes.all} colors={allInvolvedObjectTypesWithColor} />
             <ShowAllObjectTypeAssociationsOfType type="any" associations={data.objectTypes.any} colors={allInvolvedObjectTypesWithColor} />
@@ -239,9 +240,9 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
         } />
         {data.violationInfo !== undefined &&
           <EdgeLabel transform={`translate(${labelX}px,${labelY}px)  translate(-50%, -50%)  rotate(${Math.round(slopeDegree)}deg)   translate(0,${Math.abs(slopeDegreeReal) <= 90 ? "6.5pt" : "6.5pt"})`}
-            label={<div className=" flex flex-col items-center min-w-[1.5rem]" style={{ "--violation-color": getColorForViolationPercentage(data.violationInfo.violationPercentage) } as React.CSSProperties}>
-              <Progress className="w-[1.5rem] !h-0.5 [&>*]:bg-[var(--violation-color)]" value={100 - data.violationInfo.violationPercentage} />
-              <span style={{ color: "var(--violation-color)" }} className="text-gray-500 block -mt-[1px] font-medium text-[5pt] ">{Math.round(100 * (100 - data.violationInfo.violationPercentage)) / 100}%</span>
+            label={<div className=" flex flex-col items-center min-w-6" style={{ "--violation-color": getColorForViolationPercentage(data.violationInfo.violationPercentage) } as React.CSSProperties}>
+              <Progress className="w-6 h-0.5! *:bg-(--violation-color)" value={100 - data.violationInfo.violationPercentage} />
+              <span style={{ color: "var(--violation-color)" }} className="text-gray-500 block -mt-px font-medium text-[5pt] ">{Math.round(100 * (100 - data.violationInfo.violationPercentage)) / 100}%</span>
             </div>} />
         }
         {/* <EdgeLabel transform={`translate(-50%, -50%) translate(${modifiedPos.sourceX}px,${modifiedPos.sourceY}px) ${(targetPos === Position.Top) ? "translate(8px,9px)" : targetPos === Position.Left ? "translate(12px,-11px)" : targetPos === Position.Bottom ? "translate(8px,-9px)" : "translate(-11px,-11px)"} `}
@@ -310,7 +311,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
             <path d="M-10,0 L-8,20 L-5,20 L-7,0 Z" fill="var(--arrow-primary,black)" />
             <path d="M0,0 L20,9.5 L20,10 L20,10.5 L0,20 Z " fill="var(--arrow-primary,black)" />
           </g>}
-          {data.objectTypes.each.length > 0 && <text className="font-medium  !text-[14pt]" transform={Math.abs(slopeDegreeReal) > 90 ? `scale(-1,-1) translate(-${36 + eachText.length * 9},0)` : "scale(1,1)"} fill={`url(#${gradientID}-start)`} dx="14" dy="-9">{Math.abs(slopeDegreeReal) <= 90 && "∀"} {eachText} {Math.abs(slopeDegreeReal) > 90 && "∀"}</text>
+          {data.objectTypes.each.length > 0 && <text className="font-medium  text-[14pt]!" transform={Math.abs(slopeDegreeReal) > 90 ? `scale(-1,-1) translate(-${36 + eachText.length * 9},0)` : "scale(1,1)"} fill={`url(#${gradientID}-start)`} dx="14" dy="-9">{Math.abs(slopeDegreeReal) <= 90 && "∀"} {eachText} {Math.abs(slopeDegreeReal) > 90 && "∀"}</text>
           }
           <circle cx="0" cy="0" r="10" fill={`url(#${gradientID}-start)`} strokeWidth="2" stroke="var(--arrow-primary,black)" />
         </marker>
@@ -357,6 +358,8 @@ import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
 import { ObjectTypeAssociation } from "../types/ObjectTypeAssociation";
 import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
 import { InfoSheetContext } from "@/InfoSheet";
+import { IoBarChart } from "react-icons/io5";
+import { MdBarChart } from "react-icons/md";
 
 function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: boolean, initialValue: OCDeclareArcLabel, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
   const [value, setValue] = useState(initialValue);
@@ -371,15 +374,15 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: b
       onClose(value);
     }
   }}>
-    <DialogContent className="min-h-[30rem]">
+    <DialogContent className="min-h-120">
       <DialogHeader>
         <DialogTitle>Edit Edge Object Involvement</DialogTitle>
         <DialogDescription>
           Modify the object involvments of this edge.
         </DialogDescription>
         <div className="mt-2 flex flex-col h-full">
-          {(["each", "all", "any"] as const).map(t => <div key={t} className="relative min-h-[4rem]">
-            <div className="flex w-[6rem] justify-between">
+          {(["each", "all", "any"] as const).map(t => <div key={t} className="relative min-h-16">
+            <div className="flex w-24 justify-between">
               <h3 className="font-medium text-xl ml-2">{t}</h3>
             </div>
             <ul className="ml-6 flex  flex-wrap gap-2">
@@ -484,7 +487,7 @@ function ShowObjectTypeAssociation({ t, colors }: { t: ObjectTypeAssociation, co
   </span>
     {/* ~ */}
     {t.reversed && "<"}
-    {/* <ChevronLeft className="inline-block size-[7pt] -mb-[1px] -mx-0.5" /> */}
+    {/* <ChevronLeft className="inline-block size-[7pt] -mb-px -mx-0.5" /> */}
 
     {!t.reversed && ">"}
     <span style={{ color: colors?.find(x => x.type === t.second)?.color }}>

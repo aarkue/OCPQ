@@ -1,14 +1,12 @@
 import { BackendProviderContext } from "@/BackendProviderContext";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { ImageIcon } from "@radix-ui/react-icons";
 import { toBlob, toSvg } from "html-to-image";
 import { useCallback, useContext, useEffect, useRef } from "react";
-import { ReactFlow, Node, EdgeTypes, NodeTypes, OnConnect, ReactFlowInstance, useEdgesState, Edge, Background, Controls, Panel, ConnectionLineType, ReactFlowJsonObject } from "@xyflow/react";;
+import { ReactFlow, EdgeTypes, NodeTypes, OnConnect, ReactFlowInstance, useEdgesState, Edge, Background, Controls, Panel, ConnectionLineType, ReactFlowJsonObject } from "@xyflow/react";;
 import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
-import { Input } from "@/components/ui/input";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, v4 } from 'uuid';
 import { ActivityNodeType, CustomEdgeType, CustomEdgeData, EdgeType } from "./oc-declare-flow-types";
 import { OCDeclareFlowNode } from "./OCDeclareFlowNode";
 import OCDeclareFlowEdge from "./OCDeclareFlowEdge";
@@ -119,7 +117,7 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
   const onConnect = useCallback<OnConnect>((connection) => {
     const source = flowRef.current!.getNode(connection.source!);
     const target = flowRef.current!.getNode(connection.target!);
-    if (source === undefined || target === undefined ||  source.id === target.id) {
+    if (source === undefined || target === undefined || source.id === target.id) {
       return false;
     }
     let objectTypes: OCDeclareArcLabel = { "each": [{ type: "Simple", object_type: "orders" }], any: [], all: [] };
@@ -132,7 +130,7 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
     }
     return flowRef.current?.setEdges((edges) => {
       const edgeType: EdgeType = source.data.isObject || target.data.isObject ? "as" : "ef";
-      const id = Math.random() + connection.source! + "@" + connection.sourceHandle + "-" + connection.target + "@" + connection.targetHandle;
+      const id = v4();
       const newEdge: Edge<CustomEdgeData> = {
         source: connection.source!,
         target: connection.target!,
@@ -295,8 +293,21 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
           addPastedData(nodes, edges);
           toast("Pasted selection!", { icon: <LuClipboardPaste /> });
         } catch (e) {
-          toast("Failed to parse pasted data. Try using Alt+C to copy nodes.");
-          console.error("Failed to parse JSON on paste: ", pastedNodesAndEdges);
+          try {
+            const rustResult = JSON.parse(pastedNodesAndEdges);
+            if (typeof rustResult === 'object' && 'length' in rustResult) {
+
+              console.log({ rustResult });
+              addArcsToFlow(rustResult,flowRef.current!);
+            } else {
+              throw new Error("Pasted is not an JSON array");
+            }
+          }
+          catch (e) {
+
+            toast("Failed to parse pasted data. Try using Alt+C to copy nodes.");
+            console.error("Failed to parse JSON on paste: ", pastedNodesAndEdges);
+          }
         }
         ev.preventDefault();
       }
@@ -360,7 +371,9 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
           flowRef.current?.addNodes({ id: uuidv4(), type: "activity", data: { type: "pay order" }, position: flowRef.current.screenToFlowPosition({ x: ev.clientX, y: ev.clientY }) })
         }}>Add Node</ContextMenuItem>
       </ContextMenuContent>
-    </ContextMenu><ReactFlow className='react-flow outer-flow w-full h-full border'
+    </ContextMenu>
+  <div className="outer-flow w-full h-full">
+    <ReactFlow className='react-flow'
       onInit={(i) => {
         if (initialFlowJson && "nodes" in initialFlowJson && "edges" in initialFlowJson && "viewport" in initialFlowJson) {
           i.setNodes(initialFlowJson.nodes);
@@ -381,7 +394,7 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
       }}
       edgeTypes={edgeTypes}
       maxZoom={12}
-      minZoom={0.3}
+      minZoom={0.01}
       onNodesChange={onModelChange}
       onViewportChange={onModelChange}
       onConnect={onConnect}
@@ -427,15 +440,15 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
             }}>Load JSON</Button>         <Button title="Delete all" size="sm" onClick={() => { flowRef.current?.setNodes([]); flowRef.current?.setEdges([]); }} variant="destructive">Delete all</Button>
 
 */}
-        <Button onClick={ async () => {
+        <Button onClick={async () => {
           const selectedEdges = flowRef.current!.getEdges().filter(e => e.selected);
           const edges = (selectedEdges.length > 0 ? selectedEdges : flowRef.current!.getEdges());
           const edgeIDs = edges.map(e => e.id);
           const edgesConverted = edges.map(e => flowEdgeToOCDECLARE(e, flowRef.current!));
 
-          const res = await toast.promise(backend['ocel/evaluate-oc-declare-arcs'](edgesConverted),{loading: "Evaluating...", error: "Evaluation Failed", success: "Evaluated!"});
-          for(let i = 0; i <edgeIDs.length; i++){
-            flowRef.current?.updateEdgeData(edgeIDs[i], {violationInfo: {violationPercentage: 100 * res[i]}})
+          const res = await toast.promise(backend['ocel/evaluate-oc-declare-arcs'](edgesConverted), { loading: "Evaluating...", error: "Evaluation Failed", success: "Evaluated!" });
+          for (let i = 0; i < edgeIDs.length; i++) {
+            flowRef.current?.updateEdgeData(edgeIDs[i], { violationInfo: { violationPercentage: 100 * res[i] } })
           }
         }}>Evaluate</Button>
         <Button variant="outline" title="Download Image" onClick={(ev) => {
@@ -560,7 +573,7 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
           <path d="M0,0 L20,9.5 L20,10 L20,10.5 L0,20 Z " fill="var(--arrow-primary,black)" />
         </marker>
       </defs>
-    </svg></>
+    </svg></div></>
 }
 
 

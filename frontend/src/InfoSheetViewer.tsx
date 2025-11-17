@@ -32,17 +32,11 @@ export default function InfoSheetViewer() {
   </Sheet>
 }
 
-import Plot, { PlotParams } from "react-plotly.js";
+import Plot from "react-plotly.js";
 import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
+import { DialogTitle } from "@radix-ui/react-dialog";
+import { getRandomStringColor } from "./lib/random-colors";
 
-const PLOT_COLORS = [
-  '#636EFA', // Plotly blue
-  '#EF553B', // Plotly orange
-  '#00CC96', // Plotly green
-  '#AB63FA', // Plotly purple
-  '#FFA15A', // Plotly light orange
-  '#19D3F3', // Plotly cyan
-];
 function ActivityFrequenciesSheet({ activity }: { activity: string }) {
   const backend = useContext(BackendProviderContext);
   const activityStats = useQuery({ queryKey: ["ocel", "activity-stats", activity], queryFn: () => backend["ocel/get-activity-statistics"](activity) });
@@ -106,9 +100,9 @@ function ActivityFrequenciesSheet({ activity }: { activity: string }) {
     {activityStats.data !== undefined && <>
       <div className="flex w-full h-full gap-x-4">
         <Plot useResizeHandler className="h-full w-full"
-          data={sortedObjectTypes.map((ot, index) =>
+          data={sortedObjectTypes.map((ot) =>
           ({
-            type: "histogram", marker: { color: PLOT_COLORS[index % PLOT_COLORS.length], line: { width: 0.5 } },
+              type: "histogram", marker: { color: getRandomStringColor(ot) , line: { width: 0.5 } },
             opacity: 0.4, histnorm: "percent", name: ot, x: activityStats.data.num_obs_of_ot_per_ev[ot]
           }))}
           layout={{
@@ -124,8 +118,8 @@ function ActivityFrequenciesSheet({ activity }: { activity: string }) {
           config={commonConfig}
         />
         <Plot useResizeHandler className="h-full w-full"
-          data={sortedObjectTypes.map((ot, index) => ({
-            type: "histogram", marker: { color: PLOT_COLORS[index % PLOT_COLORS.length], line: { width: 0.5 } }, autobinx: false,
+          data={sortedObjectTypes.map((ot) => ({
+            type: "histogram", marker: { color: getRandomStringColor(ot), line: { width: 0.5 } }, autobinx: false,
             opacity: 0.4, histnorm: "percent", name: ot, x: activityStats.data.num_evs_per_ot_type[ot]
           }))}
           layout={{
@@ -308,7 +302,9 @@ function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
   const isReversed = plotData.x.length > 0 && plotData.x[plotData.x.length - 1] >= 0;
 
   return <div className="w-full h-full">
+    <DialogTitle asChild>
     <h2 className="font-semibold text-2xl">Time between <span className="bg-green-400/40 px-2 -mx-0.5 rounded-sm ">{edge.from}</span> and <span className="bg-orange-400/40 px-2 -mx-0.5 rounded-sm ">{edge.to}</span></h2>
+    </DialogTitle>
     {durationStats.isLoading && <Spinner />}
     {durationStats.data !== undefined && <>
       <div className="flex w-full h-full gap-x-4">

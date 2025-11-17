@@ -59,8 +59,11 @@ import {
 } from "./types/hpc-backend";
 import { type OCELInfo } from "./types/ocel";
 import { InfoSheetContext, InfoSheetState } from "./InfoSheet";
-import { Z_TREES } from "zlib";
 import InfoSheetViewer from "./InfoSheetViewer";
+import { TbBinaryTree, TbSquareRoundedNumber4Filled, TbTable } from "react-icons/tb";
+import { PiGraphFill, PiInfoDuotone, PiInfoLight, PiTable } from "react-icons/pi";
+import { FaArrowsTurnToDots, FaTableList } from "react-icons/fa6";
+import { CgArrowsExpandRight, CgArrowsExpandUpRight } from "react-icons/cg";
 const VALID_OCEL_MIME_TYPES = [
   "application/json",
   "text/json",
@@ -138,11 +141,11 @@ function App() {
             }}
           >
             <AlertDialogTrigger asChild>
-              <Button className="mt-8" variant="ghost">
-                Backend Mode:{" "}
-                <span className="font-bold ml-1">
-                  {backendMode === "local" ? "local" : "HPC"}
+              <Button className="mt-8 text-xs" variant="ghost">
+                <span className="mr-1">
+                  {backendMode === "local" ? "Local" : "HPC"}
                 </span>
+                Backend
               </Button>
             </AlertDialogTrigger>
             {step !== undefined && (
@@ -219,7 +222,7 @@ function App() {
                               <BsCheckCircleFill className="inline-block mr-1 size-4 " />
                               Logged in successfully!
                             </div>
-                            <div className="grid grid-cols-[7rem,1fr] gap-1 items-center">
+                            <div className="grid grid-cols-[7rem_1fr] gap-1 items-center">
                               <Label>CPUs</Label>
                               <Input
                                 type="number"
@@ -311,7 +314,7 @@ function App() {
                                 >
                                   {jobStatus.status.status}
                                 </div>
-                                <div className="grid grid-cols-[auto,1fr] gap-x-1">
+                                <div className="grid grid-cols-[auto_1fr] gap-x-1">
                                   {jobStatus.status.status === "RUNNING" && (
                                     <>
                                       <span>Start:</span>{" "}
@@ -342,10 +345,10 @@ function App() {
                     )}
                   </div>
                 </div>
-                <AlertDialogFooter className="!justify-between">
+                <AlertDialogFooter className="justify-between!">
                   <AlertDialogCancel
                     disabled={loading}
-                    className="!mr-full !ml-0"
+                    className="!mr-full ml-0!"
                   >
                     Cancel
                   </AlertDialogCancel>
@@ -648,7 +651,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
 
   function setOcelInfoAndNavigate(info: OCELInfo | undefined) {
     setOcelInfo(info);
-    queryClient.invalidateQueries({queryKey: ['ocel']});
+    queryClient.invalidateQueries({ queryKey: ['ocel'] });
     if (info !== null) {
       navigate("/ocel-info");
     }
@@ -657,13 +660,13 @@ function InnerApp({ children }: { children?: ReactNode }) {
   return (
     <OcelInfoContext.Provider value={ocelInfo}>
       <InfoSheetContext.Provider value={{ infoSheetState: infoSheet, setInfoSheetState: setInfoSheet }}>
-        <div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[15rem_auto]">
-          <div className="bg-gray-50 border-r border-r-slate-200 px-2 overflow-auto">
+        <div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[12rem_auto]">
+          <div className="bg-sky-50/50 border-r border-r-slate-200 px-2 overflow-auto">
             <img
               src="/favicon.png"
-              className="w-[6rem] h-[6rem] mx-auto mt-4 mb-2"
+              className="w-24 h-24 mx-auto mt-4 mb-2"
             />
-            <h2 className="font-bold text-3xl bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-sky-600 tracking-tighter">
+            <h2 className="font-black text-3xl bg-clip-text text-transparent bg-linear-to-r from-slate-800 to-sky-600 tracking-tighter">
               OCPQ
             </h2>
             <div className="flex flex-col gap-2 mt-1 text-xs">
@@ -678,35 +681,46 @@ function InnerApp({ children }: { children?: ReactNode }) {
                 </span>
               )}
               {ocelInfo != null && (
-                <span className="flex flex-col items-center mx-auto text-xl">
+                <span className="flex flex-col items-center mx-auto text-sm leading-tight">
                   <span className=" font-semibold text-green-700">
                     OCEL loaded
                   </span>
-                  <span className="text-sm grid grid-cols-[auto,1fr] text-right gap-x-2 items-baseline">
+                  <span className="text-xs grid grid-cols-[auto_1fr] text-right gap-x-2 leading-tight items-baseline">
                     <span className="font-mono">{ocelInfo.num_events}</span> <span className="text-left">Events</span>
                     <span className="font-mono">{ocelInfo.num_objects}</span> <span className="text-left">Objects</span>
                   </span>
                 </span>
               )}
               {ocelInfo != null && (
-                <>
-                  <MenuLink to="/ocel-info">OCEL Info</MenuLink>
-                  <MenuLink to="/graph">Graph</MenuLink>
-                  <MenuLink
-                    to="/constraints"
-                    classNames={[
-                      "bg-purple-200 hover:bg-purple-300 bg-purple-100 border-purple-300",
-                    ]}
-                  >
-                    Queries & Constraints
+                <div className="flex flex-col gap-y-1 w-[11rem] mx-auto">
+                  <MenuLink to="/ocel-info" classNames="bg-blue-300/20">OCEL Info
+
+                    <TbTable className="ml-2" />
                   </MenuLink>
-                  <MenuLink to={"/oc-declare"}>OC-DECLARE</MenuLink>
-                </>
+                  <MenuLink to="/graph" classNames="bg-sky-300/20">Instance Graph
+
+                    <PiGraphFill className="ml-2" />
+                  </MenuLink>
+                  <br />
+                  <MenuLink classNames="bg-purple-300/40"
+                    to="/constraints"
+                  // classNames={
+                  //   "bg-purple-200 hover:bg-purple-300 bg-purple-100 border-purple-300"
+                  // }
+                  >
+                    OCPQ (Queries)
+                    <TbBinaryTree className="ml-2" />
+                  </MenuLink>
+                  <MenuLink to={"/oc-declare"} classNames="bg-emerald-300/40">OC-DECLARE
+
+                    <CgArrowsExpandUpRight className="ml-2 rotate-45" />
+                  </MenuLink>
+                </div>
               )}
               <br />
               {!isAtRoot && (
                 <>
-                  <MenuLink to={"/"}>Load another dataset</MenuLink>
+                  <MenuLink to={"/"} classNames="text-xs text-center bg-transparent border-transparent justify-center">Load another dataset</MenuLink>
                 </>
               )}
               <UpdateButton />
@@ -902,7 +916,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
             <Outlet />
           </div>
         </div>
-      <InfoSheetViewer/>
+        <InfoSheetViewer />
       </InfoSheetContext.Provider>
     </OcelInfoContext.Provider>
   );

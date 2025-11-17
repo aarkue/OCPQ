@@ -28,7 +28,7 @@ export default function SituationIndicator({
     >
       <div className={clsx("flex items-center justify-center text-sm")}>
         <RiHashtag
-          className={clsx("h-4 mt-[1px] block text-muted-foreground")}
+          className={clsx("h-4 mt-px block text-muted-foreground")}
         />
         {violationsPerNode.situationCount}
       </div>

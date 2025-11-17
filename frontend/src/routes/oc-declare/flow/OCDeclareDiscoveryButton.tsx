@@ -25,7 +25,8 @@ export type OCDeclareDiscoveryOptions = {
 
 }
 const DEFAULT_OC_DECLARE_DISCOVERY_OPTIONS: OCDeclareDiscoveryOptions = {
-  noise_threshold: 0.2, o2o_mode: "None", counts_for_generation: [1, null], counts_for_filter: [1, 20], reduction: "Lossless", considered_arrow_types: ["AS", "EF", "EP", "DP", "DF"]
+  noise_threshold: 0.2, o2o_mode: "None", counts_for_generation: [1, null], counts_for_filter: [1, 20], reduction: "Lossless",
+  considered_arrow_types: ["AS", "EF", "EP"]
 }
 export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { onConstraintsDiscovered: (arcs: OCDeclareArc[]) => unknown }) {
   const backend = useContext(BackendProviderContext);
@@ -105,7 +106,7 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
     onSubmit={async (data) => {
       wasCancelledRef.current = false;
       console.log("Discovery with options", data);
-      const res = await toast.promise(backend['ocel/discover-oc-declare'](data), { loading: "Discovering...", error: "Discovery failed.", success: "Discovery finished!" }, { id: "oc-declare-discovery" });
+      const res = await toast.promise(backend['ocel/discover-oc-declare'](data), { loading: "Discovering...", error: "Discovery failed.", success: (e) => `Discovery finished!\nFound ${e.length} constraints.` }, { id: "oc-declare-discovery" });
       if (!wasCancelledRef.current) {
         onConstraintsDiscovered(res);
       } else {

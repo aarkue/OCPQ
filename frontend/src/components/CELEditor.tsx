@@ -866,7 +866,7 @@ export default function CELEditor({
       value={cel}
       language="cel"
       onChange={onChange}
-      className="min-h-[10rem] rounded !bg-white !opacity-100 border-2 "
+      className="min-h-40 rounded bg-white! opacity-100! border-2 "
       onMount={(editor) => {
         editor.updateOptions({
           fontSize: 16,

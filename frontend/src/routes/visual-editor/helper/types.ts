@@ -24,9 +24,9 @@ export type GateNodeData = { type: "not" | "or" | "and" };
 
 export type TimeConstraint = { minSeconds: number; maxSeconds: number };
 export type EventTypeLinkData = {
-  color: string;
-  minCount: number | null;
-  maxCount: number | null;
+  color?: string;
+  minCount?: number | null;
+  maxCount?: number | null;
   name?: string;
 };
 

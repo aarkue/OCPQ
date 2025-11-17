@@ -75,8 +75,8 @@ export default function AlertHelper<T>(props: AlertHelperProps<T>) {
             close={() => setOpen(false)}
           />
         </div>
-        <AlertDialogFooter className="!justify-between">
-          <AlertDialogCancel className="!mr-full !ml-0">
+        <AlertDialogFooter className="justify-between!">
+          <AlertDialogCancel className="!mr-full ml-0!">
             Cancel
           </AlertDialogCancel>
           {props.submitAction !== undefined && (

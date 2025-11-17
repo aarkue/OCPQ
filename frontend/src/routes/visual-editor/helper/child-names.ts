@@ -1,4 +1,4 @@
-import { type Edge } from "reactflow";
+import { type Edge } from "@xyflow/react";
 import { type EventTypeLinkData } from "./types";
 
 export function getAvailableChildNamesWithEdges(

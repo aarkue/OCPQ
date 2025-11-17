@@ -300,7 +300,7 @@ export default function VisualEditorOuter() {
                       "grid w-full px-4 text-center",
                       activeIndex !== undefined &&
                       constraints[activeIndex] !== undefined &&
-                      "grid-cols-[1fr,1fr,1fr]",
+                      "grid-cols-[1fr_1fr_1fr]",
                       (activeIndex === undefined ||
                         constraints[activeIndex] === undefined) &&
                       "grid-cols-1 max-w-sm mx-auto h-full",
@@ -486,7 +486,7 @@ export default function VisualEditorOuter() {
                     {activeIndex !== undefined &&
                       constraints[activeIndex] !== undefined && (
                         <div className="">
-                          <p className="h-[1.5rem] text-xs lg:text-base">Selected Query</p>
+                          <p className="h-6 text-xs lg:text-base">Selected Query</p>
                           <div
                             className="w-full flex flex-col gap-y-1 px-2"
                             key={activeIndex}
@@ -516,7 +516,7 @@ export default function VisualEditorOuter() {
                               />
                               <div className="px-2">
                                 <Textarea
-                                  className="max-h-[2.5rem]"
+                                  className="max-h-10"
                                   defaultValue={
                                     constraints[activeIndex].description
                                   }
@@ -542,7 +542,7 @@ export default function VisualEditorOuter() {
                     {activeIndex !== undefined &&
                       constraints[activeIndex] !== undefined && (
                         <div className="text-xs lg:text-base">
-                          <p className="h-[1.5rem]">Query Info</p>
+                          <p className="h-6">Query Info</p>
                           <div className="px-2 border rounded flex flex-col items-center justify-around w-full">
                             {prevDataRef.current[activeIndex]?.flowJson !==
                               undefined
@@ -571,7 +571,7 @@ export default function VisualEditorOuter() {
                   {activeIndex !== undefined &&
                     constraints[activeIndex] !== undefined && (
                       <div className="relative w-full h-full">
-                        <div className="xl:w-full min-h-[35rem] h-full border border-blue-100 rounded-sm p-2">
+                        <div className="xl:w-full min-h-140 h-full border border-blue-100 rounded-sm p-2">
                           {
                             ocelInfo !== undefined && (
                               <>
