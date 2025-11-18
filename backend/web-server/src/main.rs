@@ -23,6 +23,7 @@ use ocpq_shared::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
         ExportFormat, FilterExportWithBoxTreeRequest,
     },
+    db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
         auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
         AutoDiscoverConstraintsResponse,
@@ -112,6 +113,7 @@ async fn main() {
         )
         .route("/ocel/graph", post(ocel_graph_req))
         .route("/ocel/check-constraints-box", post(check_with_box_tree_req))
+        .route("/ocel/create-db-query", post(translate_to_db_req))
         .route(
             "/ocel/export-filter-box",
             post(filter_export_with_box_tree_req),
@@ -356,6 +358,11 @@ pub async fn get_oc_declare_edge_statistics_handler(
         get_edge_stats(ocel, &req)
     }))
 }
+
+pub async fn translate_to_db_req(Json(req): Json<DBTranslationInput>) -> String {
+    translate_to_sql_shared(req)
+}
+
 pub async fn export_bindings_table(
     state: State<AppState>,
     Json((node_index, table_options)): Json<(usize, TableExportOptions)>,

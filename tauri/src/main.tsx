@@ -26,6 +26,7 @@ import ReactDOM from "react-dom/client";
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { EvaluateBoxTreeResult } from "$/types/generated/EvaluateBoxTreeResult";
+import { DBTranslationInput } from "$/types/DBTranslationInput";
 
 
 const tauriBackend: BackendProvider = {
@@ -114,7 +115,7 @@ const tauriBackend: BackendProvider = {
 
   },
   "ocel/get-activity-statistics": async (activity) => {
-    return await invoke("get_oc_declare_activity_statistics",{activity})
+    return await invoke("get_oc_declare_activity_statistics", { activity })
   },
   "ocel/export-bindings": async (nodeIndex, options) => {
     const res: undefined = await invoke("export_bindings_table", { nodeIndex, options });
@@ -125,6 +126,10 @@ const tauriBackend: BackendProvider = {
   },
   "ocel/get-event": async (req) => {
     return await invoke("get_event", { req });
+  },
+  "/ocel/create-db-query": async (req: DBTranslationInput) => {
+    return await invoke("create_db_query", { input: req })
+
   },
   "ocel/get-object": async (req) => {
     return await invoke("get_object", { req });

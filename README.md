@@ -1,6 +1,8 @@
 # OCPQ (Object-Centric Process Querying)
 [__Download__](https://github.com/aarkue/ocpq/releases/latest)
 
+See __[ocpq.aarkue.eu](https://ocpq.aarkue.eu)__ for more info and documentation!
+
 
 ## Installation
 You can download the automatically cross-compiled installers for the latest release from [__github.com/aarkue/ocpq/releases/latest__](https://github.com/aarkue/ocpq/releases/latest).
@@ -154,15 +156,15 @@ The discovered Constraints are automatically added to the list of constraints an
 
 ## Development
 
-We use `cargo` and `npm`, so please ensure they are available by installing them (i.e., Rust and Node).
-Then, install all dependencies (e.g., using `npm i` inside the `frontend` folder)
+We use `cargo` and `pnpm`, so please ensure they are available by installing them (i.e., Rust and Node).
+Then, install all dependencies (e.g., using `pnpm i` inside the `frontend` folder)
 
-For the full-stack web application navigate to the `backend/web-server` folder and run `cargo run --release` to start the backend and navigate to the `frontend` folder and execute `npm run dev` to start the frontend. 
+For the full-stack web application navigate to the `backend/web-server` folder and run `cargo run --release` to start the backend and navigate to the `frontend` folder and execute `pnpm run dev` to start the frontend. 
 By default, the backend server is available at `http://localhost:3000` while the frontend is available at `http://localhost:5173/`.
 
 
 For the desktop application, tauri (https://tauri.app/) is used.
-To run the desktop application, simply run `npm run tauri dev -- --release` inside the `tauri` folder.
+To run the desktop application, simply run `pnpm run tauri dev -- --release` inside the `tauri` folder.
 
 
 Currently, there are few unnecessary warning messages in the output when running or building the frontend with vite.

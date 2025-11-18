@@ -76,7 +76,7 @@ export default function AlertHelper<T>(props: AlertHelperProps<T>) {
           />
         </div>
         <AlertDialogFooter className="justify-between!">
-          <AlertDialogCancel className="!mr-full ml-0!">
+          <AlertDialogCancel className="mr-full! ml-0!">
             Cancel
           </AlertDialogCancel>
           {props.submitAction !== undefined && (
@@ -88,8 +88,11 @@ export default function AlertHelper<T>(props: AlertHelperProps<T>) {
                   setLoading(true);
                   void props
                     .onSubmit(data, ev,open === false)
-                    .then(() => {
+                    .then((x) => {
                       setLoading(false);
+                      if(x === false){
+                        return;
+                      }
                       setOpen(false);
                     })
                     .finally(() => {

@@ -19,6 +19,8 @@ import type {
 import { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
 import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
 import { ActivityStatistics } from "./types/generated/ActivityStatistics";
+import { warn } from "console";
+import { DBTranslationInput } from "./types/DBTranslationInput";
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;
@@ -57,6 +59,7 @@ export type BackendProvider = {
   "hpc/start": (jobOptions: OCPQJobOptions) => Promise<string>;
   "hpc/job-status": (jobID: string) => Promise<JobStatus>;
   "download-blob": (blob: Blob, fileName: string) => unknown;
+  "/ocel/create-db-query": (req: DBTranslationInput) => Promise<string>;
   // Register drag/drop listener, returns unregister function
   "drag-drop-listener"?: (f: (args: ({ type: "enter", path: string } | { type: "leave" } | { type: "drop", path: string })) => unknown) => Promise<(() => unknown)>,
   "ocel/get-initial-files"?: () => Promise<string[]>,
@@ -98,6 +101,7 @@ export async function warnForNoBackendProvider<T>(): Promise<T> {
 export const ErrorBackendContext: BackendProvider = {
   "ocel/info": warnForNoBackendProvider,
   "ocel/check-constraints-box": warnForNoBackendProvider,
+  "/ocel/create-db-query": warnForNoBackendProvider,
   "ocel/export-filter-box": warnForNoBackendProvider,
   "ocel/event-qualifiers": warnForNoBackendProvider,
   "ocel/object-qualifiers": warnForNoBackendProvider,
@@ -208,6 +212,15 @@ export function getAPIServerBackendProvider(
           headers: {},
         })
       ).json();
+    },
+    "/ocel/create-db-query": async (input) => {
+      return await (
+        await fetch(localBackendURL + "/ocel/create-db-query", {
+          method: "post",
+          body: JSON.stringify(input),
+          headers: { "Content-Type": "application/json" },
+        })
+      ).text();
     },
     "ocel/object-qualifiers": async () => {
       return await (

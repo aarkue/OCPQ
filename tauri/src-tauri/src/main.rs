@@ -17,6 +17,7 @@ use ocpq_shared::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
         ExportFormat, FilterExportWithBoxTreeRequest,
     },
+    db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
         auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
         AutoDiscoverConstraintsResponse,
@@ -348,6 +349,11 @@ async fn ocel_graph(
         },
         None => Err("No OCEL loaded".to_string()),
     }
+}
+
+#[tauri::command(async)]
+async fn ocel_graph(input: DBTranslationInput) -> String {
+    translate_to_sql_shared(input)
 }
 
 #[tauri::command(async)]

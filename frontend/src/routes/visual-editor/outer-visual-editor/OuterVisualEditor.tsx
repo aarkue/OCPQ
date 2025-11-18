@@ -158,7 +158,7 @@ export default function VisualEditorOuter() {
           )}
         >
           <h4
-            className="text-sm"
+            className="text-sm font-semibold"
             title={
               constraint.name !== ""
                 ? constraint.name
@@ -303,7 +303,7 @@ export default function VisualEditorOuter() {
                       "grid-cols-[1fr_1fr_1fr]",
                       (activeIndex === undefined ||
                         constraints[activeIndex] === undefined) &&
-                      "grid-cols-1 max-w-sm mx-auto h-full",
+                      "grid-cols-1  h-full",
                     )}
                   >
                     <div className="flex flex-col w-full h-full relative">
@@ -356,6 +356,11 @@ export default function VisualEditorOuter() {
                       </Dialog>
                       <div>
                         <div className="flex justify-center gap-x-2 items-center w-full mb-2">
+                        {activeIndex === undefined && <div className="mr-auto text-left">
+
+                        <h2 className="text-4xl font-black bg-clip-text text-transparent tracking-tighter bg-linear-to-t from-sky-400 to-teal-600">OCPQ</h2>
+                        <h4 className="font-semibold text-lg tracking-tight">Object-Centric Process Queries</h4>
+                           </div>}
                           <AlertHelper
                             trigger={
                               <Button

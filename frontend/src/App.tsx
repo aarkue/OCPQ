@@ -60,10 +60,9 @@ import {
 import { type OCELInfo } from "./types/ocel";
 import { InfoSheetContext, InfoSheetState } from "./InfoSheet";
 import InfoSheetViewer from "./InfoSheetViewer";
-import { TbBinaryTree, TbSquareRoundedNumber4Filled, TbTable } from "react-icons/tb";
-import { PiGraphFill, PiInfoDuotone, PiInfoLight, PiTable } from "react-icons/pi";
-import { FaArrowsTurnToDots, FaTableList } from "react-icons/fa6";
-import { CgArrowsExpandRight, CgArrowsExpandUpRight } from "react-icons/cg";
+import { TbBinaryTree, TbTable } from "react-icons/tb";
+import { PiGraphFill } from "react-icons/pi";
+import { CgArrowsExpandUpRight } from "react-icons/cg";
 const VALID_OCEL_MIME_TYPES = [
   "application/json",
   "text/json",
@@ -141,7 +140,7 @@ function App() {
             }}
           >
             <AlertDialogTrigger asChild>
-              <Button className="mt-8 text-xs" variant="ghost">
+              <Button className="mt-8 mb-1 text-xs" size="sm" variant="ghost">
                 <span className="mr-1">
                   {backendMode === "local" ? "Local" : "HPC"}
                 </span>
@@ -661,7 +660,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
     <OcelInfoContext.Provider value={ocelInfo}>
       <InfoSheetContext.Provider value={{ infoSheetState: infoSheet, setInfoSheetState: setInfoSheet }}>
         <div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[12rem_auto]">
-          <div className="bg-sky-50/50 border-r border-r-slate-200 px-2 overflow-auto">
+          <div className="border-r border-r-slate-300 px-2 overflow-auto">
             <img
               src="/favicon.png"
               className="w-24 h-24 mx-auto mt-4 mb-2"
@@ -670,16 +669,6 @@ function InnerApp({ children }: { children?: ReactNode }) {
               OCPQ
             </h2>
             <div className="flex flex-col gap-2 mt-1 text-xs">
-              {backendAvailable && (
-                <span className="text-green-700 font-semibold bg-green-200 w-fit mx-auto p-1 rounded">
-                  Backend online
-                </span>
-              )}
-              {!backendAvailable && (
-                <span className="text-red-700 font-semibold bg-red-200 w-fit mx-auto p-1 rounded">
-                  Backend offline
-                </span>
-              )}
               {ocelInfo != null && (
                 <span className="flex flex-col items-center mx-auto text-sm leading-tight">
                   <span className=" font-semibold text-green-700">
@@ -693,25 +682,22 @@ function InnerApp({ children }: { children?: ReactNode }) {
               )}
               {ocelInfo != null && (
                 <div className="flex flex-col gap-y-1 w-[11rem] mx-auto">
-                  <MenuLink to="/ocel-info" classNames="bg-blue-300/20">OCEL Info
+                  <MenuLink to="/ocel-info" classNames="bg-blue-300/10 border-blue-300/20 hover:bg-blue-300/50 [.active]:border-blue-400 [.active]:bg-blue-300/70">OCEL Info
 
                     <TbTable className="ml-2" />
                   </MenuLink>
-                  <MenuLink to="/graph" classNames="bg-sky-300/20">Instance Graph
+                  <MenuLink to="/graph" classNames="bg-sky-300/10 border-sky-300/20 hover:bg-sky-300/50 [.active]:border-sky-400 [.active]:bg-sky-300/70">Relationship Graph
 
                     <PiGraphFill className="ml-2" />
                   </MenuLink>
-                  <br />
-                  <MenuLink classNames="bg-purple-300/40"
+                  <br className="my-1" />
+                  <MenuLink classNames="bg-purple-300/20 border-purple-300/30 hover:bg-purple-300/70 [.active]:border-purple-400 [.active]:bg-purple-300/80"
                     to="/constraints"
-                  // classNames={
-                  //   "bg-purple-200 hover:bg-purple-300 bg-purple-100 border-purple-300"
-                  // }
                   >
                     OCPQ (Queries)
                     <TbBinaryTree className="ml-2" />
                   </MenuLink>
-                  <MenuLink to={"/oc-declare"} classNames="bg-emerald-300/40">OC-DECLARE
+                  <MenuLink to={"/oc-declare"} classNames="bg-emerald-300/20 border-emerald-300/30 hover:bg-emerald-300/60 [.active]:border-emerald-400 [.active]:bg-emerald-300/70">OC-DECLARE
 
                     <CgArrowsExpandUpRight className="ml-2 rotate-45" />
                   </MenuLink>
@@ -720,11 +706,23 @@ function InnerApp({ children }: { children?: ReactNode }) {
               <br />
               {!isAtRoot && (
                 <>
-                  <MenuLink to={"/"} classNames="text-xs text-center bg-transparent border-transparent justify-center">Load another dataset</MenuLink>
+                  <MenuLink to={"/"} classNames="text-xs text-center bg-transparent border-transparent justify-center hover:bg-sky-50">Load another dataset</MenuLink>
                 </>
               )}
               <UpdateButton />
               {children}
+            </div>
+            <div className="text-xs">
+              {backendAvailable && (
+                <span className="text-green-700 font-semibold bg-green-200 w-fit mx-auto p-1 rounded">
+                  Backend online
+                </span>
+              )}
+              {!backendAvailable && (
+                <span className="text-red-700 font-semibold bg-red-200 w-fit mx-auto p-1 rounded">
+                  Backend offline
+                </span>
+              )}
             </div>
           </div>
           <div className="px-4 overflow-auto my-4">

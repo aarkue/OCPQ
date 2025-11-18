@@ -484,7 +484,7 @@ function GraphOptions({
   return (
     <div className="max-h-full overflow-y-auto px-2">
       <div className="h-fit">
-        <h3 className="font-semibold mb-1"> Relationship Graph </h3>
+        <h3 className="mb-1 font-black"> Relationship Graph </h3>
         <div className="flex flex-col gap-y-1 mb-4">
           <div className="flex gap-x-1 items-center">
             <Label className="w-[9ch] cursor-help" title="Entity type (i.e., Object/Event) of the Object/Event to query">Root Type</Label>

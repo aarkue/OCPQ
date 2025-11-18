@@ -30,9 +30,9 @@ export default function OCDeclareListPage() {
 
   return <div className="text-left h-full overflow-hidden flex flex-col">
 
-    <h2 className="text-3xl font-black bg-clip-text text-transparent tracking-tighter bg-linear-to-t from-orange-400 to-pink-600">OC-DECLARE</h2>
-    <h4 className="font-medium text-lg tracking-tight">Object-Centric Declarative Constraints</h4>
-    <div className="flex justify-between items-center mb-1">
+    <h2 className="text-4xl font-black bg-clip-text text-transparent tracking-tighter bg-linear-to-t from-orange-400 to-pink-600">OC-DECLARE</h2>
+    <h4 className="font-semibold text-lg tracking-tight">Object-Centric Declarative Constraints</h4>
+    <div className="flex justify-between items-center my-1">
       
     <Button className="cursor-pointer"
       // size="lg"

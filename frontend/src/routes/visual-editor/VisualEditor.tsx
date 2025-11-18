@@ -7,7 +7,8 @@ import {
   type ReactNode,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import {ReactFlow,
+import {
+  ReactFlow,
   Background,
   Controls,
   MarkerType,
@@ -25,7 +26,6 @@ import Spinner from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import "@/lib/editor-loader";
 import type { BindingBoxTreeNode } from "@/types/generated/BindingBoxTreeNode";
 import type { EventVariable } from "@/types/generated/EventVariable";
@@ -42,7 +42,7 @@ import {
 } from "react-icons/lu";
 import { PiPlayFill } from "react-icons/pi";
 import { RxReset } from "react-icons/rx";
-import { TbFileExport, TbLogicAnd, TbPlus, TbSquare } from "react-icons/tb";
+import { TbDatabaseEdit, TbDatabaseLeak, TbFileExport, TbFilter, TbLogicAnd, TbPlus, TbSquare } from "react-icons/tb";
 import "@xyflow/react/dist/style.css";
 import type { OCELInfo, OCELType } from "../../types/ocel";
 import ViolationDetailsSheet from "./ViolationDetailsSheet";
@@ -79,8 +79,9 @@ import {
 } from "@/components/ui/context-menu";
 import { getAvailableChildNamesWithEdges } from "./helper/child-names";
 import { isEditorElementTarget } from "@/lib/flow-helper";
-import EventTypeLink from "./helper/EventTypeLink";
 import { v4 } from "uuid";
+import { Toggle } from "@/components/ui/toggle";
+import DatabaseTranslationButton from "./helper/DatabaseTranslationButton";
 
 interface VisualEditorProps {
   ocelInfo: OCELInfo;
@@ -91,7 +92,7 @@ interface VisualEditorProps {
 export default function VisualEditor(props: VisualEditorProps) {
   const { setInstance, registerOtherDataGetter, otherData, flushData } =
     useContext(FlowContext);
-  const instance = useReactFlow<Node<EventTypeNodeData|GateNodeData>,Edge<EventTypeLinkData>>();
+  const instance = useReactFlow<Node<EventTypeNodeData | GateNodeData>, Edge<EventTypeLinkData>>();
 
   const [violationDetails, setViolationDetails] = useState<{
     id: string;
@@ -256,18 +257,18 @@ export default function VisualEditor(props: VisualEditorProps) {
     ): OCELType[] => {
       const edges = instance.getEdges();
       let node = instance.getNode(nodeID) as
-        | Node<EventTypeNodeData|GateNodeData>
+        | Node<EventTypeNodeData | GateNodeData>
         | undefined;
       while (
         node != null &&
         (
-        !("box" in node.data)  || !(
-          variable in
-          (type === "event"
-            ? node.data.box.newEventVars
-            : node.data.box.newObjectVars)
-        )
-      )) {
+          !("box" in node.data) || !(
+            variable in
+            (type === "event"
+              ? node.data.box.newEventVars
+              : node.data.box.newObjectVars)
+          )
+        )) {
         node = instance.getNode(getParentNodeID(node.id, edges) ?? "-");
       }
       if (node != null && "box" in node.data) {
@@ -441,9 +442,9 @@ export default function VisualEditor(props: VisualEditorProps) {
       ev.preventDefault();
       if (ev.clipboardData !== null) {
         const data = JSON.stringify(selectedRef.current);
-          await navigator.clipboard.writeText(
-            JSON.stringify(selectedRef.current),
-          );
+        await navigator.clipboard.writeText(
+          JSON.stringify(selectedRef.current),
+        );
         // ev.clipboardData.setData("application/json+ocpq-flow", data);
       }
       toast("Copied selection!", { icon: <LuClipboardCopy /> });
@@ -625,7 +626,6 @@ export default function VisualEditor(props: VisualEditorProps) {
         getNodeIDByName,
         filterMode,
         showElementInfo: (elInfo) => {
-          console.log('jo', JSON.stringify(elInfo));
           setElementInfo(elInfo ? { ...elInfo } : undefined);
         },
         getVarName: (variable, type) => {
@@ -636,32 +636,10 @@ export default function VisualEditor(props: VisualEditorProps) {
           };
         },
         onNodeDataChange: (id, newData) => {
-          instance.setNodes((ns) => {
-            // setNodes((ns) => {
-            const newNodes = [...ns];
-            const changedNodeIndex = newNodes.findIndex((n) => n.id === id);
-            if (newData === undefined) {
-              newNodes.splice(changedNodeIndex, 1);
-              // instance.setEdges((edges) =>
-              //   [...edges].filter((e) => e.source !== id && e.target !== id),
-              // );
-              return newNodes;
-            }
-            const changedNode = newNodes[changedNodeIndex];
-            if (changedNode?.data !== undefined) {
-              changedNode.data = {
-                ...changedNode.data,
-                ...newData,
-              };
-            } else {
-              console.warn("Did not find changed node data");
-            }
-            return newNodes;
-          });
           if (newData === undefined) {
-            instance.setEdges((edges) =>
-              edges.filter((e) => e.source !== id && e.target !== id),
-            );
+            instance.deleteElements({ nodes: [{ id }] })
+          } else {
+            instance.updateNodeData(id, newData)
           }
         },
         onEdgeDataChange: (id, newData) => {
@@ -754,148 +732,8 @@ export default function VisualEditor(props: VisualEditorProps) {
         }}
       >
         <Controls onInteractiveChange={() => { }} />
-        <Panel position="top-right" className="flex gap-x-2">
-          <Button
-            variant="outline"
-            size="icon"
-            title="Auto layout (Alt+L)"
-            className="bg-white"
-            onClick={async () => await autoLayout()}
-          >
-            <LuLayoutDashboard />
-          </Button>
+        <Panel position="top-right" className="flex flex-row-reverse gap-x-2">
 
-          <Button
-            variant="outline"
-            size="icon"
-            title="Save as Image (PNG, hold Shift for SVG)"
-            className="bg-white"
-            onClick={(ev) => {
-              const button = ev.currentTarget;
-              button.disabled = true;
-              const scaleFactor = 2.0;
-              const viewPort = document.querySelector(
-                ".react-flow__viewport",
-              ) as HTMLElement;
-              const useSVG = ev.shiftKey;
-              void (useSVG ? toSvg : toBlob)(viewPort, {
-                canvasHeight: viewPort.clientHeight * scaleFactor,
-                canvasWidth: viewPort.clientWidth * scaleFactor,
-                filter: (node) =>
-                  node.classList === undefined ||
-                  !node.classList.contains("hide-in-image"),
-              })
-                .then(async (dataURLOrBlob) => {
-                  let blob = dataURLOrBlob;
-                  if (typeof blob === "string") {
-                    blob = await (await fetch(blob)).blob();
-                  }
-                  if (blob) {
-                    backend["download-blob"](
-                      blob,
-                      `${props.constraintInfo.name}.${useSVG ? "svg" : "png"}`,
-                    );
-                  }
-                })
-                .finally(() => {
-                  button.disabled = false;
-                });
-            }}
-          >
-            <ImageIcon />
-          </Button>
-          {props.children}
-          <AlertHelper
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-            initialData={{ type: "not" } as GateNodeData}
-            trigger={
-              <Button
-                variant="outline"
-                title="Add Gate"
-                className="bg-white relative"
-                onClick={() => { }}
-              >
-                <TbLogicAnd size={20} />
-                <TbPlus
-                  strokeWidth={"3px"}
-                  size={12}
-                  className="absolute right-1.5 bottom-1.5"
-                />
-              </Button>
-            }
-            title={"Add Gate"}
-            submitAction={"Submit"}
-            onSubmit={(data) => {
-              instance.setNodes((nodes) => {
-                const center =
-                  instance != null
-                    ? instance.screenToFlowPosition({
-                      x: window.innerWidth / 2,
-                      y: window.innerHeight / 2,
-                    })
-                    : { x: 0, y: 0 };
-                return [
-                  ...nodes,
-                  {
-                    id: "gate" + Date.now(),
-                    type: GATE_NODE_TYPE,
-                    position: center,
-                    data: {
-                      type: data.type,
-                    },
-                  },
-                ];
-              });
-            }}
-            content={({ data, setData }) => {
-              const sortedOcelEventTypes = [...props.ocelInfo.event_types];
-              sortedOcelEventTypes.sort((a, b) => a.name.localeCompare(b.name));
-              return (
-                <>
-                  <p className="mb-2">
-                    Please select the type of gate to add below.
-                  </p>
-                  <Combobox
-                    value={data.type}
-                    onChange={(v) => {
-                      setData({ ...data, type: v as GateNodeData["type"] });
-                    }}
-                    name="Gate Type"
-                    options={ALL_GATE_TYPES.map((t) => ({
-                      label: t,
-                      value: t,
-                    }))}
-                  ></Combobox>
-                </>
-              );
-            }}
-          />
-          <Button
-            variant="outline"
-            title="Add Node (Alt+N)"
-            className="bg-white relative"
-            onClick={() => {
-              addNewNode();
-            }}
-          >
-            <TbSquare size={16} className="mr-0.5" />
-            <TbPlus
-              strokeWidth={"3px"}
-              size={12}
-              className="absolute right-1.5 bottom-1.5"
-            />
-          </Button>
-          <div className="flex flex-col items-center gap-y-1 min-w-12 min-h-20">
-            <label className="flex flex-col text-sm">
-              Filter
-              <Switch
-                checked={filterMode === "shown"}
-                onCheckedChange={(checked) => {
-                  setFilterMode(checked ? "shown" : "hidden");
-                }}
-              />
-            </label>
-          </div>
           <div className="flex flex-col items-center gap-y-1">
             <Button
               disabled={isEvaluationLoading}
@@ -1110,6 +948,7 @@ export default function VisualEditor(props: VisualEditorProps) {
                 }}
               />
             )}
+
             {violationInfo.violationsPerNode !== undefined && (
               <Button
                 size="icon"
@@ -1124,6 +963,146 @@ export default function VisualEditor(props: VisualEditorProps) {
                 <RxReset size={16} />
               </Button>
             )}
+            <div className="flex flex-col gap-y-1 mt-1">
+              <Button
+                variant="outline"
+                size="icon"
+                title="Auto layout (Alt+L)"
+                className="bg-white"
+                onClick={async () => await autoLayout()}
+              >
+                <LuLayoutDashboard />
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+                title="Save as Image (PNG, hold Shift for SVG)"
+                className="bg-white"
+                onClick={(ev) => {
+                  const button = ev.currentTarget;
+                  button.disabled = true;
+                  const scaleFactor = 2.0;
+                  const viewPort = document.querySelector(
+                    ".react-flow__viewport",
+                  ) as HTMLElement;
+                  const useSVG = ev.shiftKey;
+                  void (useSVG ? toSvg : toBlob)(viewPort, {
+                    canvasHeight: viewPort.clientHeight * scaleFactor,
+                    canvasWidth: viewPort.clientWidth * scaleFactor,
+                    filter: (node) =>
+                      node.classList === undefined ||
+                      !node.classList.contains("hide-in-image"),
+                  })
+                    .then(async (dataURLOrBlob) => {
+                      let blob = dataURLOrBlob;
+                      if (typeof blob === "string") {
+                        blob = await (await fetch(blob)).blob();
+                      }
+                      if (blob) {
+                        backend["download-blob"](
+                          blob,
+                          `${props.constraintInfo.name}.${useSVG ? "svg" : "png"}`,
+                        );
+                      }
+                    })
+                    .finally(() => {
+                      button.disabled = false;
+                    });
+                }}
+              >
+                <ImageIcon />
+              </Button>
+            <DatabaseTranslationButton instance={instance}/>
+            </div>
+          </div>
+          {props.children}
+          <div className="flex  gap-1">
+            <div className="flex flex-col items-center gap-y-1 ">
+              <Toggle title="OCEL Filtering (For Export)" pressed={filterMode === "shown"} onPressedChange={(pressed) => {
+                setFilterMode(pressed ? "shown" : "hidden")
+              }}><TbFilter /> </Toggle>
+            </div>
+            <Button
+              variant="outline"
+              title="Add Node (Alt+N)"
+              className="bg-white relative"
+              onClick={() => {
+                addNewNode();
+              }}
+            >
+              <TbSquare size={16} className="mr-0.5" />
+              <TbPlus
+                strokeWidth={"3px"}
+                size={12}
+                className="absolute right-1.5 bottom-1.5"
+              />
+            </Button>
+            <AlertHelper
+              // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+              initialData={{ type: "not" } as GateNodeData}
+              trigger={
+                <Button
+                  variant="outline"
+                  title="Add Gate"
+                  className="bg-white relative"
+                  onClick={() => { }}
+                >
+                  <TbLogicAnd size={20} />
+                  <TbPlus
+                    strokeWidth={"3px"}
+                    size={12}
+                    className="absolute right-1.5 bottom-1.5"
+                  />
+                </Button>
+              }
+              title={"Add Gate"}
+              submitAction={"Submit"}
+              onSubmit={(data) => {
+                instance.setNodes((nodes) => {
+                  const center =
+                    instance != null
+                      ? instance.screenToFlowPosition({
+                        x: window.innerWidth / 2,
+                        y: window.innerHeight / 2,
+                      })
+                      : { x: 0, y: 0 };
+                  return [
+                    ...nodes,
+                    {
+                      id: "gate" + Date.now(),
+                      type: GATE_NODE_TYPE,
+                      position: center,
+                      data: {
+                        type: data.type,
+                      },
+                    },
+                  ];
+                });
+              }}
+              content={({ data, setData }) => {
+                const sortedOcelEventTypes = [...props.ocelInfo.event_types];
+                sortedOcelEventTypes.sort((a, b) => a.name.localeCompare(b.name));
+                return (
+                  <>
+                    <p className="mb-2">
+                      Please select the type of gate to add below.
+                    </p>
+                    <Combobox
+                      value={data.type}
+                      onChange={(v) => {
+                        setData({ ...data, type: v as GateNodeData["type"] });
+                      }}
+                      name="Gate Type"
+                      options={ALL_GATE_TYPES.map((t) => ({
+                        label: t,
+                        value: t,
+                      }))}
+                    ></Combobox>
+                  </>
+                );
+              }}
+            />
           </div>
         </Panel>
         <Background />
