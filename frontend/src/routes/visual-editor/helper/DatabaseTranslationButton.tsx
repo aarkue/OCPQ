@@ -55,7 +55,7 @@ export default function DatabaseTranslationButton({ instance }: { instance: Reac
     initialData={{ dialect: "SQLite" as "SQLite"|"DuckDB", objectMapping: getTranslationValue(ocelInfo.object_types.map(ot => ot.name)), eventMapping: getTranslationValue(ocelInfo.event_types.map(et => et.name)) }}
     content={({ data, setData }) => {
       return <div>
-        <p className="mb-2">Currently, some assumptions on the database are made.
+        <p className="mb-2">Currently, some assumptions on the database schema are made.
           For example, each object and event type is mapped to a single table, and certain attributes are expected exist as columns (e.g., ocel:id).
           The table mappings can be adjusted below.
         </p>
@@ -104,7 +104,7 @@ export default function DatabaseTranslationButton({ instance }: { instance: Reac
             <AccordionTrigger>
               Objects
             </AccordionTrigger>
-            <AccordionContent className="flex flex-col gap-1">
+            <AccordionContent className="flex flex-col gap-1 max-h-32 overflow-auto px-2">
               {Object.keys(data.objectMapping).map(ot => <div key={ot} className="flex gap-x-1 items-center">
                 <Input value={ot} readOnly disabled /> <TbArrowRight className="size-8" /> <Input key={data.objectMapping[ot]} defaultValue={data.objectMapping[ot]} onBlur={(ev) => {
                   data.objectMapping[ot] = ev.currentTarget.value;
@@ -117,7 +117,7 @@ export default function DatabaseTranslationButton({ instance }: { instance: Reac
             <AccordionTrigger>
               Events
             </AccordionTrigger>
-            <AccordionContent className="flex flex-col gap-1">
+            <AccordionContent className="flex flex-col gap-1 max-h-32 overflow-auto px-2">
               {Object.keys(data.eventMapping).map(ot => <div key={ot} className="flex gap-x-1 items-center">
                 <Input value={ot} readOnly disabled /> <TbArrowRight className="size-8" /> <Input key={data.eventMapping[ot]} defaultValue={data.eventMapping[ot]} onBlur={(ev) => {
                   data.eventMapping[ot] = ev.currentTarget.value;

@@ -352,8 +352,9 @@ async fn ocel_graph(
 }
 
 #[tauri::command(async)]
-async fn ocel_graph(input: DBTranslationInput) -> String {
-    translate_to_sql_shared(input)
+async fn create_db_query(input: DBTranslationInput,
+    state: State<'_, AppState>,) -> Result<String,String> {
+    Ok(translate_to_sql_shared(input))
 }
 
 #[tauri::command(async)]
@@ -513,7 +514,8 @@ fn main() {
             auto_discover_oc_declare,
             evaluate_oc_declare_arcs,
             get_oc_declare_edge_statistics,
-            get_oc_declare_activity_statistics
+            get_oc_declare_activity_statistics,
+            create_db_query
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

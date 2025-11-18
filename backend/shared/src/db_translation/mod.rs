@@ -60,15 +60,14 @@ DuckDB
 
 
 #[derive(Clone)]
-pub struct SqlParts{
+pub struct SqlParts<'a>{
     node: InterMediateNode,
     select_fields: Vec<String>,
     base_from: Vec<String>,
     join_clauses: Vec<String>,
     where_clauses: Vec<String>,
     child_sql: Vec<(String,String)>,
-    event_tables: HashMap<String,String>,
-    object_tables: HashMap<String,String>,
+    table_mappings: &'a TableMappings,
     used_keys: HashSet<String>,
     database_type: DatabaseType,
     alias_type_map: HashMap<String, String> 
@@ -79,6 +78,15 @@ pub struct SqlParts{
 pub struct TableMappings {
     pub event_tables: HashMap<String,String>,
     pub object_tables: HashMap<String,String>
+}
+
+impl TableMappings {
+    pub fn event_table<'a,'b: 'a>(&'b self,ev_type: &'a str) -> &'a str {
+        self.event_tables.get(ev_type).map(|table_name| table_name.as_str()).unwrap_or(ev_type)
+    }
+pub fn object_table<'a,'b: 'a>(&'b self,ob_type: &'a str) -> &'a str {
+        self.object_tables.get(ob_type).map(|table_name| table_name.as_str()).unwrap_or(ob_type)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,8 +116,7 @@ pub fn translate_to_sql_shared(
         join_clauses: vec![],
         where_clauses: vec![],
         child_sql: vec![],
-        event_tables: input.table_mappings.event_tables,
-        object_tables: input.table_mappings.object_tables,
+        table_mappings: &input.table_mappings,
         used_keys: HashSet::new(),
         database_type: input.database,
         alias_type_map: HashMap::new()
@@ -996,8 +1003,7 @@ pub fn construct_childstrings(sql_parts: &SqlParts) -> Vec<(String, String)> {
             join_clauses: vec![],
             where_clauses: vec![],
             child_sql: vec![],
-            event_tables: sql_parts.event_tables.clone(),
-            object_tables: sql_parts.object_tables.clone(),
+            table_mappings: sql_parts.table_mappings,
             used_keys: sql_parts.used_keys.clone(),
             database_type: sql_parts.database_type,
             alias_type_map: sql_parts.alias_type_map.clone()
@@ -1560,13 +1566,13 @@ pub fn map_objecttables(
 
         // Case SQLLite
         DatabaseType::SQLite =>{
-             return format!("\"object_{}\"", sql_parts.object_tables[object_type]);
+             return format!("\"object_{}\"", sql_parts.table_mappings.object_table(object_type));
         }
 
 
         //Case DuckDB
         DatabaseType::DuckDB =>{
-            return format!("\"object_{}\"", sql_parts.object_tables[object_type]);
+            return format!("\"object_{}\"", sql_parts.table_mappings.object_table(object_type));
         }
 
 
@@ -1585,13 +1591,13 @@ pub fn map_eventttables(
 
         // Case SQLLite
         DatabaseType::SQLite =>{
-            return format!("\"event_{}\"", sql_parts.event_tables[event_type]);
+            return format!("\"event_{}\"", sql_parts.table_mappings.event_table(event_type));
         }
 
 
         //Case DuckDB
         DatabaseType::DuckDB =>{
-            return format!("\"event_{}\"", sql_parts.event_tables[event_type]);
+            return format!("\"event_{}\"", sql_parts.table_mappings.event_table(event_type));
         }
 
 
