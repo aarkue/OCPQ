@@ -1,4 +1,4 @@
-FROM rust:1.86.0
+FROM rust:1.88.0
 WORKDIR /app-backend
 COPY . .
 RUN cargo install --path ./web-server
