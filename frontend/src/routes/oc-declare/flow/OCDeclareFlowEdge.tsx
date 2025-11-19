@@ -17,7 +17,7 @@ import { getEdgeParams } from './edge-helpers';
 import { getRandomStringColor } from "@/lib/random-colors";
 import { ContextMenuArrow } from '@radix-ui/react-context-menu';
 import React, { Fragment, useContext, useEffect, useMemo, useState } from "react";
-import { LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuHash, LuShapes, LuTrendingUp, LuXCircle } from 'react-icons/lu';
+import { LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuBadgeCheck, LuBadgePercent, LuHash, LuShapes, LuTrendingUp, LuXCircle } from 'react-icons/lu';
 const asSvg = "/as.svg";
 const dfSvg = "/df.svg";
 const dpSvg = "/dp.svg";
@@ -52,6 +52,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
   const { setInfoSheetState } = useContext(InfoSheetContext);
 
   const flow = useReactFlow<ActivityNodeType, CustomEdgeType>();
+  const backend = useContext(BackendProviderContext);
 
   if (!sourceNode || !targetNode) {
     return null;
@@ -96,11 +97,6 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
   } else if (slopeRad > 0.4 && slopeRad < 2.75) {
     tDir = Position.Bottom
   }
-  // const targetLeft = Math.abs(slopeRad) >= 2.75;
-  // const targetTop = slopeRad > -2.75 && slopeRad <= -0.415; 
-  // const targetRight = slopeRad > -0.415 && slopeRad <= 0.4;
-  // const targetBottom = slopeRad > 0.4 && slopeRad < 2.75;
-  // console.log(tDir)
   const invertGradient = (tDir === Position.Top || tDir === Position.Left);
   const correctedGradient = [...allInvolvedObjectTypesWithColor];
   if (invertGradient) {
@@ -121,10 +117,11 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
         </linearGradient>
       </defs>
       <path
+        // Key is required to prevent bug in Linux App, where the end marker is not updated correctly
+        key={markerEnd}
         id={id}
         className="react-flow__edge-path"
         d={edgePath}
-        // stroke-linecap="round"
         markerStart={`url(#start-${id})`}
         markerEnd={markerEnd}
         style={{
@@ -157,12 +154,20 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={() => {
-            setInfoSheetState({type: "edge-duration-statistics", edge: flowEdgeToOCDECLARE(edge,flow)})
+            setInfoSheetState({ type: "edge-duration-statistics", edge: flowEdgeToOCDECLARE(edge, flow) })
           }}>
-            <MdBarChart   className='size-4 mr-1'/>
+            <MdBarChart className='size-4 mr-1' />
             View Statistics
-            </ContextMenuItem>
+          </ContextMenuItem>
+          <ContextMenuItem onClick={async () => {
+            const res = await toast.promise(backend['ocel/evaluate-oc-declare-arcs']([flowEdgeToOCDECLARE(edge,flow)]), { loading: "Evaluating...", error: "Evaluation Failed", success: "Evaluated!" });
+            flow.updateEdgeData(id, { violationInfo: { violationPercentage: 100 * res[0] } })
+          }}>
+            <TbDiscountCheckFilled className='size-4 mr-1' />
+            Evaluate
+          </ContextMenuItem>
 
+          <ContextMenuSeparator />
           <ContextMenuSub>
             <ContextMenuSubTrigger>
               <LuTrendingUp className='size-4 mr-1' /> Edit Edge Type
@@ -171,7 +176,9 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
               <ContextMenuSubContent>
                 {ALL_EDGE_TYPES.map((et) => <ContextMenuCheckboxItem checked={data?.type === et} key={et} onClick={(ev) => {
                   ev.stopPropagation();
-                  flow.updateEdge(id, { data: { ...data, type: et }, ...getMarkersForEdge(et, id) })
+                  const markers = getMarkersForEdge(et, id);
+                  // flow.updateEdge(id, { markerStart: markers.markerStart, markerEnd: markers.markerEnd});
+                  flow.updateEdge(id, { data: { ...data, type: et }, ...markers })
                 }}>
 
                   <span className="w-12">{getArcTypeDisplayName(et)}</span> <span className="inline-block relative">
@@ -184,20 +191,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
               </ContextMenuSubContent>
             </ContextMenuPortal>
           </ContextMenuSub>
-          {/* <OCELInfoContext.Consumer>
-                        {({ ocelInfo }) => Object.keys(ocelInfo).length > 0 && <ContextMenuItem onClick={(ev) => {
-                            ev.stopPropagation();
-                            const x = flowEdgeToOCDECLARE(edge, flow);
-                            const violFrac = getEdgeViolationPerc(x);
-                            console.log(violFrac)
-                            flow.updateEdgeData(id, { violationInfo: { violationPercentage: 100 * violFrac } });
-                        }}>
-                            <AlignStartVertical className='size-4 mr-1' />
-                            Evaluate
-                        </ContextMenuItem>}
-                    </OCELInfoContext.Consumer> */}
 
-          <ContextMenuSeparator />
           <ContextMenuItem onClick={(ev) => {
             ev.stopPropagation();
             setShowDialog("ot-label");
@@ -361,10 +355,13 @@ import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-ty
 import { ActivityNodeData, ActivityNodeType, ALL_EDGE_TYPES, CustomEdgeType, EdgeType } from "./oc-declare-flow-types";
 import { getMarkersForEdge } from "./OCDeclareFlowEditor";
 import { OcelInfoContext } from "@/App";
-import { getNodeRelationshipSupport, getTypesRelationshipSupport, SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
+import { getTypesRelationshipSupport, SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
+import toast from "react-hot-toast";
+import { BackendProviderContext } from "@/BackendProviderContext";
+import { TbDiscountCheckFilled } from "react-icons/tb";
 
-function EditEdgeLabelsDialog({ open, initialValue, onClose, colors,sourceAct, targetAct }: { open: boolean, initialValue: OCDeclareArcLabel, sourceAct: ActivityNodeData, targetAct: ActivityNodeData, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
-  const [value, setValue] = useState({...initialValue});
+function EditEdgeLabelsDialog({ open, initialValue, onClose, colors, sourceAct, targetAct }: { open: boolean, initialValue: OCDeclareArcLabel, sourceAct: ActivityNodeData, targetAct: ActivityNodeData, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
+  const [value, setValue] = useState({ ...initialValue });
 
   const [addValue, setAddValue] = useState<{ mode: "each" | "all" | "any", t: ObjectTypeAssociation }>({ mode: "each", t: { type: "Simple", object_type: "" } })
   const ocelInfo = useContext(OcelInfoContext);
@@ -384,105 +381,105 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors,sourceAct, t
           Modify the object involvments of this edge.
         </DialogDescription>
       </DialogHeader>
-        <div className="flex flex-col h-full">
-          {(["each", "all", "any"] as const).map(t => <div key={t} className="relative min-h-16">
-            <div className="flex w-24 justify-between">
-              <h3 className="font-medium text-xl ml-2">{t}</h3>
-            </div>
-            <ul className="ml-6 flex  flex-wrap gap-2">
-              {value[t].map((ot, i) => <li key={i} onClick={() => {
-                setAddValue({mode: t,  t: ot})
-              }} className="border p-1 rounded relative">
-                <ShowObjectTypeAssociation t={ot} colors={colors} />
-                <LuXCircle className="absolute size-5 -right-2 -top-2 text-red-400 hover:text-red-600" tabIndex={1} onClick={() => {
-                  setValue((v) => {
-                    const changed = [...v[t]];
-                    changed.splice(i, 1);
-                    const newVal = { ...v, [t]: changed }
-                    return newVal;
-                  })
-                }} />
-              </li>)}
-            </ul>
-          </div>)}
-          <div className="border-t pt-2">
-            <datalist id="object-type-suggestions">
-                {ocelInfo?.object_types.map(ot => <option key={ot.name} value={ot.name} />)}
-            </datalist>
-            <h3 className="font-medium text-lg mb-2">Add Object Involvement</h3>
-            <ToggleGroup className="mb-2" type="single" variant="outline" value={addValue.mode} onValueChange={newMode => {
-              setAddValue({ mode: newMode as any, t: addValue.t })
-            }}>
-              <ToggleGroupItem value="each">Each</ToggleGroupItem>
-              <ToggleGroupItem value="all">All</ToggleGroupItem>
-              <ToggleGroupItem value="any">Any</ToggleGroupItem>
-            </ToggleGroup>
-
-            <Tabs defaultValue="Simple" value={addValue.t.type} onValueChange={(v) => {
-              setAddValue({ mode: addValue.mode, t: (v === "Simple" ? { type: "Simple", object_type: addValue.t.type === "O2O" ? addValue.t['first'] : "" } : { type: "O2O", first: addValue.t.type === "Simple" ? addValue.t.object_type : "", second: "", reversed: false }) })
-            }} className="">
-              <TabsList className="w-fit mx-auto block">
-                <TabsTrigger value="Simple">Simple (Direct)</TabsTrigger>
-                <TabsTrigger value="O2O">O2O (Indirect)</TabsTrigger>
-              </TabsList>
-              <TabsContent value="Simple">
-                {addValue.t.type === "Simple" && <>
-                  <div className="mt-1">
-                    <Input placeholder="Object Type" list="object-type-suggestions" type="text" value={addValue.t.object_type} onChange={(ev) => {
-                      setAddValue({ ...addValue, t: { type: "Simple", object_type: ev.currentTarget.value } })
-                    }} />
-                  </div>
-                </>}
-              </TabsContent>
-              <TabsContent value="O2O">
-                {addValue.t.type === "O2O" && <>
-                  <div className="flex gap-x-2 mt-1">
-
-                    <Input placeholder="Object Type" list="object-type-suggestions"  type="text" value={addValue.t.first} onChange={(ev) => {
-                      setAddValue({ ...addValue, t: { ...addValue.t as any, first: ev.currentTarget.value } })
-                    }} />
-                    <Button size="sm" variant="secondary" onClick={() => {
-                      setAddValue({ ...addValue, t: { ...addValue.t as any, reversed: !(addValue.t as any).reversed } })
-                    }}>
-                      {!addValue.t.reversed && <LuArrowRight />}
-                      {addValue.t.reversed && <LuArrowLeft />}
-                    </Button>
-                    <Input placeholder="Object Type" list="object-type-suggestions"  type="text" value={addValue.t.second} onChange={(ev) => {
-                      setAddValue({ ...addValue, t: { ...addValue.t as any, second: ev.currentTarget.value } })
-                    }} />
-                  </div>
-                  <div className="flex justify-center mt-1">
-                    <SupportDisplay text="O2O-Relations" support={getTypesRelationshipSupport(ocelInfo!,[!addValue.t.reversed ? addValue.t.first : addValue.t.second],[!addValue.t.reversed ? addValue.t.second : addValue.t.first], false)} />
-                  </div>
-                </>}
-              </TabsContent>
-              {addValue.t.type == "O2O"  && <div className="text-sm mt-2 gap-y-1 grid grid-cols-2 justify-between place-items-center items-center text-center">
-                  <span>{sourceAct.type}</span>
-                  <span>{targetAct.type}</span>
-                  <SupportDisplay text="E2O-Relations" support={sourceAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [sourceAct.type], [addValue.t.first], true) : 1} />
-                  <SupportDisplay text="E2O-Relations" support={getTypesRelationshipSupport(ocelInfo!, [targetAct.type], [addValue.t.second], true)} />
-                </div>}
-                {addValue.t.type == "Simple"  && <div className="text-sm mt-2 gap-y-1 grid grid-cols-2 justify-between place-items-center items-center text-center">
-                  <span>{sourceAct.type}</span>
-                  <span>{targetAct.type}</span>
-                  <SupportDisplay text="E2O-Relations" support={sourceAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [sourceAct.type], [addValue.t.object_type], true) :  1} />
-                  <SupportDisplay text="E2O-Relations" support={targetAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [targetAct.type], [addValue.t.object_type], true) : 1} />
-                </div>}
-                 
-              <Button className="mt-2 ml-auto block" onClick={() => {
+      <div className="flex flex-col h-full">
+        {(["each", "all", "any"] as const).map(t => <div key={t} className="relative min-h-16">
+          <div className="flex w-24 justify-between">
+            <h3 className="font-medium text-xl ml-2">{t}</h3>
+          </div>
+          <ul className="ml-6 flex  flex-wrap gap-2">
+            {value[t].map((ot, i) => <li key={i} onClick={() => {
+              setAddValue({ mode: t, t: ot })
+            }} className="border p-1 rounded relative">
+              <ShowObjectTypeAssociation t={ot} colors={colors} />
+              <LuXCircle className="absolute size-5 -right-2 -top-2 text-red-400 hover:text-red-600" tabIndex={1} onClick={() => {
                 setValue((v) => {
-                  const changed = [...(v[addValue.mode] ?? []), addValue.t]
-                  const newVal = { ...v, [addValue.mode]: [...new Set(changed)] }
+                  const changed = [...v[t]];
+                  changed.splice(i, 1);
+                  const newVal = { ...v, [t]: changed }
                   return newVal;
                 })
-              }}>Add</Button>
-            </Tabs>
-          </div>
+              }} />
+            </li>)}
+          </ul>
+        </div>)}
+        <div className="border-t pt-2">
+          <datalist id="object-type-suggestions">
+            {ocelInfo?.object_types.map(ot => <option key={ot.name} value={ot.name} />)}
+          </datalist>
+          <h3 className="font-medium text-lg mb-2">Add Object Involvement</h3>
+          <ToggleGroup className="mb-2" type="single" variant="outline" value={addValue.mode} onValueChange={newMode => {
+            setAddValue({ mode: newMode as any, t: addValue.t })
+          }}>
+            <ToggleGroupItem value="each">Each</ToggleGroupItem>
+            <ToggleGroupItem value="all">All</ToggleGroupItem>
+            <ToggleGroupItem value="any">Any</ToggleGroupItem>
+          </ToggleGroup>
+
+          <Tabs defaultValue="Simple" value={addValue.t.type} onValueChange={(v) => {
+            setAddValue({ mode: addValue.mode, t: (v === "Simple" ? { type: "Simple", object_type: addValue.t.type === "O2O" ? addValue.t['first'] : "" } : { type: "O2O", first: addValue.t.type === "Simple" ? addValue.t.object_type : "", second: "", reversed: false }) })
+          }} className="">
+            <TabsList className="w-fit mx-auto block">
+              <TabsTrigger value="Simple">Simple (Direct)</TabsTrigger>
+              <TabsTrigger value="O2O">O2O (Indirect)</TabsTrigger>
+            </TabsList>
+            <TabsContent value="Simple">
+              {addValue.t.type === "Simple" && <>
+                <div className="mt-1">
+                  <Input placeholder="Object Type" list="object-type-suggestions" type="text" value={addValue.t.object_type} onChange={(ev) => {
+                    setAddValue({ ...addValue, t: { type: "Simple", object_type: ev.currentTarget.value } })
+                  }} />
+                </div>
+              </>}
+            </TabsContent>
+            <TabsContent value="O2O">
+              {addValue.t.type === "O2O" && <>
+                <div className="flex gap-x-2 mt-1">
+
+                  <Input placeholder="Object Type" list="object-type-suggestions" type="text" value={addValue.t.first} onChange={(ev) => {
+                    setAddValue({ ...addValue, t: { ...addValue.t as any, first: ev.currentTarget.value } })
+                  }} />
+                  <Button size="sm" variant="secondary" onClick={() => {
+                    setAddValue({ ...addValue, t: { ...addValue.t as any, reversed: !(addValue.t as any).reversed } })
+                  }}>
+                    {!addValue.t.reversed && <LuArrowRight />}
+                    {addValue.t.reversed && <LuArrowLeft />}
+                  </Button>
+                  <Input placeholder="Object Type" list="object-type-suggestions" type="text" value={addValue.t.second} onChange={(ev) => {
+                    setAddValue({ ...addValue, t: { ...addValue.t as any, second: ev.currentTarget.value } })
+                  }} />
+                </div>
+                <div className="flex justify-center mt-1">
+                  <SupportDisplay text="O2O-Relations" support={getTypesRelationshipSupport(ocelInfo!, [!addValue.t.reversed ? addValue.t.first : addValue.t.second], [!addValue.t.reversed ? addValue.t.second : addValue.t.first], false)} />
+                </div>
+              </>}
+            </TabsContent>
+            {addValue.t.type == "O2O" && <div className="text-sm mt-2 gap-y-1 grid grid-cols-2 justify-between place-items-center items-center text-center">
+              <span>{sourceAct.type}</span>
+              <span>{targetAct.type}</span>
+              <SupportDisplay text="E2O-Relations" support={sourceAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [sourceAct.type], [addValue.t.first], true) : 1} />
+              <SupportDisplay text="E2O-Relations" support={getTypesRelationshipSupport(ocelInfo!, [targetAct.type], [addValue.t.second], true)} />
+            </div>}
+            {addValue.t.type == "Simple" && <div className="text-sm mt-2 gap-y-1 grid grid-cols-2 justify-between place-items-center items-center text-center">
+              <span>{sourceAct.type}</span>
+              <span>{targetAct.type}</span>
+              <SupportDisplay text="E2O-Relations" support={sourceAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [sourceAct.type], [addValue.t.object_type], true) : 1} />
+              <SupportDisplay text="E2O-Relations" support={targetAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [targetAct.type], [addValue.t.object_type], true) : 1} />
+            </div>}
+
+            <Button className="mt-2 ml-auto block" onClick={() => {
+              setValue((v) => {
+                const changed = [...(v[addValue.mode] ?? []), addValue.t]
+                const newVal = { ...v, [addValue.mode]: [...new Set(changed)] }
+                return newVal;
+              })
+            }}>Add</Button>
+          </Tabs>
         </div>
-    <DialogFooter>
-      <Button variant="secondary" onClick={() => onClose()}>Cancel</Button>
-      <Button onClick={() => onClose(value)}>Save</Button>
-    </DialogFooter>
+      </div>
+      <DialogFooter>
+        <Button variant="secondary" onClick={() => onClose()}>Cancel</Button>
+        <Button onClick={() => onClose(value)}>Save</Button>
+      </DialogFooter>
     </DialogContent>
   </Dialog>
 }
