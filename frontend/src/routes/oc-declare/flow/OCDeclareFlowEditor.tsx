@@ -17,6 +17,7 @@ import { applyLayoutToNodes, useLayoutedElements } from "./automatic-layout";
 import { isEditorElementTarget } from "@/lib/flow-helper";
 import toast from "react-hot-toast";
 import { OcelInfoContext } from "@/App";
+import { RxReset } from "react-icons/rx";
 
 export const nodeTypes = {
   'activity': OCDeclareFlowNode,
@@ -199,7 +200,6 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
       });
     }
     flowRef.current!.setNodes(origNodes);
-    console.log(isSelectionEmpty);
     if (isSelectionEmpty) {
       setTimeout(() => {
         flowRef.current?.fitView({ duration: 200, padding: 0.2 });
@@ -226,7 +226,6 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
       ev.preventDefault();
       if (ev.clipboardData !== null) {
         const data = JSON.stringify(selectedRef.current);
-        console.log({ ...selectedRef.current })
         ev.clipboardData.setData("application/json+oc-declare-flow", data);
         ev.clipboardData.setData("text/plain", data);
       }
@@ -245,7 +244,6 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
       const xOffset = x - nodeRect.x - firstNodeSize.width / 2;
       const yOffset = y - nodeRect.y - firstNodeSize.minHeight / 2;
       // Mutate nodes to update position and IDs (+ select them)
-      console.log({ nodes, edges })
       const newNodes = nodes.map((n) => ({
         id: idPrefix + n.id,
         position: { x: n.position.x + xOffset, y: n.position.y + yOffset },
@@ -293,7 +291,6 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
       if (!isEditorElementTarget(ev.target)) {
         return;
       }
-      console.log(ev);
       if (ev.clipboardData != null) {
         let pastedNodesAndEdges = ev.clipboardData.getData(
           "application/json+oc-declare-flow",
@@ -492,17 +489,31 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
             }}>Load JSON</Button>         <Button title="Delete all" size="sm" onClick={() => { flowRef.current?.setNodes([]); flowRef.current?.setEdges([]); }} variant="destructive">Delete all</Button>
 
 */}
-          <Button onClick={async () => {
-            const selectedEdges = flowRef.current!.getEdges().filter(e => e.selected);
-            const edges = (selectedEdges.length > 0 ? selectedEdges : flowRef.current!.getEdges());
-            const edgeIDs = edges.map(e => e.id);
-            const edgesConverted = edges.map(e => flowEdgeToOCDECLARE(e, flowRef.current!));
+          <div className="flex flex-row-reverse items-center gap-x-1">
 
-            const res = await toast.promise(backend['ocel/evaluate-oc-declare-arcs'](edgesConverted), { loading: "Evaluating...", error: "Evaluation Failed", success: "Evaluated!" });
-            for (let i = 0; i < edgeIDs.length; i++) {
-              flowRef.current?.updateEdgeData(edgeIDs[i], { violationInfo: { violationPercentage: 100 * res[i] } })
-            }
-          }}>Evaluate</Button>
+            <Button onClick={async () => {
+              const selectedEdges = flowRef.current!.getEdges().filter(e => e.selected);
+              const edges = (selectedEdges.length > 0 ? selectedEdges : flowRef.current!.getEdges());
+              const edgeIDs = edges.map(e => e.id);
+              const edgesConverted = edges.map(e => flowEdgeToOCDECLARE(e, flowRef.current!));
+
+              const res = await toast.promise(backend['ocel/evaluate-oc-declare-arcs'](edgesConverted), { loading: "Evaluating...", error: "Evaluation Failed", success: "Evaluated!" });
+              for (let i = 0; i < edgeIDs.length; i++) {
+                flowRef.current?.updateEdgeData(edgeIDs[i], { violationInfo: { violationPercentage: 100 * res[i] } })
+              }
+            }}>Evaluate</Button>
+            {edges.find(e => e.data?.violationInfo) !== undefined &&<Button
+              size="icon"
+              variant="outline"
+              title={"Clear evaluation"}
+              className=""
+              onClick={async () => {
+                flowRef!.current?.setEdges((eds) => eds.map(e => ({ ...e, data: { ...e.data!, violationInfo: undefined } })))
+              }}
+            >
+              <RxReset size={16} />
+            </Button>}
+          </div>
           <Button variant="outline" title="Download Image" onClick={(ev) => {
             const button = ev.currentTarget;
             button.disabled = true;
