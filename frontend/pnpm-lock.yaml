@@ -75,7 +75,7 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
       '@xyflow/react':
-        specifier: ^12.4.2
+        specifier: ^12.9.3
         version: 12.9.3(@types/react@18.3.26)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       class-variance-authority:
         specifier: ^0.7.0
@@ -165,9 +165,6 @@ importers:
       '@types/react-plotly.js':
         specifier: ^2.6.3
         version: 2.6.3
-      '@types/react-virtualized-auto-sizer':
-        specifier: ^1.0.4
-        version: 1.0.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react-window':
         specifier: ^1.8.8
         version: 1.8.8
@@ -1529,10 +1526,6 @@ packages:
 
   '@types/react-plotly.js@2.6.3':
     resolution: {integrity: sha512-HBQwyGuu/dGXDsWhnQrhH+xcJSsHvjkwfSRjP+YpOsCCWryIuXF78ZCBjpfgO3sCc0Jo8sYp4NOGtqT7Cn3epQ==}
-
-  '@types/react-virtualized-auto-sizer@1.0.8':
-    resolution: {integrity: sha512-keJpNyhiwfl2+N12G1ocCVA5ZDBArbPLe/S90X3kt7fam9naeHdaYYWbpe2sHczp70JWJ+2QLhBE8kLvLuVNjA==}
-    deprecated: This is a stub types definition. react-virtualized-auto-sizer provides its own type definitions, so you do not need this installed.
 
   '@types/react-window@1.8.8':
     resolution: {integrity: sha512-8Ls660bHR1AUA2kuRvVG9D/4XpRC6wjAaPT9dil7Ckc76eP9TKWZwwmgfq8Q1LANX3QNDnoU4Zp48A3w+zK69Q==}
@@ -5177,13 +5170,6 @@ snapshots:
     dependencies:
       '@types/plotly.js': 3.0.8
       '@types/react': 18.3.26
-
-  '@types/react-virtualized-auto-sizer@1.0.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
-    dependencies:
-      react-virtualized-auto-sizer: 1.0.26(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-    transitivePeerDependencies:
-      - react
-      - react-dom
 
   '@types/react-window@1.8.8':
     dependencies:
