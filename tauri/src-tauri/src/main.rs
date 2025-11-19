@@ -352,8 +352,10 @@ async fn ocel_graph(
 }
 
 #[tauri::command(async)]
-async fn create_db_query(input: DBTranslationInput,
-    state: State<'_, AppState>,) -> Result<String,String> {
+async fn create_db_query(
+    input: DBTranslationInput,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
     Ok(translate_to_sql_shared(input))
 }
 

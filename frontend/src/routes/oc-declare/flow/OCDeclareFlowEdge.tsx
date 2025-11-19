@@ -16,8 +16,8 @@ import { getEdgeParams } from './edge-helpers';
 
 import { getRandomStringColor } from "@/lib/random-colors";
 import { ContextMenuArrow } from '@radix-ui/react-context-menu';
-import { LuArrowLeft, LuArrowRight, LuArrowLeftRight, LuHash, LuShapes, LuXCircle, LuTrendingUp } from 'react-icons/lu';
 import React, { Fragment, useContext, useEffect, useMemo, useState } from "react";
+import { LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuHash, LuShapes, LuTrendingUp, LuXCircle } from 'react-icons/lu';
 const asSvg = "/as.svg";
 const dfSvg = "/df.svg";
 const dpSvg = "/dp.svg";
@@ -47,8 +47,8 @@ function orZero(n: number) {
 }
 export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { data: { type: string } }) {
   const { id, source, target, markerEnd, style, selected, data } = edge;
-  const sourceNode = useInternalNode(source);
-  const targetNode = useInternalNode(target);
+  const sourceNode = useInternalNode<ActivityNodeType>(source);
+  const targetNode = useInternalNode<ActivityNodeType>(target);
   const { setInfoSheetState } = useContext(InfoSheetContext);
 
   const flow = useReactFlow<ActivityNodeType, CustomEdgeType>();
@@ -133,7 +133,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
         } as React.CSSProperties
         }
       />
-      {showDialog === "ot-label" && <EditEdgeLabelsDialog open={showDialog === "ot-label"} initialValue={data.objectTypes} colors={allInvolvedObjectTypesWithColor} onClose={(value) => {
+      {showDialog === "ot-label" && <EditEdgeLabelsDialog open={showDialog === "ot-label"} sourceAct={sourceNode.data} targetAct={targetNode.data} initialValue={data.objectTypes} colors={allInvolvedObjectTypesWithColor} onClose={(value) => {
 
         setShowDialog(undefined);
         if (value !== undefined) {
@@ -344,6 +344,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
@@ -351,20 +352,22 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ActivityNodeType, ALL_EDGE_TYPES, CustomEdgeType, EdgeType } from "./oc-declare-flow-types";
-import { getMarkersForEdge } from "./OCDeclareFlowEditor";
-import { MinMaxDisplayWithSugar } from "./MinMaxSugar";
-import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
-import { ObjectTypeAssociation } from "../types/ObjectTypeAssociation";
-import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
 import { InfoSheetContext } from "@/InfoSheet";
-import { IoBarChart } from "react-icons/io5";
 import { MdBarChart } from "react-icons/md";
+import { ObjectTypeAssociation } from "../types/ObjectTypeAssociation";
+import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
+import { MinMaxDisplayWithSugar } from "./MinMaxSugar";
+import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
+import { ActivityNodeData, ActivityNodeType, ALL_EDGE_TYPES, CustomEdgeType, EdgeType } from "./oc-declare-flow-types";
+import { getMarkersForEdge } from "./OCDeclareFlowEditor";
+import { OcelInfoContext } from "@/App";
+import { getNodeRelationshipSupport, getTypesRelationshipSupport, SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
 
-function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: boolean, initialValue: OCDeclareArcLabel, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
-  const [value, setValue] = useState(initialValue);
+function EditEdgeLabelsDialog({ open, initialValue, onClose, colors,sourceAct, targetAct }: { open: boolean, initialValue: OCDeclareArcLabel, sourceAct: ActivityNodeData, targetAct: ActivityNodeData, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
+  const [value, setValue] = useState({...initialValue});
 
-  const [addValue, setAddValue] = useState<{ mode: "each" | "all" | "any", t: ObjectTypeAssociation }>({ mode: "each", t: { type: "Simple", object_type: "orders" } })
+  const [addValue, setAddValue] = useState<{ mode: "each" | "all" | "any", t: ObjectTypeAssociation }>({ mode: "each", t: { type: "Simple", object_type: "" } })
+  const ocelInfo = useContext(OcelInfoContext);
   useEffect(() => {
     setValue(initialValue);
   }, [initialValue]);
@@ -380,13 +383,16 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: b
         <DialogDescription>
           Modify the object involvments of this edge.
         </DialogDescription>
-        <div className="mt-2 flex flex-col h-full">
+      </DialogHeader>
+        <div className="flex flex-col h-full">
           {(["each", "all", "any"] as const).map(t => <div key={t} className="relative min-h-16">
             <div className="flex w-24 justify-between">
               <h3 className="font-medium text-xl ml-2">{t}</h3>
             </div>
             <ul className="ml-6 flex  flex-wrap gap-2">
-              {value[t].map((ot, i) => <li key={i} className="border p-1 rounded relative">
+              {value[t].map((ot, i) => <li key={i} onClick={() => {
+                setAddValue({mode: t,  t: ot})
+              }} className="border p-1 rounded relative">
                 <ShowObjectTypeAssociation t={ot} colors={colors} />
                 <LuXCircle className="absolute size-5 -right-2 -top-2 text-red-400 hover:text-red-600" tabIndex={1} onClick={() => {
                   setValue((v) => {
@@ -400,7 +406,10 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: b
             </ul>
           </div>)}
           <div className="border-t pt-2">
-            <h3 className="font-bold text-xl">Add</h3>
+            <datalist id="object-type-suggestions">
+                {ocelInfo?.object_types.map(ot => <option key={ot.name} value={ot.name} />)}
+            </datalist>
+            <h3 className="font-medium text-lg mb-2">Add Object Involvement</h3>
             <ToggleGroup className="mb-2" type="single" variant="outline" value={addValue.mode} onValueChange={newMode => {
               setAddValue({ mode: newMode as any, t: addValue.t })
             }}>
@@ -410,26 +419,26 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: b
             </ToggleGroup>
 
             <Tabs defaultValue="Simple" value={addValue.t.type} onValueChange={(v) => {
-              setAddValue({ mode: addValue.mode, t: (v === "Simple" ? { type: "Simple", object_type: addValue.t.type === "O2O" ? addValue.t['first'] : "" } : { type: "O2O", first: addValue.t.type === "Simple" ? addValue.t.object_type : "", second: "orders", reversed: false }) })
+              setAddValue({ mode: addValue.mode, t: (v === "Simple" ? { type: "Simple", object_type: addValue.t.type === "O2O" ? addValue.t['first'] : "" } : { type: "O2O", first: addValue.t.type === "Simple" ? addValue.t.object_type : "", second: "", reversed: false }) })
             }} className="">
               <TabsList className="w-fit mx-auto block">
                 <TabsTrigger value="Simple">Simple (Direct)</TabsTrigger>
                 <TabsTrigger value="O2O">O2O (Indirect)</TabsTrigger>
               </TabsList>
               <TabsContent value="Simple">
-                {addValue.t.type === "Simple" && <>Direct association of objects and events.
+                {addValue.t.type === "Simple" && <>
                   <div className="mt-1">
-                    <Input type="text" value={addValue.t.object_type} onChange={(ev) => {
+                    <Input placeholder="Object Type" list="object-type-suggestions" type="text" value={addValue.t.object_type} onChange={(ev) => {
                       setAddValue({ ...addValue, t: { type: "Simple", object_type: ev.currentTarget.value } })
                     }} />
                   </div>
                 </>}
               </TabsContent>
               <TabsContent value="O2O">
-                {addValue.t.type === "O2O" && <>Association through an object-to-object indirection.
+                {addValue.t.type === "O2O" && <>
                   <div className="flex gap-x-2 mt-1">
 
-                    <Input type="text" value={addValue.t.first} onChange={(ev) => {
+                    <Input placeholder="Object Type" list="object-type-suggestions"  type="text" value={addValue.t.first} onChange={(ev) => {
                       setAddValue({ ...addValue, t: { ...addValue.t as any, first: ev.currentTarget.value } })
                     }} />
                     <Button size="sm" variant="secondary" onClick={() => {
@@ -438,12 +447,28 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: b
                       {!addValue.t.reversed && <LuArrowRight />}
                       {addValue.t.reversed && <LuArrowLeft />}
                     </Button>
-                    <Input type="text" value={addValue.t.second} onChange={(ev) => {
+                    <Input placeholder="Object Type" list="object-type-suggestions"  type="text" value={addValue.t.second} onChange={(ev) => {
                       setAddValue({ ...addValue, t: { ...addValue.t as any, second: ev.currentTarget.value } })
                     }} />
                   </div>
+                  <div className="flex justify-center mt-1">
+                    <SupportDisplay text="O2O-Relations" support={getTypesRelationshipSupport(ocelInfo!,[!addValue.t.reversed ? addValue.t.first : addValue.t.second],[!addValue.t.reversed ? addValue.t.second : addValue.t.first], false)} />
+                  </div>
                 </>}
               </TabsContent>
+              {addValue.t.type == "O2O"  && <div className="text-sm mt-2 gap-y-1 grid grid-cols-2 justify-between place-items-center items-center text-center">
+                  <span>{sourceAct.type}</span>
+                  <span>{targetAct.type}</span>
+                  <SupportDisplay text="E2O-Relations" support={sourceAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [sourceAct.type], [addValue.t.first], true) : 1} />
+                  <SupportDisplay text="E2O-Relations" support={getTypesRelationshipSupport(ocelInfo!, [targetAct.type], [addValue.t.second], true)} />
+                </div>}
+                {addValue.t.type == "Simple"  && <div className="text-sm mt-2 gap-y-1 grid grid-cols-2 justify-between place-items-center items-center text-center">
+                  <span>{sourceAct.type}</span>
+                  <span>{targetAct.type}</span>
+                  <SupportDisplay text="E2O-Relations" support={sourceAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [sourceAct.type], [addValue.t.object_type], true) :  1} />
+                  <SupportDisplay text="E2O-Relations" support={targetAct.isObject === undefined ? getTypesRelationshipSupport(ocelInfo!, [targetAct.type], [addValue.t.object_type], true) : 1} />
+                </div>}
+                 
               <Button className="mt-2 ml-auto block" onClick={() => {
                 setValue((v) => {
                   const changed = [...(v[addValue.mode] ?? []), addValue.t]
@@ -454,7 +479,10 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors }: { open: b
             </Tabs>
           </div>
         </div>
-      </DialogHeader>
+    <DialogFooter>
+      <Button variant="secondary" onClick={() => onClose()}>Cancel</Button>
+      <Button onClick={() => onClose(value)}>Save</Button>
+    </DialogFooter>
     </DialogContent>
   </Dialog>
 }

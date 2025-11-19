@@ -82,7 +82,7 @@ pub fn get_activity_statistics(locel: &IndexLinkedOCEL, activity: &str) -> Activ
 }
 
 pub fn get_edge_stats(locel: &IndexLinkedOCEL, arc: &OCDeclareArc) -> Vec<i64> {
-    process_mining::object_centric::oc_declare::TriggerEvent::get_all_trigger_evs(
+    process_mining::object_centric::oc_declare::EventOrSynthetic::get_all_syn_evs(
         locel,
         arc.from.as_str(),
     )

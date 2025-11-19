@@ -64,7 +64,7 @@ export default function FilterOrConstraintEditor<
   const childVars = getAvailableChildNames(nodeID);
   switch (value.type) {
     case "O2E": {
-      const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.event, value.object, true) : null;
+      const support = ocelInfo !== undefined ? getNodeRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.event, value.object, true) : null;
       return (
         <>
           <EventVarSelector
@@ -77,11 +77,11 @@ export default function FilterOrConstraintEditor<
               }
             }}
           />
-          <SupportDisplay support={support} />
+          <AbsolutePositionedSupportDisplay support={support} />
           <ObjectVarSelector
             objectVars={availableObjectVars}
             disabledStyleObjectVars={availableObjectVars.filter((v) => {
-              const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.event, v, true) : null;
+              const support = ocelInfo !== undefined ? getNodeRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.event, v, true) : null;
               if (support !== null) { return support === 0 }
               else { return true; }
             })}
@@ -112,7 +112,7 @@ export default function FilterOrConstraintEditor<
       );
     }
     case "O2O": {
-      const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.object, value.other_object, false) : null;
+      const support = ocelInfo !== undefined ? getNodeRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.object, value.other_object, false) : null;
       return (
         <>
           <ObjectVarSelector
@@ -130,11 +130,11 @@ export default function FilterOrConstraintEditor<
               <MdSwapHoriz />
             </Button>
           </div>
-          <SupportDisplay support={support} />
+          <AbsolutePositionedSupportDisplay support={support} />
           <ObjectVarSelector
             objectVars={availableObjectVars}
             disabledStyleObjectVars={availableObjectVars.filter((v) => {
-              const support = ocelInfo !== undefined ? getRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.object, v, false) : null;
+              const support = ocelInfo !== undefined ? getNodeRelationshipSupport(ocelInfo, getTypesForVariable, nodeID, value.object, v, false) : null;
               if (support !== null) { return support === 0 }
               else { return true; }
             })}
@@ -1354,29 +1354,43 @@ function deDupe<T>(values: T[]): T[] {
 }
 
 
-function getRelationshipSupport(ocelInfo: OCELInfo, getTypesForVariable: VisualEditorContextValue['getTypesForVariable'], nodeID: string, var1: ObjectVariable | EventVariable, var2: ObjectVariable, isE2O: boolean): number {
+export function getNodeRelationshipSupport(ocelInfo: OCELInfo, getTypesForVariable: VisualEditorContextValue['getTypesForVariable'], nodeID: string, var1: ObjectVariable | EventVariable, var2: ObjectVariable, isE2O: boolean): number {
   const types1 = getTypesForVariable(nodeID, var1, isE2O ? "event" : "object");
   const types2 = getTypesForVariable(nodeID, var2, "object");
+  return getTypesRelationshipSupport(ocelInfo, types1.map(t => t.name), types2.map(t => t.name), isE2O);
+}
+
+
+export function getTypesRelationshipSupport(ocelInfo: OCELInfo, firstTypes: string[], secondTypes: string[], isE2O: boolean): number {
   let support = 0;
-  for (const type1 of types1) {
-    for (const type2 of types2) {
-      support += (isE2O ? ocelInfo?.e2o_types : ocelInfo?.o2o_types)[type1.name][type2.name][0];
+  for (const type1 of firstTypes) {
+    for (const type2 of secondTypes) {
+      support += (isE2O ? ocelInfo?.e2o_types : ocelInfo?.o2o_types)[type1]?.[type2]?.[0] ?? 0;
 
     }
   }
   return support;
 
-
 }
 
-function SupportDisplay({ support }: { support: number | null }) {
+function AbsolutePositionedSupportDisplay({ support, text }: { support: number | null, text?: string }) {
+  return <div className="relative">
+    <div className="absolute left-1/2 -translate-x-1/2  -bottom-7">
+      <SupportDisplay support={support} text={text} />
+    </div>
+  </div>;
+}
+
+export function SupportDisplay({ support, text }: { support: number | null, text?: string }) {
   if (support === null) {
     return null;
   }
-  return <div className="relative">
-    <div className={clsx("absolute left-1/2 -translate-x-1/2 -bottom-7 p-0.5 rounded text-sm w-fit whitespace-nowrap", support > 0 && "bg-green-200 text-green-800",
+  return <div className={clsx(" p-0.5 rounded text-sm w-fit whitespace-nowrap", support > 0 && "bg-green-200 text-green-800",
       support === 0 && "bg-red-200 text-red-800")}>
-      {support} Supporting Relations
-    </div></div>
+      {support} {text ?? "Supporting Relations"}
+    </div>
+  //  <div className="relative">
+    {/* absolute left-1/2 -translate-x-1/2  -bottom-7*/}
+    // </div>
 
 }

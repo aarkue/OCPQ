@@ -6,6 +6,8 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityNodeType } from './oc-declare-flow-types';
 import { InfoSheetContext } from '@/InfoSheet';
 import { MdBarChart } from 'react-icons/md';
+import { OcelInfoContext } from '@/App';
+import { MinMaxDisplayWithSugar } from './MinMaxSugar';
 const OBJECT_INIT = "<init>";
 const OBJECT_EXIT = "<exit>";
 export function OCDeclareFlowNode({
@@ -164,24 +166,25 @@ export function OCDeclareFlowNode({
         {(!connection.inProgress || isTarget) && (
           <Handle className="fullHandle z-10" position={Position.Left} type="target" isConnectableStart={false} />
         )}
-        {/* {selected &&
-          <ObjectInvolvementHelper activity={(data.isObject  === "init" ? "<init> " : data.isObject === "exit" ? "<exit> " : "") + data.type} />
-        } */}
+        {selected &&
+          <ObjectInvolvementHelper activity={data.type} isObject={data.isObject !== undefined} />
+        }
       </div></>
   );
 }
 
-// function ObjectInvolvementHelper({ activity }: { activity: string }) {
-//   const { ocelInfo } = useContext(OCELInfoContext);
-//   const actInfo = ocelInfo[activity];
-//   if (actInfo == undefined) {
-//     return null;
-//   }
-//   return <div className='absolute -right-0.5 translate-x-full text-[5pt] bg-white z-99 px-1 rounded-sm border'>
-//     <ul className='list-disc pl-1'>
-//       {Object.entries(actInfo).map(([key, value]) => <li key={key} style={{ color: getRandomStringColor(key) }}>
-//         <span className={clsx(value.max > 1 && "font-bold")}>{key}</span>: <MinMaxDisplayWithSugar {...value} rangeMode />
-//       </li>)}
-//     </ul>
-//   </div>
-// }
+function ObjectInvolvementHelper({ activity, isObject }: { activity: string, isObject: boolean }) {
+  const ocelInfo = useContext(OcelInfoContext);
+  
+  const actInfo = isObject ? {[activity]: [1,{}] as const} : ocelInfo?.e2o_types[activity]
+  if (actInfo == undefined) {
+    return null;
+  }
+  return <div className='absolute -right-0.5 translate-x-full text-[5pt] bg-white z-99 px-1 rounded-sm border'>
+    <ul className='list-disc ml-2 leading-tight list-inside'>
+      {Object.keys(actInfo).filter(object => actInfo[object][0] > 0).map((object) => <li key={object} className='-ml-2' style={{ color: getRandomStringColor(object) }}>
+        <span>{object}</span>
+      </li>)}
+    </ul>
+  </div>
+}

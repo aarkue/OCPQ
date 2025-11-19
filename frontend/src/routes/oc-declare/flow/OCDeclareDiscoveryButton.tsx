@@ -12,7 +12,6 @@ import MultiSelect from "@/components/ui/multi-select";
 import { OcelInfoContext } from "@/App";
 import { Switch } from "@/components/ui/switch";
 import { OCDeclareArcType } from "../types/OCDeclareArcType";
-import { ALL_EDGE_TYPES } from "./oc-declare-flow-types";
 
 export type OCDeclareDiscoveryOptions = {
   noise_threshold: number,
@@ -25,7 +24,7 @@ export type OCDeclareDiscoveryOptions = {
 
 }
 const DEFAULT_OC_DECLARE_DISCOVERY_OPTIONS: OCDeclareDiscoveryOptions = {
-  noise_threshold: 0.2, o2o_mode: "None", counts_for_generation: [1, null], counts_for_filter: [1, 20], reduction: "Lossless",
+  noise_threshold: 0.2, o2o_mode: "None", counts_for_generation: [1, 20], counts_for_filter: [1, 20], reduction: "Lossless",
   considered_arrow_types: ["AS", "EF", "EP"]
 }
 export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { onConstraintsDiscovered: (arcs: OCDeclareArc[]) => unknown }) {
@@ -42,6 +41,27 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
       <Label className="flex flex-col gap-y-1">
         Noise Threshold
         <Input type="number" min={0} max={1} step={0.05} value={data.noise_threshold} onChange={((ev) => setData({ ...data, noise_threshold: ev.currentTarget.valueAsNumber }))} />
+      </Label>
+      <Label className="flex flex-col gap-y-1">
+        Maximal Count Filters
+        <Select value={data.counts_for_filter[1] === null ? "no-max-counts" : data.counts_for_generation[1] === null ? "after-discovery" : "during-discovery"} onValueChange={(mode) => {
+
+          if (mode === "no-max-counts") {
+            setData({ ...data, counts_for_filter: [1, null], counts_for_generation: [1, null] })
+          } else if (mode === "after-discovery") {
+            setData({ ...data, counts_for_filter: [1, 20], counts_for_generation: [1, null] })
+          } else if (mode === "during-discovery") {
+            setData({ ...data, counts_for_filter: [1, 20], counts_for_generation: [1, 20] })
+          }
+        }}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no-max-counts">No max counts <span className="text-xs text-muted-foreground">Discover all maximal constraints.</span></SelectItem>
+            <SelectItem value="after-discovery">After Discovery <span className="text-xs text-muted-foreground">Discover all but filter constraints <b className="font-bold">only</b> supported by resource-like objects.</span></SelectItem>
+            <SelectItem value="during-discovery">During Discovery <span className="text-xs text-muted-foreground">Filter out constraints during discovery, likely not including resource-like object types in constraints.</span></SelectItem>
+
+          </SelectContent>
+        </Select>
       </Label>
       <Label className="flex flex-col gap-y-1">
         O2O Mode

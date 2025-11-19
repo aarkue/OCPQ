@@ -4248,7 +4248,7 @@ dependencies = [
 [[package]]
 name = "process_mining"
 version = "0.3.25"
-source = "git+https://github.com/aarkue/rust4pm?branch=feat/oc-declare#b6a4b020b87a62e7979cd77167170d22bea3e316"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat/oc-declare#8ed0eac4e59a7147b944e7dd238cf9cc260b8139"
 dependencies = [
  "chrono",
  "flate2",
