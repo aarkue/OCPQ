@@ -21,10 +21,12 @@ export type OCDeclareDiscoveryOptions = {
   counts_for_filter: [number | null, number | null],
   reduction: "None" | "Lossless" | "Lossy",
   considered_arrow_types: OCDeclareArcType[],
+  refinement: boolean,
 
 }
 const DEFAULT_OC_DECLARE_DISCOVERY_OPTIONS: OCDeclareDiscoveryOptions = {
   noise_threshold: 0.2, o2o_mode: "None", counts_for_generation: [1, 20], counts_for_filter: [1, 20], reduction: "Lossless",
+  refinement: true,
   considered_arrow_types: ["AS", "EF", "EP"]
 }
 export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { onConstraintsDiscovered: (arcs: OCDeclareArc[]) => unknown }) {
@@ -39,6 +41,15 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
     title="Auto-Discover OC-DECLARE Constraints"
     content={({ data, setData }) => <div className="flex flex-col gap-y-4">
       <Label className="flex flex-col gap-y-1">
+        O2O Mode
+        <Select value={data.o2o_mode} defaultValue={data.o2o_mode} onValueChange={(v) => setData({ ...data, o2o_mode: v as OCDeclareDiscoveryOptions['o2o_mode'] })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {(["None", "Direct", "Reversed", "Bidirectional"] satisfies OCDeclareDiscoveryOptions['o2o_mode'][]).map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label className="flex flex-col gap-y-1">
         Noise Threshold
         <Input type="number" min={0} max={1} step={0.05} value={data.noise_threshold} onChange={((ev) => setData({ ...data, noise_threshold: ev.currentTarget.valueAsNumber }))} />
       </Label>
@@ -47,9 +58,9 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
         <Select value={data.counts_for_filter[1] === null ? "no-max-counts" : data.counts_for_generation[1] === null ? "after-discovery" : "during-discovery"} onValueChange={(mode) => {
 
           if (mode === "no-max-counts") {
-            setData({ ...data, counts_for_filter: [1, null], counts_for_generation: [1, null] })
+            setData({ ...data, counts_for_filter: [1, null], counts_for_generation: [1, null], refinement: false, })
           } else if (mode === "after-discovery") {
-            setData({ ...data, counts_for_filter: [1, 20], counts_for_generation: [1, null] })
+            setData({ ...data, counts_for_filter: [1, 20], counts_for_generation: [1, null], refinement: false })
           } else if (mode === "during-discovery") {
             setData({ ...data, counts_for_filter: [1, 20], counts_for_generation: [1, 20] })
           }
@@ -64,20 +75,24 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
         </Select>
       </Label>
       <Label className="flex flex-col gap-y-1">
-        O2O Mode
-        <Select value={data.o2o_mode} defaultValue={data.o2o_mode} onValueChange={(v) => setData({ ...data, o2o_mode: v as OCDeclareDiscoveryOptions['o2o_mode'] })}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {(["None", "Direct", "Reversed", "Bidirectional"] satisfies OCDeclareDiscoveryOptions['o2o_mode'][]).map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </Label>
-      <Label className="flex flex-col gap-y-1">
         Reduction
         <Select value={data.reduction} defaultValue={data.reduction} onValueChange={(v) => setData({ ...data, reduction: v as OCDeclareDiscoveryOptions['reduction'] })}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             {(["None", "Lossless", "Lossy"] satisfies OCDeclareDiscoveryOptions['reduction'][]).map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </Label>
+      <Label className="flex flex-col gap-y-1">
+        Refinement
+        <Select disabled={data.counts_for_filter[1] == null || data.counts_for_generation[1] == null} value={data.refinement ? "true" : "false"} onValueChange={(mode) => {
+
+          setData({ ...data, refinement: mode === "true" });
+        }}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="false">Disabled <span className="text-xs text-muted-foreground">Do not refine discovered constraints.</span></SelectItem>
+            <SelectItem value="true">Enabled <span className="text-xs text-muted-foreground">Refine discovered constraints after discovery and reduction.</span></SelectItem>
           </SelectContent>
         </Select>
       </Label>
@@ -92,14 +107,17 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
           }}
         />
       </Label>
-      {ocelInfo?.event_types && <Label className="flex flex-col gap-y-1">
+      {ocelInfo?.event_types && <div className="flex flex-col gap-y-1">
+        <Label >
         Activities
+      </Label>
         <div className="flex items-center gap-x-1">
 
           <Switch checked={data.acts_to_use === undefined} onCheckedChange={(checked) => {
             if (checked) {
               setData({ ...data, acts_to_use: undefined })
             } else {
+              // setData({ ...data, acts_to_use: ["W_Shortened completion ", "A_Denied", "O_Refused"] })
               setData({ ...data, acts_to_use: ocelInfo.event_types.slice(0, 3).map(t => t.name) })
             }
           }} />
@@ -119,7 +137,7 @@ export default function OCDeclareDiscoveryButton({ onConstraintsDiscovered }: { 
             }}
           />
         }
-      </Label>}
+    </div>}
     </div>}
     submitAction={<>Run</>}
     mode="promise"

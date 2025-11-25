@@ -58,7 +58,7 @@ export function useLayoutedElements<N extends Record<string, unknown>>() {
         setNodes(nodes);
         if (fitViewAfter) {
           setTimeout(() => {
-            fitView();
+            fitView({padding: 0});
           }, 50);
         }
       });

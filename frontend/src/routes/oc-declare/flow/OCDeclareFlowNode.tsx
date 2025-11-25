@@ -29,8 +29,11 @@ export function OCDeclareFlowNode({
       | React.FocusEvent<HTMLDivElement, Element>
       | React.MouseEvent<HTMLDivElement, MouseEvent>,
   ) {
-    const objectMode = ev.currentTarget.innerText.includes(OBJECT_INIT) ? "init" : ev.currentTarget.innerText.includes(OBJECT_EXIT) ? "exit" : undefined;
-    const newLabel = ev.currentTarget.innerText.replace("\n", "").replace(OBJECT_INIT + " ", "").replace(OBJECT_EXIT + " ", "");
+    // Use innerHTML instead of innerText to avoid stripping whitespaces
+    const newName = 
+ev.currentTarget.innerHTML;
+    const objectMode = newName.includes(OBJECT_INIT) ? "init" : ev.currentTarget.innerText.includes(OBJECT_EXIT) ? "exit" : undefined;
+    const newLabel = newName.replace("\n", "").replace(OBJECT_INIT + " ", "").replace(OBJECT_EXIT + " ", "");
     setEditMode(false);
     setNodes((nodes) => {
       const newNodes = [...nodes];
