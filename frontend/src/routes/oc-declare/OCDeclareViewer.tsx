@@ -83,7 +83,7 @@ export default function OCDeclareViewer() {
     </div>
     <div className="w-full h-full border">
 
-      <OCDeclareFlowEditor initialFlowJson={data.flowJson} onChange={(value) => {
+      <OCDeclareFlowEditor initialFlowJson={data.flowJson} name={metaInfo.name} onChange={(value) => {
         localStorage.setItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + id, JSON.stringify({ flowJson: value } satisfies OCDeclareFlowData));
       }} onInit={(ref) => flowRef.current = ref} />
     </div>

@@ -517,7 +517,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
             .promise(backend['ocel/picker']!(path), {
               loading: "Loading OCEL2...",
               success: "Imported OCEL2",
-              error: "Failed to load OCEL2",
+              error: (e) => "Failed to load OCEL2\n" + String(e),
             })
             .then((ocelInfo) => {
               setOcelInfoAndNavigate(ocelInfo);
@@ -556,7 +556,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
             .promise(backend['ocel/picker']!(e.path), {
               loading: "Loading OCEL2...",
               success: "Imported OCEL2",
-              error: "Failed to load OCEL2",
+              error: (e) => "Failed to load OCEL2\n" + String(e),
             })
             .then((ocelInfo) => {
               setOcelInfoAndNavigate(ocelInfo);
@@ -564,7 +564,6 @@ function InnerApp({ children }: { children?: ReactNode }) {
             .finally(() => setLoading(false));
         }
       }).then(unregister => {
-        console.log(dragDropUnregister)
         if (dragDropUnregister === true) {
           // Immediately unregister, because cleanup already happened....
           unregister()
@@ -745,7 +744,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
                         .promise(backend["ocel/picker"]!(), {
                           loading: "Loading OCEL2...",
                           success: "Imported OCEL2",
-                          error: "Failed to load OCEL2",
+                          error: (e) => "Failed to load OCEL2\n" + String(e),
                         })
                         .then((ocelInfo) => {
                           setOcelInfoAndNavigate(ocelInfo);
@@ -792,7 +791,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
                         .promise(loadOcel(), {
                           loading: "Loading OCEL...",
                           success: "Loaded OCEL",
-                          error: "Failed to load OCEL",
+                          error: (e) => "Failed to load OCEL\n" + String(e),
                         })
                         .finally(() => {
                           setLoading(false);
@@ -888,7 +887,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
                             .promise(backend["ocel/picker"]!(), {
                               loading: "Loading OCEL2...",
                               success: "Imported OCEL2",
-                              error: "Failed to load OCEL2",
+                              error: (e) => "Failed to load OCEL2\n" + String(e),
                             })
                             .then((ocelInfo) => {
                               setOcelInfoAndNavigate(ocelInfo);

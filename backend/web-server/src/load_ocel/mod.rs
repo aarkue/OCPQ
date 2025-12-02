@@ -80,12 +80,12 @@ pub fn load_ocel_file_to_state(
 
 pub fn load_ocel_file(name: &str) -> Result<OCEL, std::io::Error> {
     let path = format!("{DATA_PATH}{name}");
-    if name.ends_with(".json") {
+    if name.ends_with(".json")  || name.ends_with(".jsonocel") {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let ocel: OCEL = serde_json::from_reader(reader)?;
         Ok(ocel)
-    } else if name.ends_with(".xml") {
+    } else if name.ends_with(".xml") || name.ends_with(".xmlocel") {
         let ocel = import_ocel_xml_file_with(&path, OCELImportOptions::default());
         Ok(ocel)
     } else {

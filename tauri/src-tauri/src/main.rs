@@ -63,11 +63,11 @@ fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
     let path = path.as_ref();
     println!("{path:?}");
     let path_str = path.to_string_lossy();
-    let ocel = match path_str.ends_with(".json") {
-        true => import_ocel_json_from_path(path).map_err(|e| format!("{e:?}"))?,
-        false => match path_str.ends_with(".xml") {
+    let ocel = match path_str.ends_with(".json") || path_str.ends_with(".jsonocel") {
+        true => import_ocel_json_from_path(path).map_err(|e| e.to_string())?,
+        false => match path_str.ends_with(".xml") || path_str.ends_with(".xmlocel") {
             true => import_ocel_xml_file(path),
-            false => import_ocel_sqlite_from_path(path).map_err(|e| format!("{e:?}"))?,
+            false => import_ocel_sqlite_from_path(path).map_err(|e| e.to_string())?,
         },
     };
     Ok(ocel)
@@ -108,7 +108,7 @@ async fn import_xes_path_as_ocel(
     path: &str,
     state: tauri::State<'_, AppState>,
 ) -> Result<OCELInfo, String> {
-    let xes = import_xes_file(path, XESImportOptions::default()).unwrap();
+    let xes = import_xes_file(path, XESImportOptions::default()).map_err(|e| e.to_string())?;
     let ocel = trad_log_to_ocel(&xes);
 
     let locel = IndexLinkedOCEL::from_ocel(ocel);

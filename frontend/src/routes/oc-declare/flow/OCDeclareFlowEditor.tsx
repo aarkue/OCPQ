@@ -111,7 +111,7 @@ export function getMarkersForEdge(edgeType: EdgeType, id?: string): { markerStar
   }
 }
 
-export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit }: { initialFlowJson?: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>, onInit?: (ref: ReactFlowInstance<ActivityNodeType, CustomEdgeType>) => unknown, onChange: (json: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>) => unknown }) {
+export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit, name }: {name: string, initialFlowJson?: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>, onInit?: (ref: ReactFlowInstance<ActivityNodeType, CustomEdgeType>) => unknown, onChange: (json: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>) => unknown }) {
   const backend = useContext(BackendProviderContext);
   const flowRef = useRef<ReactFlowInstance<ActivityNodeType, CustomEdgeType>>();
   const ocelInfo = useContext(OcelInfoContext);
@@ -538,7 +538,7 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit 
                     if (typeof blob === 'string') {
                       blob = await (await fetch(blob)).blob()
                     }
-                    backend["download-blob"](blob as Blob, "oc-DECLARE" + (useSVG ? ".svg" : ".png"))
+                    backend["download-blob"](blob as Blob, name + (useSVG ? ".svg" : ".png"))
                   }).finally(() =>
                     button.disabled = false);
               })

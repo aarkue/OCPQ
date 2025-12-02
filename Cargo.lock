@@ -107,12 +107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2254,8 +2248,6 @@ version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 dependencies = [
- "allocator-api2",
- "equivalent",
  "foldhash",
 ]
 
@@ -3659,9 +3651,9 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "5.0.0"
+version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2c1f9f56e534ac6a9b8a4600bdf0f530fb393b5f393e7b4d03489c3cf0c3f01"
+checksum = "7f4779c6901a562440c3786d08192c6fbda7c1c2060edd10006b05ee35d10f2d"
 dependencies = [
  "num-traits",
 ]
@@ -3848,9 +3840,9 @@ dependencies = [
 
 [[package]]
 name = "petgraph"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54acf3a685220b533e437e264e4d932cfbdc4cc7ec0cd232ed73c08d03b8a7ca"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
 dependencies = [
  "fixedbitset",
  "hashbrown 0.15.2",
@@ -4248,13 +4240,13 @@ dependencies = [
 [[package]]
 name = "process_mining"
 version = "0.3.25"
-source = "git+https://github.com/aarkue/rust4pm?branch=feat/oc-declare#8f7f92318752dacb8e3ef4d4b5d9dbb0d410b209"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat/oc-declare#a52d1ae44d39c2fd0f5a33546208afebd9da3ebe"
 dependencies = [
  "chrono",
  "flate2",
  "itertools 0.14.0",
- "ordered-float 5.0.0",
- "petgraph 0.8.2",
+ "ordered-float 5.1.0",
+ "petgraph 0.8.3",
  "quick-xml 0.37.5",
  "rayon",
  "rusqlite",

@@ -39,7 +39,7 @@ const tauriBackend: BackendProvider = {
     if (path === undefined) {
       path = await dialog.open({
         title: "Select an OCEL2 file",
-        filters: [{ name: "OCEL2", extensions: ["json", "xml", "sqlite", "sqlite3", "db"] }, { name: "XES", extensions: ["xes", "xes.gz"] }],
+        filters: [{ name: "OCEL2", extensions: ["json", "xml", 'jsonocel', 'xmlocel',  "sqlite", "sqlite3", "db"] }, { name: "XES", extensions: ["xes", "xes.gz"] }],
       });
     }
     if (typeof path === "string") {
