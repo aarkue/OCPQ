@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::Display,
     hash::Hash,
@@ -6,13 +7,14 @@ use std::{
 
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use process_mining::ocel::{
+use process_mining::core::event_data::object_centric::{
     linked_ocel::{
-        index_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex},
-        IndexLinkedOCEL, LinkedOCELAccess,
+        slim_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex},
+        LinkedOCELAccess, SlimLinkedOCEL,
     },
-    ocel_struct::{OCELAttributeValue, OCELEvent, OCELObject},
+    OCELAttributeValue, OCELEvent, OCELObject,
 };
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use ts_rs::TS;
@@ -58,14 +60,14 @@ pub type Qualifier = Option<String>;
 
 #[derive(TS)]
 #[ts(export, export_to = "../../../frontend/src/types/generated/")]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Binding {
     #[ts(as = "BTreeMap<EventVariable, usize>")]
-    pub event_map: BTreeMap<EventVariable, EventIndex>,
+    pub event_map: FxHashMap<EventVariable, EventIndex>,
     #[ts(as = "BTreeMap<ObjectVariable, usize>")]
-    pub object_map: BTreeMap<ObjectVariable, ObjectIndex>,
-    pub label_map: BTreeMap<String, LabelValue>,
+    pub object_map: FxHashMap<ObjectVariable, ObjectIndex>,
+    pub label_map: FxHashMap<String, LabelValue>,
 }
 
 #[derive(TS)]
@@ -102,11 +104,14 @@ impl Binding {
         self.object_map.insert(ev_var, ob_index);
         self
     }
+    // The get_ev and get_ob function should likely be replaced with functions that don't require "fattening" the Cow
+    // In particular, things like the time of an event, the type etc. should be easily accessible
+
     pub fn get_ev<'a>(
         &self,
         ev_var: &EventVariable,
-        ocel: &'a IndexLinkedOCEL,
-    ) -> Option<&'a OCELEvent> {
+        ocel: &'a SlimLinkedOCEL,
+    ) -> Option<Cow<'a, OCELEvent>> {
         match self.event_map.get(ev_var) {
             Some(ev_index) => Some(ocel.get_ev(ev_index)),
             None => None,
@@ -115,8 +120,8 @@ impl Binding {
     pub fn get_ob<'a>(
         &self,
         ob_var: &ObjectVariable,
-        ocel: &'a IndexLinkedOCEL,
-    ) -> Option<&'a OCELObject> {
+        ocel: &'a SlimLinkedOCEL,
+    ) -> Option<Cow<'a, OCELObject>> {
         match self.object_map.get(ob_var) {
             Some(ob_index) => Some(ocel.get_ob(ob_index)),
             None => None,
@@ -204,7 +209,7 @@ pub struct BindingBoxTree {
 }
 
 impl BindingBoxTree {
-    pub fn evaluate(&self, ocel: &IndexLinkedOCEL) -> Result<(EvaluationResults, bool), String> {
+    pub fn evaluate(&self, ocel: &SlimLinkedOCEL) -> Result<(EvaluationResults, bool), String> {
         if let Some(root) = self.nodes.first() {
             let ((ret, _violation), skipped) = root.evaluate(0, Binding::default(), self, ocel)?;
             // ret.push((0, Binding::default(), violation));
@@ -323,7 +328,7 @@ impl BindingBoxTreeNode {
         own_index: usize,
         parent_binding: Binding,
         tree: &BindingBoxTree,
-        ocel: &IndexLinkedOCEL,
+        ocel: &SlimLinkedOCEL,
     ) -> Result<
         (
             (EvaluationResults, Vec<(Binding, Option<ViolationReason>)>),
@@ -366,7 +371,7 @@ impl BindingBoxTreeNode {
                         // Evaluate Child
                             tree.nodes[*c].evaluate(*c, b.clone(), tree, ocel)?;
                     child_res.insert(c_name, violations);
-                    if children.len() * c_res.len() * expanded_len > 10_000_000 {
+                    if children.len() * c_res.len() * expanded_len > 25_000_000 {
                         x.cancel();
                         println!(
                             "Too much too handle! {}*{}*{}={}",
@@ -675,7 +680,7 @@ pub enum Filter {
 }
 
 impl Filter {
-    pub fn check_binding(&self, b: &Binding, ocel: &IndexLinkedOCEL) -> Result<bool, String> {
+    pub fn check_binding(&self, b: &Binding, ocel: &SlimLinkedOCEL) -> Result<bool, String> {
         match self {
             Filter::O2E {
                 object,
@@ -683,17 +688,15 @@ impl Filter {
                 qualifier,
                 filter_label: _,
             } => {
-                let ob = b.get_ob(object, ocel).unwrap();
-                let ev = b.get_ev(event, ocel).unwrap();
-
-                Ok(ev.relationships.iter().any(|rel| {
-                    rel.object_id == ob.id
-                        && if let Some(q) = qualifier {
-                            &rel.qualifier == q
-                        } else {
-                            true
-                        }
-                }))
+                let ob_index = b
+                    .get_ob_index(object)
+                    .ok_or_else(|| format!("Object Variable {object} without value."))?;
+                let ev_index = b
+                    .get_ev_index(event)
+                    .ok_or_else(|| format!("Event Variable {event} without value."))?;
+                Ok(ocel
+                    .get_e2o(ev_index)
+                    .any(|(q, o)| o == ob_index && qualifier.as_ref().is_none_or(|qual| q == qual)))
             }
             Filter::O2O {
                 object,
@@ -701,16 +704,15 @@ impl Filter {
                 qualifier,
                 filter_label: _,
             } => {
-                let ob1 = b.get_ob(object, ocel).unwrap();
-                let ob2 = b.get_ob(other_object, ocel).unwrap();
-                Ok(ob1.relationships.iter().any(|rel| {
-                    rel.object_id == ob2.id
-                        && if let Some(q) = qualifier {
-                            &rel.qualifier == q
-                        } else {
-                            true
-                        }
-                }))
+                let ob1 = b
+                    .get_ob_index(object)
+                    .ok_or_else(|| format!("Object Variable {object} without value"))?;
+                let ob2 = b
+                    .get_ob_index(other_object)
+                    .ok_or_else(|| format!("Object Variable {other_object} without value"))?;
+                Ok(ocel
+                    .get_o2o(ob1)
+                    .any(|(q, o)| o == ob2 && qualifier.as_ref().is_none_or(|qual| q == qual)))
             }
             Filter::TimeBetweenEvents {
                 from_event: ev_var_1,
@@ -718,9 +720,15 @@ impl Filter {
                 min_seconds: min_sec,
                 max_seconds: max_sec,
             } => {
-                let e1 = b.get_ev(ev_var_1, ocel).unwrap();
-                let e2 = b.get_ev(ev_var_2, ocel).unwrap();
-                let duration_diff = (e2.time - e1.time).num_milliseconds() as f64 / 1000.0;
+                let e1 = b
+                    .get_ev_index(ev_var_1)
+                    .ok_or_else(|| format!("Event Variable {ev_var_1} without value"))?;
+                let e2 = b
+                    .get_ev_index(ev_var_2)
+                    .ok_or_else(|| format!("Event Variable {ev_var_2} without value"))?;
+                let e1_time = e1.get_time(ocel);
+                let e2_time = e2.get_time(ocel);
+                let duration_diff = (*e2_time - e1_time).num_milliseconds() as f64 / 1000.0;
                 Ok(!min_sec.is_some_and(|min_sec| duration_diff < min_sec)
                     && !max_sec.is_some_and(|max_sec| duration_diff > max_sec))
             }
@@ -780,12 +788,13 @@ impl Filter {
                             .filter(|at| &at.name == attribute_name)
                             .any(|at| value_filter.check_value(&at.value))),
                         ObjectValueFilterTimepoint::AtEvent { event } => {
-                            if let Some(ev) = b.get_ev(event, ocel) {
+                            if let Some(ev) = b.get_ev_index(event) {
+                                let ev_time = ocel.get_ev_time(ev);
                                 // Find last attribute value update _before_ the event occured (or at the same time)
                                 if let Some(last_val_before) = o
                                     .attributes
                                     .iter()
-                                    .filter(|at| &at.name == attribute_name && at.time <= ev.time)
+                                    .filter(|at| &at.name == attribute_name && &at.time <= ev_time)
                                     .sorted_by_key(|x| x.time)
                                     .last()
                                 {
@@ -924,7 +933,7 @@ impl SizeFilter {
         &self,
         binding: &Binding,
         child_res: &HashMap<String, Vec<(Binding, Option<ViolationReason>)>>,
-        ocel: &IndexLinkedOCEL,
+        ocel: &SlimLinkedOCEL,
     ) -> Result<bool, String> {
         match self {
             SizeFilter::NumChilds {
@@ -967,19 +976,22 @@ impl SizeFilter {
                 if child_names.is_empty() {
                     Ok(true)
                 } else if let Some(c_res) = child_res.get(&child_names[0]) {
-                    let set: HashSet<_> = c_res.iter().map(|(binding, _)| binding).collect();
-                    for other_c in child_names.iter().skip(1) {
-                        if let Some(c2_res) = child_res.get(other_c) {
-                            let set2: HashSet<_> =
-                                c2_res.iter().map(|(binding, _)| binding).collect();
-                            if set != set2 {
-                                return Ok(false);
-                            }
-                        } else {
-                            return Ok(false);
-                        }
-                    }
-                    Ok(true)
+                    todo!()
+                //     let mut set: Vec<_> = c_res.iter().map(|(binding, _)| binding).collect();
+                //     // set.sort_unstable();
+                //     // set.dedup();
+                //     for other_c in child_names.iter().skip(1) {
+                //         if let Some(c2_res) = child_res.get(other_c) {
+                //             let set2: HashSet<_> =
+                //                 c2_res.iter().map(|(binding, _)| binding).collect();
+                //             if set != set2 {
+                //                 return Ok(false);
+                //             }
+                //         } else {
+                //             return Ok(false);
+                //         }
+                //     }
+                //     Ok(true)
                 } else {
                     Ok(false)
                 }

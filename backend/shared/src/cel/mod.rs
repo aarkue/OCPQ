@@ -11,20 +11,17 @@ use cel_interpreter::{
 use chrono::{DateTime, FixedOffset, Local};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use process_mining::ocel::{
-    linked_ocel::{
-        index_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex},
-        IndexLinkedOCEL,
-    },
-    ocel_struct::OCELAttributeValue,
+use process_mining::core::event_data::object_centric::{
+    OCELAttributeValue, linked_ocel::{
+        LinkedOCELAccess, SlimLinkedOCEL, slim_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex}
+    }
 };
 
 use crate::{
     binding_box::{
-        structs::{EventVariable, LabelFunction, LabelValue, ObjectVariable, Variable},
-        Binding, ViolationReason,
+        Binding, ViolationReason, structs::{EventVariable, LabelFunction, LabelValue, ObjectVariable, Variable}
     },
-    preprocessing::linked_ocel::{event_or_object_from_index, OCELNodeRef},
+    preprocessing::linked_ocel::{OCELNode, OCELNodeRef, event_or_object_from_index},
 };
 
 fn string_to_index(s: &str) -> Option<EventOrObjectIndex> {
@@ -52,7 +49,7 @@ impl<T> Clone for RawBindingContextPtr<'_, T> {
 
 impl<T> Copy for RawBindingContextPtr<'_, T> {}
 
-fn index_string_to_val<'a>(s: &str, ocel: &'a IndexLinkedOCEL) -> Option<OCELNodeRef<'a>> {
+fn index_string_to_val<'a>(s: &str, ocel: &'a SlimLinkedOCEL) -> Option<OCELNode> {
     let index = string_to_index(s)?;
     let ret = event_or_object_from_index(index, ocel);
     Some(ret)
@@ -60,12 +57,12 @@ fn index_string_to_val<'a>(s: &str, ocel: &'a IndexLinkedOCEL) -> Option<OCELNod
 
 unsafe fn index_string_to_val_raw<'a>(
     s: &str,
-    ocel: RawBindingContextPtr<'a, IndexLinkedOCEL>,
-) -> Option<OCELNodeRef<'a>> {
+    ocel: RawBindingContextPtr<'a, SlimLinkedOCEL>,
+) -> Option<OCELNode> {
     index_string_to_val(s, ocel.0.as_ref().unwrap())
 }
 
-unsafe fn get_ocel_raw(ocel: RawBindingContextPtr<'_, IndexLinkedOCEL>) -> &IndexLinkedOCEL {
+unsafe fn get_ocel_raw(ocel: RawBindingContextPtr<'_, SlimLinkedOCEL>) -> &SlimLinkedOCEL {
     ocel.0.as_ref().unwrap()
 }
 
@@ -102,7 +99,7 @@ pub fn evaluate_cel<'a>(
     cel: &str,
     binding: &'a Binding,
     child_res: Option<&HashMap<String, Vec<(Binding, Option<ViolationReason>)>>>,
-    ocel: &'a IndexLinkedOCEL,
+    ocel: &'a SlimLinkedOCEL,
 ) -> Result<Value, CELEvalError> {
     // let now = Instant::now();
     lazy_compile_and_insert_into_cache(cel).map_err(CELEvalError::ParseError)?;
@@ -163,7 +160,7 @@ pub fn evaluate_cel<'a>(
         // println!("Context added: {:?}", now.elapsed());
 
         let ocel_raw = RawBindingContextPtr(unsafe {
-            std::mem::transmute::<*mut &'a IndexLinkedOCEL, *mut &'static IndexLinkedOCEL>(
+            std::mem::transmute::<*mut &'a SlimLinkedOCEL, *mut &'static SlimLinkedOCEL>(
                 Box::into_raw(Box::new(ocel)),
             )
         });
@@ -181,10 +178,10 @@ pub fn evaluate_cel<'a>(
                 match val {
                     Some(val_ref) => {
                         let ocel_type = match val_ref {
-                            OCELNodeRef::Event(ev) => &ev.event_type,
-                            OCELNodeRef::Object(ob) => &ob.object_type,
+                            OCELNode::Event(ev) => ev.event_type,
+                            OCELNode::Object(ob) => ob.object_type,
                         };
-                        Ok(ocel_type.clone().into())
+                        Ok(ocel_type.into())
                     }
 
                     None => ftx.error("Event or Object not found.").into(),
@@ -225,24 +222,24 @@ pub fn evaluate_cel<'a>(
                 let res = match val {
                     Some(val_ref) => {
                         let attr_val = match val_ref {
-                            OCELNodeRef::Event(ev) => ev
+                            OCELNode::Event(ev) => ev
                                 .attributes
-                                .iter()
+                                .into_iter()
                                 .find(|a| &a.name == attr_name.as_ref())
-                                .map(|a| &a.value),
-                            OCELNodeRef::Object(ob) => ob
+                                .map(|a| a.value),
+                            OCELNode::Object(ob) => ob
                                 .attributes
-                                .iter()
+                                .into_iter()
                                 .find(|a| &a.name == attr_name.as_ref())
-                                .map(|a| &a.value),
+                                .map(|a| a.value),
                         }
-                        .unwrap_or(&OCELAttributeValue::Null);
+                        .unwrap_or(OCELAttributeValue::Null);
                         let cel_val = match attr_val {
-                            OCELAttributeValue::Float(f) => (*f).into(),
-                            OCELAttributeValue::Integer(i) => (*i).into(),
-                            OCELAttributeValue::String(s) => s.clone().into(),
+                            OCELAttributeValue::Float(f) => (f).into(),
+                            OCELAttributeValue::Integer(i) => (i).into(),
+                            OCELAttributeValue::String(s) => s.into(),
                             OCELAttributeValue::Time(t) => t.fixed_offset().into(),
-                            OCELAttributeValue::Boolean(b) => (*b).into(),
+                            OCELAttributeValue::Boolean(b) => (b).into(),
                             OCELAttributeValue::Null => Value::Null,
                         };
                         Ok(cel_val)
@@ -265,21 +262,21 @@ pub fn evaluate_cel<'a>(
                 let res = match val {
                     Some(val_ref) => {
                         let attr_val = match val_ref {
-                            OCELNodeRef::Event(ev) => ev
+                            OCELNode::Event(ev) => ev
                                 .attributes
-                                .iter()
+                                .into_iter()
                                 .find(|a| &a.name == attr_name.as_ref())
-                                .map(|a| &a.value),
-                            OCELNodeRef::Object(ob) => ob
+                                .map(|a| a.value),
+                            OCELNode::Object(ob) => ob
                                 .attributes
-                                .iter()
+                                .into_iter()
                                 .filter(|a| &a.name == attr_name.as_ref())
                                 .sorted_by_key(|a| a.time)
                                 .filter(|a| a.time <= at)
                                 .next_back()
-                                .map(|a| &a.value),
+                                .map(|a| a.value),
                         }
-                        .unwrap_or(&OCELAttributeValue::Null);
+                        .unwrap_or(OCELAttributeValue::Null);
                         Ok(ocel_val_to_cel_val(attr_val))
                     }
 
@@ -297,10 +294,10 @@ pub fn evaluate_cel<'a>(
                 match val {
                     Some(val_ref) => {
                         let attr_val = match val_ref {
-                            OCELNodeRef::Event(ev) => &ev.id,
-                            OCELNodeRef::Object(ob) => &ob.id,
+                            OCELNode::Event(ev) => ev.id,
+                            OCELNode::Object(ob) => ob.id,
                         };
-                        Ok(attr_val.clone().into())
+                        Ok(attr_val.into())
                     }
 
                     None => ftx.error("Event or Object not found.").into(),
@@ -315,24 +312,24 @@ pub fn evaluate_cel<'a>(
                 let res = match val {
                     Some(val_ref) => {
                         let attr_val: Vec<Vec<Value>> = match val_ref {
-                            OCELNodeRef::Event(ev) => ev
+                            OCELNode::Event(ev) => ev
                                 .attributes
-                                .iter()
+                                .into_iter()
                                 .map(|a| {
                                     vec![
                                         a.name.clone().into(),
-                                        ocel_val_to_cel_val(&a.value),
+                                        ocel_val_to_cel_val(a.value),
                                         Value::Null,
                                     ]
                                 })
                                 .collect(),
-                            OCELNodeRef::Object(ob) => ob
+                            OCELNode::Object(ob) => ob
                                 .attributes
-                                .iter()
+                                .into_iter()
                                 .map(|a| {
                                     vec![
                                         a.name.clone().into(),
-                                        ocel_val_to_cel_val(&a.value),
+                                        ocel_val_to_cel_val(a.value),
                                         a.time.fixed_offset().into(),
                                     ]
                                 })
@@ -352,27 +349,24 @@ pub fn evaluate_cel<'a>(
             move |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
                 let val = unsafe { index_string_to_val_raw(&variable, ocel_raw) };
                 match val {
-                    Some(OCELNodeRef::Event(ev)) => Ok(ev.time.fixed_offset().into()),
+                    Some(OCELNode::Event(ev)) => Ok(ev.time.fixed_offset().into()),
                     _ => ftx.error("Event not found.").into(),
                 }
             },
         );
 
         context.add_function("numEvents", move || -> ResolveResult {
-            unsafe { Ok((get_ocel_raw(ocel_raw).get_ocel_ref().events.len() as u64).into()) }
+            unsafe { Ok((get_ocel_raw(ocel_raw).get_all_evs().count() as u64).into()) }
         });
         context.add_function("numObjects", move || -> ResolveResult {
-            unsafe { Ok((get_ocel_raw(ocel_raw).get_ocel_ref().objects.len() as u64).into()) }
+            unsafe { Ok((get_ocel_raw(ocel_raw).get_all_obs().count() as u64).into()) }
         });
 
         context.add_function("events", move || -> ResolveResult {
             unsafe {
                 Ok((get_ocel_raw(ocel_raw)
-                    .get_ocel_ref()
-                    .events
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| ev_index_to_name(&EventIndex::from(i))))
+                .get_all_evs_ref()
+                    .map(|i | ev_index_to_name(i)))
                 .collect_vec()
                 .into())
             }
@@ -381,11 +375,8 @@ pub fn evaluate_cel<'a>(
         context.add_function("objects", move || -> ResolveResult {
             unsafe {
                 Ok((get_ocel_raw(ocel_raw)
-                    .get_ocel_ref()
-                    .objects
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| ob_index_to_name(&ObjectIndex::from(i))))
+                    .get_all_obs_ref()
+                    .map(|i | ob_index_to_name(i)))
                 .collect_vec()
                 .into())
             }
@@ -436,7 +427,7 @@ pub fn check_cel_predicate<'a>(
     cel: &str,
     binding: &'a Binding,
     child_res: Option<&HashMap<String, Vec<(Binding, Option<ViolationReason>)>>>,
-    ocel: &'a IndexLinkedOCEL,
+    ocel: &'a SlimLinkedOCEL,
 ) -> Result<bool, String> {
     match evaluate_cel(cel, binding, child_res, ocel) {
         Ok(Value::Bool(b)) => Ok(b),
@@ -449,7 +440,7 @@ pub fn check_cel_predicate<'a>(
 pub fn add_cel_label<'a>(
     binding: &'a mut Binding,
     child_res: Option<&HashMap<String, Vec<(Binding, Option<ViolationReason>)>>>,
-    ocel: &'a IndexLinkedOCEL,
+    ocel: &'a SlimLinkedOCEL,
     label_fun: &'a LabelFunction,
 ) -> Result<(), String> {
     match evaluate_cel(&label_fun.cel, binding, child_res, ocel) {
@@ -479,13 +470,13 @@ fn value_to_float(val: &Value) -> f64 {
     }
 }
 
-fn ocel_val_to_cel_val(val: &OCELAttributeValue) -> Value {
+fn ocel_val_to_cel_val(val: OCELAttributeValue) -> Value {
     match val {
-        OCELAttributeValue::Float(f) => (*f).into(),
-        OCELAttributeValue::Integer(i) => (*i).into(),
-        OCELAttributeValue::String(s) => s.clone().into(),
+        OCELAttributeValue::Float(f) => f.into(),
+        OCELAttributeValue::Integer(i) => i.into(),
+        OCELAttributeValue::String(s) => s.into(),
         OCELAttributeValue::Time(t) => t.fixed_offset().into(),
-        OCELAttributeValue::Boolean(b) => (*b).into(),
+        OCELAttributeValue::Boolean(b) => b.into(),
         OCELAttributeValue::Null => Value::Null,
     }
 }

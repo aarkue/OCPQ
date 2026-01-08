@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
-use process_mining::ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess};
+use process_mining::core::event_data::object_centric::linked_ocel::{
+    index_linked_ocel::EventOrObjectIndex, LinkedOCELAccess, SlimLinkedOCEL,
+};
 
 use crate::discovery::advanced::EventOrObjectTypeRef;
 
@@ -10,64 +12,6 @@ use super::{
     Binding,
 };
 
-pub fn get_expected_relation_count(
-    bound_by: &Variable,
-    bbox: &BindingBox,
-    parent_binding_opt: Option<&Binding>,
-    ocel: &IndexLinkedOCEL,
-) -> Option<i32> {
-    let mut bound_by_types = Vec::new();
-    // First check if bound_by is already bound by parent
-    if let Some(bound_by_index) = parent_binding_opt.and_then(|b| b.get_any_index(bound_by)) {
-        let bound_by_type = match bound_by_index {
-            process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Event(
-                event_index,
-            ) => EventOrObjectTypeRef::Event(ocel.get_ev(&event_index).event_type.as_str()),
-            process_mining::ocel::linked_ocel::index_linked_ocel::EventOrObjectIndex::Object(
-                object_index,
-            ) => EventOrObjectTypeRef::Object(ocel.get_ob(&object_index).object_type.as_str()),
-        };
-        bound_by_types.push(bound_by_type);
-    } else {
-        bound_by_types = match bound_by {
-            Variable::Event(var_ev) => bbox
-                .new_event_vars
-                .get(var_ev)
-                .unwrap()
-                .iter()
-                .map(|t| EventOrObjectTypeRef::Event(t.as_str()))
-                .collect(),
-            Variable::Object(var_ob) => bbox
-                .new_object_vars
-                .get(var_ob)
-                .unwrap()
-                .iter()
-                .map(|t| EventOrObjectTypeRef::Object(t.as_str()))
-                .collect(),
-        }
-    }
-    let res: usize = bound_by_types
-        .into_iter()
-        .map(|bound_by_type| {
-            // Previously this was based on the average relations of an object/event
-            // Now it's simply the count (how many exist)
-            match bound_by_type {
-                EventOrObjectTypeRef::Event(t) => ocel
-                    .events_per_type
-                    .get(t)
-                    .map(|es| es.len())
-                    .unwrap_or_default(),
-                EventOrObjectTypeRef::Object(t) => ocel
-                    .objects_per_type
-                    .get(t)
-                    .map(|es| es.len())
-                    .unwrap_or_default(),
-            }
-        })
-        .sum();
-    // println!("{res} for {bound_by:?}");
-    Some(res as i32)
-}
 impl BindingStep {
     /// Get a binding order from a binding box
     ///
@@ -80,7 +24,7 @@ impl BindingStep {
     pub fn get_binding_order(
         bbox: &BindingBox,
         parent_binding_opt: Option<&Binding>,
-        ocel: &IndexLinkedOCEL,
+        ocel: &SlimLinkedOCEL,
     ) -> Vec<Self> {
         let mut ret = Vec::new();
 

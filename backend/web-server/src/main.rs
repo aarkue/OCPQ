@@ -5,6 +5,7 @@ use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -19,43 +20,19 @@ use std::{
 };
 
 use ocpq_shared::{
-    binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
-        ExportFormat, FilterExportWithBoxTreeRequest,
-    },
-    db_translation::{translate_to_sql_shared, DBTranslationInput},
-    discovery::{
-        auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
-        AutoDiscoverConstraintsResponse,
-    },
-    get_event_info, get_object_info,
-    hpc_backend::{
-        get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
-        ConnectionConfig, JobStatus, OCPQJobOptions,
-    },
-    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
-    ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
-    ocel_qualifiers::qualifiers::{
-        get_qualifiers_for_event_types, QualifierAndObjectType, QualifiersForEventType,
-    },
-    preprocessing::preprocess::get_object_rels_per_type,
-    process_mining::object_centric::oc_declare::{self, OCDeclareArc},
-    table_export::{export_bindings_to_writer, TableExportOptions},
-    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
+    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex, binding_box::{
+        CheckWithBoxTreeRequest, EvaluateBoxTreeResult, ExportFormat, FilterExportWithBoxTreeRequest, evaluate_box_tree, filter_ocel_box_tree
+    }, db_translation::{DBTranslationInput, translate_to_sql_shared}, discovery::{
+        AutoDiscoverConstraintsRequest, AutoDiscoverConstraintsResponse, auto_discover_constraints_with_options
+    }, get_event_info, get_object_info, hpc_backend::{
+        Client, ConnectionConfig, JobStatus, OCPQJobOptions, get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job
+    }, oc_declare::statistics::{ActivityStatistics, get_activity_statistics, get_edge_stats}, ocel_graph::{OCELGraph, OCELGraphOptions, get_ocel_graph}, ocel_qualifiers::qualifiers::{
+        QualifierAndObjectType, QualifiersForEventType, get_qualifiers_for_event_types
+    },  process_mining::{OCEL, core::{event_data::{case_centric::xes::{XESImportOptions, import_xes_slice}, object_centric::{
+        OCELEvent, OCELObject, linked_ocel::{SlimLinkedOCEL, LinkedOCELAccess}, ocel_json::export_ocel_json_to_vec, ocel_sql::{export_ocel_sqlite_to_vec, import_ocel_sqlite_from_slice}, ocel_xml::{export_ocel_xml, import_ocel_xml_slice}
+    }}, process_models::oc_declare::OCDeclareArc}, discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions}, table_export::{TableExportOptions, export_bindings_to_writer}, trad_event_log::trad_log_to_ocel
 };
-use ocpq_shared::{
-    process_mining::{
-        event_log::ocel::ocel_struct::OCEL,
-        export_ocel_json_to_vec, export_ocel_sqlite_to_vec, export_ocel_xml,
-        import_ocel_sqlite_from_slice, import_ocel_xml_slice, import_xes_slice,
-        ocel::{
-            linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess},
-            ocel_struct::{OCELEvent, OCELObject},
-        },
-        XESImportOptions,
-    },
-    trad_event_log::trad_log_to_ocel,
-};
+
 use tower_http::cors::CorsLayer;
 
 use crate::load_ocel::{
@@ -65,10 +42,24 @@ pub mod load_ocel;
 
 #[derive(Clone, Default)]
 pub struct AppState {
-    ocel: Arc<RwLock<Option<IndexLinkedOCEL>>>,
+    ocel: Arc<RwLock<Option<SlimLinkedOCEL>>>,
     client: Arc<RwLock<Option<Client>>>,
     jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
+}
+
+struct AppError(String);
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.0).into_response()
+    }
+}
+
+impl From<String> for AppError {
+    fn from(err: String) -> Self {
+        Self(err)
+    }
 }
 
 #[tokio::main]
@@ -103,14 +94,6 @@ async fn main() {
             post(upload_ocel_xes_conversion).layer(DefaultBodyLimit::disable()),
         )
         .route("/ocel/available", get(get_available_ocels))
-        .route(
-            "/ocel/event-qualifiers",
-            get(get_qualifiers_for_event_types_handler),
-        )
-        .route(
-            "/ocel/object-qualifiers",
-            get(get_qualifers_for_object_types),
-        )
         .route("/ocel/graph", post(ocel_graph_req))
         .route("/ocel/check-constraints-box", post(check_with_box_tree_req))
         .route("/ocel/create-db-query", post(translate_to_db_req))
@@ -171,14 +154,17 @@ async fn get_loaded_ocel_info(
 async fn upload_ocel_xml<'a>(
     State(state): State<AppState>,
     ocel_bytes: Bytes,
-) -> (StatusCode, Json<OCELInfo>) {
-    let ocel = import_ocel_xml_slice(&ocel_bytes);
-    let mut x = state.ocel.write().unwrap();
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
-    let ocel_info: OCELInfo = (&locel).into();
-    *x = Some(locel);
-
-    (StatusCode::OK, Json(ocel_info))
+) -> Result<Json<OCELInfo>, AppError> {
+    match import_ocel_xml_slice(&ocel_bytes) {
+        Ok(ocel) => {
+            let mut x = state.ocel.write().unwrap();
+            let locel = SlimLinkedOCEL::from_ocel(ocel);
+            let ocel_info: OCELInfo = (&locel).into();
+            *x = Some(locel);
+            Ok(Json(ocel_info))
+        }
+        Err(e) => Err(e.to_string().into()),
+    }
 }
 
 async fn upload_ocel_sqlite<'a>(
@@ -187,7 +173,7 @@ async fn upload_ocel_sqlite<'a>(
 ) -> (StatusCode, Json<OCELInfo>) {
     let ocel = import_ocel_sqlite_from_slice(&ocel_bytes).unwrap();
     let mut x = state.ocel.write().unwrap();
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     *x = Some(locel);
 
@@ -199,7 +185,7 @@ async fn upload_ocel_json<'a>(
     ocel_bytes: Bytes,
 ) -> (StatusCode, Json<OCELInfo>) {
     let ocel: OCEL = serde_json::from_slice(&ocel_bytes).unwrap();
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     let mut x = state.ocel.write().unwrap();
     *x = Some(locel);
@@ -215,7 +201,7 @@ async fn upload_ocel_xes_conversion<'a>(
     let xes = import_xes_slice(&xes_bytes, is_compressed_gz, XESImportOptions::default()).unwrap();
     let ocel = trad_log_to_ocel(&xes);
 
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     let mut x = state.ocel.write().unwrap();
     *x = Some(locel);
@@ -223,41 +209,11 @@ async fn upload_ocel_xes_conversion<'a>(
 }
 pub fn with_ocel_from_state<T, F>(State(state): &State<AppState>, f: F) -> Option<T>
 where
-    F: FnOnce(&IndexLinkedOCEL) -> T,
+    F: FnOnce(&SlimLinkedOCEL) -> T,
 {
     let read_guard = state.ocel.read().ok()?;
     let ocel_ref = read_guard.as_ref()?;
     Some(f(ocel_ref))
-}
-
-pub async fn get_qualifiers_for_event_types_handler<'a>(
-    State(state): State<AppState>,
-) -> (
-    StatusCode,
-    Json<Option<HashMap<String, HashMap<String, QualifiersForEventType>>>>,
-) {
-    match with_ocel_from_state(
-        &State(state),
-        |ocel| -> HashMap<String, HashMap<String, QualifiersForEventType>> {
-            get_qualifiers_for_event_types(ocel.get_ocel_ref())
-        },
-    ) {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::BAD_REQUEST, Json(None)),
-    }
-}
-
-pub async fn get_qualifers_for_object_types<'a>(
-    State(state): State<AppState>,
-) -> (
-    StatusCode,
-    Json<Option<HashMap<String, HashSet<QualifierAndObjectType>>>>,
-) {
-    let qualifier_and_type = with_ocel_from_state(&State(state), get_object_rels_per_type);
-    match qualifier_and_type {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::BAD_REQUEST, Json(None)),
-    }
 }
 
 pub async fn ocel_graph_req<'a>(
@@ -326,20 +282,22 @@ pub async fn auto_discover_constraints_handler<'a>(
 
 pub async fn auto_discover_oc_declare_handler(
     state: State<AppState>,
-    Json(req): Json<oc_declare::OCDeclareDiscoveryOptions>,
+    Json(req): Json<OCDeclareDiscoveryOptions>,
 ) -> Json<Option<Vec<OCDeclareArc>>> {
     Json(with_ocel_from_state(&state, |locel| {
-        oc_declare::discover_behavior_constraints(&locel, req)
+        todo!("TODO")
+        // ocpq_shared::process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints(locel, req)
     }))
 }
 pub async fn evaluate_oc_declare_arcs_handler(
     state: State<AppState>,
-    Json(req): Json<Vec<oc_declare::OCDeclareArc>>,
+    Json(req): Json<Vec<OCDeclareArc>>,
 ) -> Json<Option<Vec<f64>>> {
     Json(with_ocel_from_state(&state, |locel| {
-        req.iter()
-            .map(|arc| arc.get_for_all_evs_perf(&locel))
-            .collect()
+        todo!("TODO")
+        // req.iter()
+        //     .map(|arc| arc.get_for_all_evs_perf(&locel))
+        //     .collect()
     }))
 }
 pub async fn get_activity_statistics_handler(
@@ -387,8 +345,8 @@ pub async fn get_event_info_req<'a>(
 ) -> Json<Option<OCELEvent>> {
     Json(
         with_ocel_from_state(&state, |ocel| {
-            ocel.get_ev_index(event_id)
-                .map(|e_index| ocel.get_ev(&e_index).clone())
+            ocel.get_ev_by_id(event_id)
+                .map(|e_index| ocel.get_ev(&e_index).into_owned())
         })
         .unwrap_or_default(),
     )
@@ -399,8 +357,8 @@ pub async fn get_object_info_req<'a>(
 ) -> Json<Option<OCELObject>> {
     Json(
         with_ocel_from_state(&state, |ocel| {
-            ocel.get_ob_index(&object_id)
-                .map(|o_index| ocel.get_ob(&o_index).clone())
+            ocel.get_ob_by_id(&object_id)
+                .map(|o_index| ocel.get_ob(&o_index).into_owned())
         })
         .unwrap_or_default(),
     )

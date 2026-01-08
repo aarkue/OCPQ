@@ -1,5 +1,7 @@
 use itertools::Itertools;
-use process_mining::ocel::linked_ocel::{IndexLinkedOCEL, LinkedOCELAccess};
+use process_mining::core::event_data::object_centric::linked_ocel::{
+    LinkedOCELAccess, SlimLinkedOCEL,
+};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::structs::{Binding, BindingBox, BindingStep};
@@ -11,7 +13,7 @@ fn check_next_filters(
     b: Binding,
     next_step: usize,
     steps: &[BindingStep],
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
 ) -> Option<Binding> {
     for step in steps.iter().skip(next_step) {
         if let BindingStep::Filter(f) = &step {
@@ -28,13 +30,13 @@ fn check_next_filters(
 }
 
 impl BindingBox {
-    pub fn expand_empty(&self, ocel: &IndexLinkedOCEL) -> Result<(Vec<Binding>, bool), String> {
+    pub fn expand_empty(&self, ocel: &SlimLinkedOCEL) -> Result<(Vec<Binding>, bool), String> {
         self.expand(Binding::default(), ocel)
     }
 
     pub fn expand_with_steps_empty(
         &self,
-        ocel: &IndexLinkedOCEL,
+        ocel: &SlimLinkedOCEL,
         steps: &[BindingStep],
     ) -> Result<(Vec<Binding>, bool), String> {
         self.expand_with_steps(Binding::default(), ocel, steps)
@@ -43,7 +45,7 @@ impl BindingBox {
     pub fn expand(
         &self,
         parent_binding: Binding,
-        ocel: &IndexLinkedOCEL,
+        ocel: &SlimLinkedOCEL,
     ) -> Result<(Vec<Binding>, bool), String> {
         let order = BindingStep::get_binding_order(self, Some(&parent_binding), ocel);
         self.expand_with_steps(parent_binding, ocel, &order)
@@ -52,7 +54,7 @@ impl BindingBox {
     pub fn expand_with_steps(
         &self,
         parent_binding: Binding,
-        ocel: &IndexLinkedOCEL,
+        ocel: &SlimLinkedOCEL,
         steps: &[BindingStep],
     ) -> Result<(Vec<Binding>, bool), String> {
         let mut ret = vec![parent_binding];
@@ -73,17 +75,14 @@ impl BindingBox {
                                 .iter()
                                 .flat_map(|ev_type| ocel.get_evs_of_type(ev_type))
                                 .filter_map(move |e_index| {
-                                    let e = ocel.get_ev(e_index);
                                     if time_constr.is_none()
                                         || time_constr.as_ref().unwrap().iter().all(
                                             |(ref_ev_var_name, (min_sec, max_sec))| {
-                                                // println!(
-                                                //     "{:?} - {:?}; Binding: {:?}",
-                                                //     ref_ev_var_name, step, b
-                                                // );
-                                                let ref_ev = b.get_ev(ref_ev_var_name, ocel);
+                                                let ref_ev = b.get_ev_index(ref_ev_var_name);
                                                 if let Some(ref_ev) = ref_ev {
-                                                    let duration_diff = (e.time - ref_ev.time)
+                                                    let ref_ev_time = ocel.get_ev_time(ref_ev);
+                                                    let e_time = ocel.get_ev_time(e_index);
+                                                    let duration_diff = (*e_time - ref_ev_time)
                                                         .num_milliseconds()
                                                         as f64
                                                         / 1000.0;
@@ -150,7 +149,7 @@ impl BindingBox {
                             let re = Ok(obs
                                 .into_iter()
                                 .filter(|(q, o)| {
-                                    obj_types.contains(&ocel.get_ob(o).object_type)
+                                    obj_types.contains(ocel.get_ob_type_of(o))
                                         && qualifier.as_ref().is_none_or(|qual| qual == *q)
                                 })
                                 .filter_map(move |(_q, o)| {
@@ -188,8 +187,8 @@ impl BindingBox {
                                     if qualifier.as_ref().is_none_or(|q| q == qual) {
                                         let allowed_types =
                                             self.new_object_vars.get(ob_var_name)?;
-                                        let o = ocel.get_ob(to_ob_index);
-                                        if allowed_types.contains(&o.object_type) {
+                                        let to_obj_type = ocel.get_ob_type_of(to_ob_index);
+                                        if allowed_types.contains(to_obj_type) {
                                             check_next_filters(
                                                 b.clone()
                                                     .expand_with_ob(*ob_var_name, *to_ob_index),
@@ -225,23 +224,19 @@ impl BindingBox {
                                 .new_event_vars
                                 .get(ev_var_name)
                                 .ok_or_else(|| format!("Could not get {ev_var_name}"))?;
-                            let e2o_rev: Vec<_> = ocel.get_e2o_rev(ob_index).collect();
+                            let e2o_rev = ocel
+                                .get_e2o_rev(ob_index)
+                                .filter(|(_q, ev)| ev_types.contains(ocel.get_ev_type_of(ev)));
                             let vec = e2o_rev
                                 .into_iter()
-                                .filter_map(move |(q, to_ev_index)| {
+                                .filter_map(|(q, to_ev_index)| {
                                     if qualifier.as_ref().is_none_or(move |qual| qual == q) {
-                                        let to_ev = ocel.get_ev(to_ev_index);
-                                        if ev_types.contains(&to_ev.event_type) {
-                                            check_next_filters(
-                                                b.clone()
-                                                    .expand_with_ev(*ev_var_name, *to_ev_index),
-                                                step_index + 1,
-                                                steps,
-                                                ocel,
-                                            )
-                                        } else {
-                                            None
-                                        }
+                                        check_next_filters(
+                                            b.clone().expand_with_ev(*ev_var_name, *to_ev_index),
+                                            step_index + 1,
+                                            steps,
+                                            ocel,
+                                        )
                                     } else {
                                         None
                                     }

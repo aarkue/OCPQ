@@ -6,8 +6,8 @@ use std::{cmp::max, collections::HashMap};
 
 use itertools::Itertools;
 
-use process_mining::ocel::linked_ocel::{
-    index_linked_ocel::EventOrObjectIndex, IndexLinkedOCEL, LinkedOCELAccess,
+use process_mining::core::event_data::object_centric::linked_ocel::{
+    slim_linked_ocel::EventOrObjectIndex, SlimLinkedOCEL, LinkedOCELAccess,
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -24,7 +24,7 @@ use super::{
 
 // 1st Step: Allow building of  (simple) sampled bindings based on object/event type
 pub fn generate_sample_bindings(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     ocel_types: &Vec<EventOrObjectType>,
     target_variable: Variable,
 ) -> Vec<Binding> {
@@ -81,7 +81,7 @@ pub fn binding_to_instances(
 // Results are a list of bools of the same size as the input bindings
 // True: Subtree was satisfied for Binding, False: Subtree was violated for Binding
 pub fn label_bindings(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     bindings: &Vec<Binding>,
     subtree: &BindingBoxTree,
 ) -> Vec<bool> {
@@ -98,7 +98,7 @@ pub fn label_bindings(
 }
 
 pub fn get_labeled_instances(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     ocel_type: &EventOrObjectType,
     subtree: BindingBoxTree,
 ) -> Vec<(EventOrObjectIndex, bool)> {
@@ -125,7 +125,7 @@ pub fn get_labeled_instances(
 // 2nd Step: Test Combination of Trees
 //
 pub fn test_tree_combinations(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     subtrees: Vec<BindingBoxTree>,
     input_bindings: Vec<Binding>,
     input_variable: Variable,
@@ -246,7 +246,7 @@ pub fn test_tree_combinations(
 ///
 /// The new version (as did the first) _specifically_ discovers constraints for violating/non-supporting bindings
 pub fn discover_or_constraints_old(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     ocel_type: &EventOrObjectType,
     input_variable: Variable,
     subtrees: Vec<BindingBoxTree>,

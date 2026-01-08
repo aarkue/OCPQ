@@ -10,6 +10,7 @@ serde = {version = "1.0.192" , features = ["derive", "rc"]}
 serde_json = "1.0.108"
 serde_with = "3.11.0"
 ts-rs = { version = "8.1", features = ["serde-compat","chrono-impl"] }
+rustc-hash = "2.1.1"
 # process_mining = {path = "../../../rust4pm/process_mining", features = ['ocel-sqlite']}
 process_mining = { git = "https://github.com/aarkue/rust4pm", features = ["ocel-sqlite"], branch = "feat/oc-declare" }
 rayon = "1.8.0"

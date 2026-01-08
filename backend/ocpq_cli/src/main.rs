@@ -7,11 +7,8 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use ocpq_shared::binding_box::{evaluate_box_tree, BindingBoxTree};
-use ocpq_shared::process_mining::{
-    import_ocel_json_from_path, import_ocel_sqlite_from_path, import_ocel_xml_file,
-    ocel::linked_ocel::IndexLinkedOCEL,
-};
+use ocpq_shared::{binding_box::{BindingBoxTree, evaluate_box_tree}, process_mining::{Importable, OCEL, core::event_data::object_centric::linked_ocel::SlimLinkedOCEL}};
+
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -32,19 +29,10 @@ fn main() {
     let bbox_tree: BindingBoxTree =
         serde_json::from_reader(bbox_reader).expect("Could not parse bbox_tree JSON");
     let now = Instant::now();
-    let ocel = match args.ocel.extension().and_then(|e| e.to_str()) {
-        Some("json") => {
-            import_ocel_json_from_path(args.ocel).expect("Could not parse JSON OCEL2.0")
-        }
-        Some("sqlite") => {
-            import_ocel_sqlite_from_path(args.ocel).expect("Could not parse SQLite OCEL2.0")
-        }
-        Some("xml") => import_ocel_xml_file(args.ocel),
-        x => panic!("Could not import OCEL 2.0 file. Unknown extension: {x:?}"),
-    };
+    let ocel = OCEL::import_from_path(args.ocel).expect("Could not import OCEL 2.0 file");
     println!("Imported OCEL 2.0 in {:?}", now.elapsed());
     let now = Instant::now();
-    let index_linked_ocel = IndexLinkedOCEL::from_ocel(ocel);
+    let index_linked_ocel = SlimLinkedOCEL::from_ocel(ocel);
     println!("Linked OCEL 2.0 in {:?}", now.elapsed());
     let res = evaluate_box_tree(bbox_tree, &index_linked_ocel, true);
 

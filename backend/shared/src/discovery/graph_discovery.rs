@@ -9,9 +9,9 @@ use std::{
 
 use itertools::Itertools;
 
-use process_mining::ocel::linked_ocel::{
-    index_linked_ocel::{EventOrObjectIndex, ObjectIndex},
-    IndexLinkedOCEL, LinkedOCELAccess,
+use process_mining::core::event_data::object_centric::linked_ocel::{
+    slim_linked_ocel::{EventOrObjectIndex, ObjectIndex},
+    LinkedOCELAccess, SlimLinkedOCEL,
 };
 // use plotly::{
 //     common::Marker,
@@ -37,7 +37,7 @@ use crate::{
         advanced::{binding_to_instances, generate_sample_bindings, label_bindings},
         RNG_SEED, SAMPLE_FRAC, SAMPLE_MIN_NUM_INSTANCES,
     },
-    preprocessing::linked_ocel::{event_or_object_from_index, OCELNodeRef},
+    preprocessing::linked_ocel::{event_or_object_from_index, OCELNode, OCELNodeRef},
 };
 
 use super::advanced::EventOrObjectType;
@@ -51,7 +51,7 @@ pub enum RefType {
 }
 
 pub fn get_instances(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     ocel_type: &EventOrObjectType,
 ) -> Vec<EventOrObjectIndex> {
     let mut rng = StdRng::seed_from_u64(RNG_SEED);
@@ -95,10 +95,7 @@ pub struct SymmetricRel {
     pub reversed: bool,
     pub qualifier: String,
 }
-pub fn get_symmetric_rels(
-    index: &EventOrObjectIndex,
-    locel: &IndexLinkedOCEL,
-) -> Vec<SymmetricRel> {
+pub fn get_symmetric_rels(index: &EventOrObjectIndex, locel: &SlimLinkedOCEL) -> Vec<SymmetricRel> {
     match index {
         EventOrObjectIndex::Event(event_index) => locel
             .get_e2o(event_index)
@@ -129,7 +126,7 @@ pub fn get_symmetric_rels(
     }
 }
 pub fn discover_count_constraints(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     coverage: f32,
     ocel_type: EventOrObjectType,
 ) -> Vec<CountConstraint> {
@@ -150,7 +147,7 @@ pub fn discover_count_constraints_for_supporting_instances<
     It: Borrow<EventOrObjectIndex>,
     I: Iterator<Item = It>,
 >(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     coverage: f32,
     supporting_instances: I,
     supporting_instance_type: &EventOrObjectType,
@@ -159,14 +156,12 @@ pub fn discover_count_constraints_for_supporting_instances<
     let mut total_map: HashMap<_, Vec<usize>> = HashMap::new();
     for o_index in supporting_instances {
         let mut map: HashMap<_, usize> = ocel
-            .get_ocel_ref()
-            .event_types
-            .iter()
-            .map(|et| ((RefType::Event, et.name.clone()), 0))
-            .chain(ocel.get_ocel_ref().object_types.iter().flat_map(|ot| {
+            .get_ev_types()
+            .map(|et| ((RefType::Event, et.to_string()), 0))
+            .chain(ocel.get_ob_types().flat_map(|ot| {
                 vec![
-                    ((RefType::Object, ot.name.clone()), 0),
-                    ((RefType::ObjectReversed, ot.name.clone()), 0),
+                    ((RefType::Object, ot.to_string()), 0),
+                    ((RefType::ObjectReversed, ot.to_string()), 0),
                 ]
             }))
             .collect();
@@ -176,7 +171,7 @@ pub fn discover_count_constraints_for_supporting_instances<
         } in rels
         {
             let (ref_type, ocel_type) = match event_or_object_from_index(index, ocel) {
-                OCELNodeRef::Event(e) => (
+                OCELNode::Event(e) => (
                     if reversed {
                         RefType::EventReversed
                     } else {
@@ -184,7 +179,7 @@ pub fn discover_count_constraints_for_supporting_instances<
                     },
                     e.event_type.clone(),
                 ),
-                OCELNodeRef::Object(o) => (
+                OCELNode::Object(o) => (
                     if reversed {
                         RefType::ObjectReversed
                     } else {
@@ -568,7 +563,7 @@ pub struct EFConstraint {
 }
 
 pub fn discover_ef_constraints(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     coverage: f32,
     object_type: &String,
 ) -> Vec<EFConstraint> {
@@ -593,7 +588,7 @@ pub fn discover_ef_constraints_for_supporting_instances<
     It: Borrow<ObjectIndex>,
     I: Iterator<Item = It>,
 >(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     coverage: f32,
     supporting_instances: I,
     supporting_object_type: &String,
@@ -601,7 +596,17 @@ pub fn discover_ef_constraints_for_supporting_instances<
     let _now = Instant::now();
     let mut ret = Vec::new();
     let mut rng = StdRng::seed_from_u64(RNG_SEED);
-    let mut total_map: HashMap<(&String, &String), Vec<Option<f64>>> = HashMap::new();
+    let mut total_map: HashMap<String, HashMap<String, Vec<Option<f64>>>> = ocel
+        .get_ev_types()
+        .map(|et1| {
+            (
+                et1.to_string(),
+                ocel.get_ev_types()
+                    .map(|et2| (et2.to_string(), Vec::default()))
+                    .collect(),
+            )
+        })
+        .collect();
     for o_index in supporting_instances {
         let rels = get_symmetric_rels(&(*o_index.borrow()).into(), ocel);
         let evs = rels
@@ -626,34 +631,32 @@ pub fn discover_ef_constraints_for_supporting_instances<
         };
         // println!("Selected {} out of {} events",evs.len(), evs_num);
         for i in 0..evs.len() {
-            let mut min_delay_to: HashMap<&String, Option<f64>> = ocel
-                .get_ocel_ref()
-                .event_types
-                .iter()
-                .map(|t| (&t.name, None))
-                .collect();
+            let mut min_delay_to: HashMap<String, Option<f64>> =
+                ocel.get_ev_types().map(|t| (t.to_string(), None)).collect();
             for j in 0..evs.len() {
                 if i != j && evs[i].time <= evs[j].time {
                     let time_diff = (evs[j].time - evs[i].time).num_milliseconds() as f64 / 1000.0;
 
-                    let v = min_delay_to.entry(&evs[j].event_type).or_default();
-                    if v.is_none() || v.unwrap() > time_diff {
-                        *v = Some(time_diff);
+                    if let Some(v) = min_delay_to.get_mut(&evs[j].event_type) {
+                        if v.is_none() || v.unwrap() > time_diff {
+                            *v = Some(time_diff);
+                        }
                     }
                 }
             }
             for (to_ev_type, min_delay) in &min_delay_to {
-                total_map
-                    .entry((&evs[i].event_type, *to_ev_type))
-                    .or_default()
-                    .push(*min_delay);
+                if let Some(x) = total_map
+                    .get_mut(&evs[i].event_type)
+                    .and_then(|x| x.get_mut(to_ev_type))
+                {
+                    x.push(*min_delay);
+                }
             }
         }
     }
     // println!("Count finished after {:?}",now.elapsed());
-    total_map
-        .iter()
-        .for_each(|((from_ev_type, to_ev_type), seconds)| {
+    for (from_ev_type, x) in total_map {
+        for (to_ev_type, seconds) in x {
             let num_ef_with_any_delay = seconds.iter().filter(|s| s.is_some()).count() as f32;
             let fraction_ef_with_any_delay = num_ef_with_any_delay / seconds.len() as f32;
             // println!("EF Fraction: {fraction_ef_with_any_delay} of {coverage}");
@@ -675,15 +678,15 @@ pub fn discover_ef_constraints_for_supporting_instances<
                 if std_deviation >= 0.0 {
                     // Otherwise, not interesting (no deviation between values)
                     if let Some((min, max)) = get_seconds_range_with_coverage(
-                        seconds,
+                        &seconds,
                         coverage,
                         0.0,
                         std_deviation,
                         Direction::Increase,
                     ) {
                         ret.push(EFConstraint {
-                            from_ev_type: (*from_ev_type).clone(),
-                            to_ev_type: (*to_ev_type).clone(),
+                            from_ev_type: from_ev_type.to_string(),
+                            to_ev_type: to_ev_type.to_string(),
                             min_duration_sec: Some(min),
                             max_duration_sec: Some(max),
                             for_object_type: supporting_object_type.clone(),
@@ -691,7 +694,8 @@ pub fn discover_ef_constraints_for_supporting_instances<
                     }
                 }
             }
-        });
+        }
+    }
     // println!("total_map finished after {:?}",now.elapsed());
     ret
 }
@@ -791,7 +795,7 @@ impl EFConstraint {
 }
 
 pub fn discover_or_constraints_new(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     ocel_type: &EventOrObjectType,
     coverage: f32,
 ) -> Vec<(String, BindingBoxTree)> {
@@ -996,7 +1000,7 @@ pub fn discover_or_constraints_new(
 }
 
 pub fn check_or_compat(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     bindings: &Vec<Binding>,
     st1_labeled_bindings: &[bool],
     st1: &BindingBoxTree,

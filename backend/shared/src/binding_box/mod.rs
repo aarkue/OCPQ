@@ -11,16 +11,16 @@ use std::{collections::HashSet, fs::File, io::BufWriter, time::Instant};
 
 use chrono::DateTime;
 use itertools::Itertools;
+
 use process_mining::{
-    export_ocel_json_path,
-    ocel::{
+    core::event_data::object_centric::{
         linked_ocel::{
-            index_linked_ocel::{EventIndex, ObjectIndex},
-            IndexLinkedOCEL, LinkedOCELAccess,
+            slim_linked_ocel::{EventIndex, ObjectIndex},
+            LinkedOCELAccess, SlimLinkedOCEL,
         },
-        ocel_struct::OCELRelationship,
+        OCELRelationship,
     },
-    OCEL,
+    Exportable, OCEL,
 };
 use serde::{Deserialize, Serialize};
 pub use structs::{Binding, BindingBox, BindingBoxTree, BindingStep, ViolationReason};
@@ -105,7 +105,7 @@ pub struct EvaluationResultWithCount {
 
 pub fn evaluate_box_tree(
     tree: BindingBoxTree,
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     measure_performance: bool,
 ) -> Result<EvaluateBoxTreeResult, String> {
     if measure_performance {
@@ -152,7 +152,7 @@ pub fn evaluate_box_tree(
         durations_path.push(format!("{dt_iso}-durations.json"));
         let seconds_json_file = File::create(durations_path).unwrap();
         serde_json::to_writer_pretty(BufWriter::new(seconds_json_file), &eval_times).unwrap();
-        println!("Evaluation time: {eval_times:?}");
+        println!("Evaluation times: {eval_times:?}");
         println!(
             "Mean: {:.2}ms",
             1000.0 * eval_times.iter().sum::<f64>() / eval_times.len() as f64
@@ -160,7 +160,7 @@ pub fn evaluate_box_tree(
     }
     let now = Instant::now();
     let (evaluation_results_flat, bindings_skipped) = tree.evaluate(ocel)?;
-    println!("Tree Evaluated in {:?}", now.elapsed());
+    // println!("Tree Evaluated in {:?}", now.elapsed());
     if bindings_skipped {
         println!("[!!!] Query yielded too many results. Some bindings were skipped. Reported counts are inaccurate!");
     }
@@ -184,31 +184,28 @@ pub fn evaluate_box_tree(
             r.situation_violated_count += 1;
         }
     }
-
-    println!(
-        "Evaluated in {:?} (Size: {})",
-        now.elapsed(),
-        evaluation_results.len()
-    );
+    if !measure_performance {
+        println!(
+            "Evaluated in {:?} (Size: {})",
+            now.elapsed(),
+            evaluation_results.len()
+        );
+    }
     Ok(EvaluateBoxTreeResult {
         evaluation_results,
         object_ids: ocel
-            .get_ocel_ref()
-            .objects
-            .iter()
-            .map(|o| o.id.clone())
+            .get_all_obs_ref()
+            .map(|o| ocel.get_ob_id(o).to_string())
             .collect(),
         event_ids: ocel
-            .get_ocel_ref()
-            .events
-            .iter()
-            .map(|o| o.id.clone())
+            .get_all_evs_ref()
+            .map(|e| ocel.get_ev_id(e).to_string())
             .collect(),
         bindings_skipped,
     })
 }
 
-pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Result<OCEL, String> {
+pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Result<OCEL, String> {
     let now = Instant::now();
     let (evaluation_results_flat, skipped_bindings) = tree.evaluate(ocel)?;
     println!("Tree Evaluated in {:?}", now.elapsed());
@@ -395,10 +392,9 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Res
         let ob = ocel.get_ob(ob_index);
         if !added_ob_types.contains(&ob.object_type) {
             if let Some(ot) = ocel
-                .get_ocel_ref()
-                .object_types
-                .iter()
-                .find(|ot| ot.name == ob.object_type)
+                .get_ob_types()
+                .find(|ot| **ot == ob.object_type)
+                .map(|ot_name| ocel.get_ob_type(ot_name))
             {
                 filtered_ocel.object_types.push(ot.clone());
             } else {
@@ -406,7 +402,7 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Res
             }
             added_ob_types.insert(ob.object_type.clone());
         }
-        let mut ob = ob.clone();
+        let mut ob = ob.into_owned();
         let o2os = ocel.get_o2o(ob_index);
         ob.relationships = o2os
             .into_iter()
@@ -424,10 +420,9 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Res
         let ev = ocel.get_ev(ev_index);
         if !added_ev_types.contains(&ev.event_type) {
             if let Some(et) = ocel
-                .get_ocel_ref()
-                .event_types
-                .iter()
-                .find(|ot| ot.name == ev.event_type)
+                .get_ev_types()
+                .find(|et| **et == ev.event_type)
+                .map(|et| ocel.get_ev_type(et))
             {
                 filtered_ocel.event_types.push(et.clone());
             } else {
@@ -435,7 +430,7 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Res
             }
             added_ev_types.insert(ev.event_type.clone());
         }
-        let mut ev = ev.clone();
+        let mut ev = ev.into_owned();
         let e2os = ocel.get_e2o(ev_index);
         ev.relationships = e2os
             .into_iter()
@@ -445,10 +440,9 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &IndexLinkedOCEL) -> Res
                 qualifier: q.to_string(),
             })
             .collect();
-        filtered_ocel.events.push(ev.clone());
+        filtered_ocel.events.push(ev);
     }
     println!("Filtering (excl. export) took {:?}", filter_now.elapsed());
-    export_ocel_json_path(&filtered_ocel, "filtered-ocel.json").unwrap();
-
+    OCEL::export_to_path(&filtered_ocel, "filtered-ocel.json").map_err(|e| e.to_string())?;
     Ok(filtered_ocel)
 }

@@ -1,10 +1,10 @@
-use std::{borrow::Cow, collections::HashSet};
+use std::{borrow::Cow, collections::HashSet, hash::Hash};
 
 use anyhow::{Error, Ok};
 use itertools::Itertools;
-use process_mining::ocel::{
-    linked_ocel::IndexLinkedOCEL,
-    ocel_struct::{OCELAttributeType, OCELAttributeValue},
+use process_mining::core::event_data::object_centric::{
+    linked_ocel::{SlimLinkedOCEL, LinkedOCELAccess},
+    OCELAttributeType, OCELAttributeValue,
 };
 use rust_xlsxwriter::{
     ColNum, Format, FormatAlign, FormatBorder, IntoExcelData, RowNum, Workbook, Worksheet,
@@ -14,12 +14,6 @@ use ts_rs::TS;
 
 use crate::binding_box::EvaluationResultWithCount;
 
-// #[test]
-// fn test(){
-
-//     let mut workbook = Workbook::new();
-//     workbook.save_to_writer(writer)
-// }
 pub enum CellContent<'a> {
     String(Cow<'a, str>),
     Value(&'a OCELAttributeValue),
@@ -128,7 +122,11 @@ impl From<&CellContent<'_>> for Vec<u8> {
 
 pub trait TableWriter<'a, W: std::io::Write> {
     fn new(w: &'a mut W) -> Self;
-    fn write_cell(&mut self, s: impl Into<CellContent<'a>>, t: CellType) -> Result<(), Error>;
+    fn write_cell<'b>(
+        &mut self,
+        s: impl Into<CellContent<'b>>,
+        t: CellType,
+    ) -> Result<(), Error>;
     fn new_row(&mut self) -> Result<(), Error>;
     fn save(self) -> Result<(), Error>;
 }
@@ -144,7 +142,7 @@ impl<'a, W: std::io::Write> TableWriter<'a, W> for CSVTableWriter<'a, W> {
         }
     }
 
-    fn write_cell(&mut self, s: impl Into<CellContent<'a>>, _: CellType) -> Result<(), Error> {
+    fn write_cell<'b>(&mut self, s: impl Into<CellContent<'b>>, _: CellType) -> Result<(), Error> {
         self.writer.write_field(Into::<Vec<u8>>::into(&s.into()))?;
         Ok(())
     }
@@ -183,7 +181,7 @@ impl<'a, W: std::io::Write + std::io::Seek + std::marker::Send> TableWriter<'a, 
         }
     }
 
-    fn write_cell(&mut self, s: impl Into<CellContent<'a>>, t: CellType) -> Result<(), Error> {
+    fn write_cell<'b>(&mut self, s: impl Into<CellContent<'b>>, t: CellType) -> Result<(), Error> {
         let format: Format = match t {
             CellType::HEADER(b) => {
                 let f = Format::new()
@@ -278,9 +276,9 @@ impl Default for TableExportOptions {
 }
 
 pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
-    ocel: &'a IndexLinkedOCEL,
+    ocel: &'a SlimLinkedOCEL,
     bindings: &EvaluationResultWithCount,
-    mut w: impl TableWriter<'a, W>,
+    mut w: impl TableWriter<'a, W> + 'a,
     options: &'a TableExportOptions,
 ) -> Result<(), Error> {
     if let Some((b, _)) = bindings.situations.first() {
@@ -294,11 +292,10 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                     .situations
                     .iter()
                     .flat_map(|(b, _)| {
-                        b.get_ev(ev_var, ocel)
-                            .iter()
-                            .flat_map(|e| e.attributes.iter().map(|a| &a.name))
-                            .collect::<Vec<_>>()
+                        let ev = b.get_ev_index(&ev_var)?;
+                        Some(ocel.get_ev_attrs(ev))
                     })
+                    .flatten()
                     .collect::<HashSet<_>>()
                     .into_iter()
                     .collect_vec()
@@ -312,11 +309,10 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                     .situations
                     .iter()
                     .flat_map(|(b, _)| {
-                        b.get_ob(ob_var, ocel)
-                            .iter()
-                            .flat_map(|e| e.attributes.iter().map(|a| &a.name))
-                            .collect::<Vec<_>>()
+                        let ob = b.get_ob_index(&ob_var)?;
+                        Some(ocel.get_ob_attrs(ob))
                     })
+                    .flatten()
                     .collect::<HashSet<_>>()
                     .into_iter()
                     .collect_vec()
@@ -389,7 +385,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                         w.write_cell(&ev.id, CellType::DEFAULT)?;
                     }
                     for attr in ev_attrs {
-                        if let Some(val) = ev.attributes.iter().find(|a| &&a.name == attr) {
+                        if let Some(val) = ev.attributes.iter().find(|a| &a.name == attr) {
                             w.write_cell(
                                 CellContent::Value(&val.value),
                                 CellType::ValueType((&val.value).into()),
@@ -437,7 +433,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
 }
 
 pub fn export_bindings_to_csv_writer<'a, W: std::io::Write>(
-    ocel: &'a IndexLinkedOCEL,
+    ocel: &'a SlimLinkedOCEL,
     bindings: &EvaluationResultWithCount,
     w: &mut W,
     options: &'a TableExportOptions,
@@ -447,7 +443,7 @@ pub fn export_bindings_to_csv_writer<'a, W: std::io::Write>(
 }
 
 pub fn export_bindings_to_xlsx_writer<'a, W: std::io::Write + std::io::Seek + std::marker::Send>(
-    ocel: &'a IndexLinkedOCEL,
+    ocel: &'a SlimLinkedOCEL,
     bindings: &EvaluationResultWithCount,
     w: &mut W,
     options: &'a TableExportOptions,
@@ -457,7 +453,7 @@ pub fn export_bindings_to_xlsx_writer<'a, W: std::io::Write + std::io::Seek + st
 }
 
 pub fn export_bindings_to_writer<'a, W: std::io::Write + std::io::Seek + std::marker::Send>(
-    ocel: &'a IndexLinkedOCEL,
+    ocel: &'a SlimLinkedOCEL,
     bindings: &EvaluationResultWithCount,
     w: &mut W,
     options: &'a TableExportOptions,

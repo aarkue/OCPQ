@@ -662,7 +662,7 @@ function InnerApp({ children }: { children?: ReactNode }) {
           <div className="border-r border-r-slate-300 px-2 overflow-auto">
             <img
               src="/favicon.png"
-              className="w-24 h-24 mx-auto mt-4 mb-2"
+              className="w-28 h-28 mx-auto mt-4 mb-2"
             />
             <h2 className="font-black text-3xl bg-clip-text text-transparent bg-linear-to-r from-slate-800 to-sky-600 tracking-tighter">
               OCPQ

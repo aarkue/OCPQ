@@ -1,16 +1,18 @@
-use process_mining::{
-    event_log::ocel::ocel_struct::{OCELEvent, OCELObject},
-    ocel::linked_ocel::{index_linked_ocel::EventOrObjectIndex, IndexLinkedOCEL, LinkedOCELAccess},
+use process_mining::core::event_data::object_centric::{
+    linked_ocel::{slim_linked_ocel::EventOrObjectIndex, SlimLinkedOCEL, LinkedOCELAccess},
+    OCELEvent, OCELObject,
 };
 use serde::{Deserialize, Serialize};
 pub fn event_or_object_from_index<'a>(
     index: EventOrObjectIndex,
-    locel: &'a IndexLinkedOCEL,
-) -> OCELNodeRef<'a> {
+    locel: &'a SlimLinkedOCEL,
+) -> OCELNode {
     let ret = match index {
-        EventOrObjectIndex::Event(event_index) => OCELNodeRef::Event(locel.get_ev(&event_index)),
+        EventOrObjectIndex::Event(event_index) => {
+            OCELNode::Event(locel.get_ev(&event_index).into_owned())
+        }
         EventOrObjectIndex::Object(object_index) => {
-            OCELNodeRef::Object(locel.get_ob(&object_index))
+            OCELNode::Object(locel.get_ob(&object_index).into_owned())
         }
     };
     ret

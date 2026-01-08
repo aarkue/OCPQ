@@ -7,7 +7,7 @@ use graph_discovery::{
 };
 use itertools::Itertools;
 
-use process_mining::ocel::linked_ocel::IndexLinkedOCEL;
+use process_mining::core::event_data::object_centric::linked_ocel::SlimLinkedOCEL;
 use serde::{Deserialize, Serialize};
 
 use crate::binding_box::BindingBoxTree;
@@ -59,7 +59,7 @@ pub struct AutoDiscoverConstraintsResponse {
 }
 
 pub fn auto_discover_constraints_with_options(
-    ocel: &IndexLinkedOCEL,
+    ocel: &SlimLinkedOCEL,
     options: AutoDiscoverConstraintsRequest,
 ) -> AutoDiscoverConstraintsResponse {
     let mut trees_per_type: HashMap<EventOrObjectType, Vec<BindingBoxTree>> = HashMap::new();
