@@ -3,6 +3,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -67,6 +68,7 @@ export default function AlertHelper<T>(props: AlertHelperProps<T>) {
       <AlertDialogContent className="flex flex-col max-h-full justify-between">
         <AlertDialogHeader>
           <AlertDialogTitle>{props.title}</AlertDialogTitle>
+          <AlertDialogDescription className="hidden">{props.title}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="text-sm text-gray-700 max-h-full overflow-auto px-2">
           <props.content

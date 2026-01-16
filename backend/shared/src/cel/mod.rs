@@ -12,16 +12,19 @@ use chrono::{DateTime, FixedOffset, Local};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use process_mining::core::event_data::object_centric::{
-    OCELAttributeValue, linked_ocel::{
-        LinkedOCELAccess, SlimLinkedOCEL, slim_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex}
-    }
+    linked_ocel::{
+        slim_linked_ocel::{EventIndex, EventOrObjectIndex, ObjectIndex},
+        LinkedOCELAccess, SlimLinkedOCEL,
+    },
+    OCELAttributeValue,
 };
 
 use crate::{
     binding_box::{
-        Binding, ViolationReason, structs::{EventVariable, LabelFunction, LabelValue, ObjectVariable, Variable}
+        structs::{EventVariable, LabelFunction, LabelValue, ObjectVariable, Variable},
+        Binding, ViolationReason,
     },
-    preprocessing::linked_ocel::{OCELNode, OCELNodeRef, event_or_object_from_index},
+    preprocessing::linked_ocel::{event_or_object_from_index, OCELNode},
 };
 
 fn string_to_index(s: &str) -> Option<EventOrObjectIndex> {
@@ -49,7 +52,7 @@ impl<T> Clone for RawBindingContextPtr<'_, T> {
 
 impl<T> Copy for RawBindingContextPtr<'_, T> {}
 
-fn index_string_to_val<'a>(s: &str, ocel: &'a SlimLinkedOCEL) -> Option<OCELNode> {
+fn index_string_to_val(s: &str, ocel: &SlimLinkedOCEL) -> Option<OCELNode> {
     let index = string_to_index(s)?;
     let ret = event_or_object_from_index(index, ocel);
     Some(ret)
@@ -272,8 +275,7 @@ pub fn evaluate_cel<'a>(
                                 .into_iter()
                                 .filter(|a| &a.name == attr_name.as_ref())
                                 .sorted_by_key(|a| a.time)
-                                .filter(|a| a.time <= at)
-                                .next_back()
+                                .rfind(|a| a.time <= at)
                                 .map(|a| a.value),
                         }
                         .unwrap_or(OCELAttributeValue::Null);
@@ -309,7 +311,8 @@ pub fn evaluate_cel<'a>(
             "attrs",
             move |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
                 let val = unsafe { index_string_to_val_raw(&variable, ocel_raw) };
-                let res = match val {
+
+                match val {
                     Some(val_ref) => {
                         let attr_val: Vec<Vec<Value>> = match val_ref {
                             OCELNode::Event(ev) => ev
@@ -339,8 +342,7 @@ pub fn evaluate_cel<'a>(
                     }
 
                     None => ftx.error("Event or Object not found.").into(),
-                };
-                res
+                }
             },
         );
 
@@ -365,8 +367,8 @@ pub fn evaluate_cel<'a>(
         context.add_function("events", move || -> ResolveResult {
             unsafe {
                 Ok((get_ocel_raw(ocel_raw)
-                .get_all_evs_ref()
-                    .map(|i | ev_index_to_name(i)))
+                    .get_all_evs()
+                    .map(|x| ev_index_to_name(&x)))
                 .collect_vec()
                 .into())
             }
@@ -375,8 +377,8 @@ pub fn evaluate_cel<'a>(
         context.add_function("objects", move || -> ResolveResult {
             unsafe {
                 Ok((get_ocel_raw(ocel_raw)
-                    .get_all_obs_ref()
-                    .map(|i | ob_index_to_name(i)))
+                    .get_all_obs()
+                    .map(|x| ob_index_to_name(&x)))
                 .collect_vec()
                 .into())
             }
@@ -445,13 +447,11 @@ pub fn add_cel_label<'a>(
 ) -> Result<(), String> {
     match evaluate_cel(&label_fun.cel, binding, child_res, ocel) {
         Ok(v) => {
-            binding.label_map.insert(label_fun.label.clone(), v.into());
+            binding.add_label(label_fun.label.clone(), v.into());
             Ok(())
         }
         Err(e) => {
-            binding
-                .label_map
-                .insert(label_fun.label.clone(), LabelValue::Null);
+            binding.add_label(label_fun.label.clone(), LabelValue::Null);
             Err(format!(
                 "Error while computing binding label {} with error {e:?}",
                 label_fun.label

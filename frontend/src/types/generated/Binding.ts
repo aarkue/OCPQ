@@ -3,4 +3,4 @@ import type { EventVariable } from "./EventVariable";
 import type { LabelValue } from "./LabelValue";
 import type { ObjectVariable } from "./ObjectVariable";
 
-export type Binding = { eventMap: { [key: EventVariable]: number }, objectMap: { [key: ObjectVariable]: number }, labelMap: { [key: string]: LabelValue }, };
+  export type Binding = { eventMap: Array<[EventVariable,number]>, objectMap:  Array<[ObjectVariable,number]> , labelMap: Array<[string,LabelValue]> };

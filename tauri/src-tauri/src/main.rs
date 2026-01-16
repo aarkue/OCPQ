@@ -5,7 +5,6 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::{
-    collections::{HashMap, HashSet},
     fs::File,
     io::{Cursor, Write},
     path::Path,
@@ -13,15 +12,36 @@ use std::{
 };
 
 use ocpq_shared::{
-    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex, binding_box::{
-        CheckWithBoxTreeRequest, EvaluateBoxTreeResult, ExportFormat, FilterExportWithBoxTreeRequest, evaluate_box_tree, filter_ocel_box_tree
-    }, db_translation::{DBTranslationInput, translate_to_sql_shared}, discovery::{
-        AutoDiscoverConstraintsRequest, AutoDiscoverConstraintsResponse, auto_discover_constraints_with_options
-    }, get_event_info, get_object_info, hpc_backend::{
-        Client, ConnectionConfig, JobStatus, OCPQJobOptions, get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job
-    }, oc_declare::statistics::{ActivityStatistics, get_activity_statistics, get_edge_stats}, ocel_graph::{OCELGraph, OCELGraphOptions, get_ocel_graph}, ocel_qualifiers::qualifiers::{QualifiersForEventType, get_qualifiers_for_event_types}, preprocessing::preprocess::get_object_rels_per_type, process_mining::{EventLog, Exportable, Importable, OCEL, core::event_data::{case_centric::xes::{XESImportOptions, import_xes_path, import_xes_slice}, object_centric::linked_ocel::SlimLinkedOCEL}, discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions}, table_export::{TableExportFormat, TableExportOptions, export_bindings_to_writer}
+    binding_box::{
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult, FilterExportWithBoxTreeRequest,
+    },
+    db_translation::{translate_to_sql_shared, DBTranslationInput},
+    discovery::{
+        auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
+        AutoDiscoverConstraintsResponse,
+    },
+    get_event_info, get_object_info,
+    hpc_backend::{
+        get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
+        ConnectionConfig, JobStatus, OCPQJobOptions,
+    },
+    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
+    ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
+    process_mining::{
+        core::{
+            event_data::{
+                case_centric::xes::{import_xes_path, import_xes_slice, XESImportOptions},
+                object_centric::linked_ocel::SlimLinkedOCEL,
+            },
+            process_models::oc_declare::OCDeclareArc,
+        },
+        discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions, Exportable, Importable, OCEL,
+    },
+    table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
+    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
 use ocpq_shared::{
+    process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints,
     trad_event_log::trad_log_to_ocel,
 };
 use tauri::{
@@ -42,7 +62,7 @@ pub struct AppState {
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
     let path = path.as_ref();
     println!("{path:?}");
-    let path_str = path.to_string_lossy();
+    let _path_str = path.to_string_lossy();
     let ocel = OCEL::import_from_path(path).map_err(|e| e.to_string())?;
     Ok(ocel)
 }
@@ -75,8 +95,7 @@ async fn import_xes_path_as_ocel(
     path: &str,
     state: tauri::State<'_, AppState>,
 ) -> Result<OCELInfo, String> {
-    let xes = import_xes_path(path, XESImportOptions::default())
-        .map_err(|e| e.to_string())?;
+    let xes = import_xes_path(path, XESImportOptions::default()).map_err(|e| e.to_string())?;
     let ocel = trad_log_to_ocel(&xes);
 
     let locel = SlimLinkedOCEL::from_ocel(ocel);
@@ -109,29 +128,6 @@ async fn get_current_ocel_info(
         None => Ok(None),
     };
     res
-}
-
-#[tauri::command(async)]
-async fn get_event_qualifiers(
-    state: State<'_, AppState>,
-) -> Result<HashMap<String, HashMap<String, QualifiersForEventType>>, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(get_qualifiers_for_event_types(ocel.get_ocel_ref())),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn get_object_qualifiers(
-    state: State<'_, AppState>,
-) -> Result<HashMap<String, HashSet<(String, String)>>, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => {
-            let object_rels_per_type = get_object_rels_per_type(ocel);
-            Ok(object_rels_per_type)
-        }
-        None => Err("No OCEL loaded".to_string()),
-    }
 }
 
 #[tauri::command(async)]
@@ -204,7 +200,7 @@ async fn auto_discover_oc_declare(
     state: State<'_, AppState>,
 ) -> Result<Vec<OCDeclareArc>, String> {
     match state.ocel.read().await.as_ref() {
-        Some(locel) => Ok(discover_behavior_constraints(&locel, options)),
+        Some(locel) => Ok(discover_behavior_constraints(locel, options)),
         None => Err("No OCEL loaded".to_string()),
     }
 }
@@ -218,7 +214,7 @@ async fn evaluate_oc_declare_arcs(
         Some(locel) => {
             let res = arcs
                 .iter()
-                .map(|arc| arc.get_for_all_evs_perf(&locel))
+                .map(|arc| arc.get_for_all_evs_perf(locel))
                 .collect();
             Ok(res)
         }
@@ -314,7 +310,7 @@ async fn ocel_graph(
 #[tauri::command(async)]
 async fn create_db_query(
     input: DBTranslationInput,
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
 ) -> Result<String, String> {
     Ok(translate_to_sql_shared(input))
 }
@@ -460,8 +456,6 @@ fn main() {
             import_xes_path_as_ocel,
             import_xes_slice_as_ocel,
             get_current_ocel_info,
-            get_event_qualifiers,
-            get_object_qualifiers,
             export_filter_box,
             check_with_box_tree,
             auto_discover_constraints,

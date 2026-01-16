@@ -37,7 +37,7 @@ use crate::{
         advanced::{binding_to_instances, generate_sample_bindings, label_bindings},
         RNG_SEED, SAMPLE_FRAC, SAMPLE_MIN_NUM_INSTANCES,
     },
-    preprocessing::linked_ocel::{event_or_object_from_index, OCELNode, OCELNodeRef},
+    preprocessing::linked_ocel::{event_or_object_from_index, OCELNode},
 };
 
 use super::advanced::EventOrObjectType;
@@ -617,7 +617,7 @@ pub fn discover_ef_constraints_for_supporting_instances<
                      reversed: _,
                      qualifier: _,
                  }| match index {
-                    EventOrObjectIndex::Event(ei) => Some(ocel.get_ev(ei)),
+                    EventOrObjectIndex::Event(ei) => Some(ocel.get_full_ev(ei)),
                     EventOrObjectIndex::Object(_) => None,
                 },
             )

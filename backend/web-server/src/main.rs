@@ -13,24 +13,48 @@ use itertools::Itertools;
 use tokio::{net::TcpListener, task::JoinHandle};
 
 use std::{
-    collections::{HashMap, HashSet},
     env,
     io::Cursor,
     sync::{Arc, RwLock},
 };
 
 use ocpq_shared::{
-    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex, binding_box::{
-        CheckWithBoxTreeRequest, EvaluateBoxTreeResult, ExportFormat, FilterExportWithBoxTreeRequest, evaluate_box_tree, filter_ocel_box_tree
-    }, db_translation::{DBTranslationInput, translate_to_sql_shared}, discovery::{
-        AutoDiscoverConstraintsRequest, AutoDiscoverConstraintsResponse, auto_discover_constraints_with_options
-    }, get_event_info, get_object_info, hpc_backend::{
-        Client, ConnectionConfig, JobStatus, OCPQJobOptions, get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job
-    }, oc_declare::statistics::{ActivityStatistics, get_activity_statistics, get_edge_stats}, ocel_graph::{OCELGraph, OCELGraphOptions, get_ocel_graph}, ocel_qualifiers::qualifiers::{
-        QualifierAndObjectType, QualifiersForEventType, get_qualifiers_for_event_types
-    },  process_mining::{OCEL, core::{event_data::{case_centric::xes::{XESImportOptions, import_xes_slice}, object_centric::{
-        OCELEvent, OCELObject, linked_ocel::{SlimLinkedOCEL, LinkedOCELAccess}, ocel_json::export_ocel_json_to_vec, ocel_sql::{export_ocel_sqlite_to_vec, import_ocel_sqlite_from_slice}, ocel_xml::{export_ocel_xml, import_ocel_xml_slice}
-    }}, process_models::oc_declare::OCDeclareArc}, discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions}, table_export::{TableExportOptions, export_bindings_to_writer}, trad_event_log::trad_log_to_ocel
+    binding_box::{
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
+        ExportFormat, FilterExportWithBoxTreeRequest,
+    },
+    db_translation::{translate_to_sql_shared, DBTranslationInput},
+    discovery::{
+        auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
+        AutoDiscoverConstraintsResponse,
+    },
+    get_event_info, get_object_info,
+    hpc_backend::{
+        get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
+        ConnectionConfig, JobStatus, OCPQJobOptions,
+    },
+    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
+    ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
+    process_mining::{
+        core::{
+            event_data::{
+                case_centric::xes::{import_xes_slice, XESImportOptions},
+                object_centric::{
+                    linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
+                    ocel_json::export_ocel_json_to_vec,
+                    ocel_sql::{export_ocel_sqlite_to_vec, import_ocel_sqlite_from_slice},
+                    ocel_xml::{export_ocel_xml, import_ocel_xml_slice},
+                    OCELEvent, OCELObject,
+                },
+            },
+            process_models::oc_declare::OCDeclareArc,
+        },
+        discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions,
+        OCEL,
+    },
+    table_export::{export_bindings_to_writer, TableExportOptions},
+    trad_event_log::trad_log_to_ocel,
+    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
 
 use tower_http::cors::CorsLayer;
@@ -285,8 +309,7 @@ pub async fn auto_discover_oc_declare_handler(
     Json(req): Json<OCDeclareDiscoveryOptions>,
 ) -> Json<Option<Vec<OCDeclareArc>>> {
     Json(with_ocel_from_state(&state, |locel| {
-        todo!("TODO")
-        // ocpq_shared::process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints(locel, req)
+        ocpq_shared::process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints(locel, req)
     }))
 }
 pub async fn evaluate_oc_declare_arcs_handler(
@@ -294,10 +317,9 @@ pub async fn evaluate_oc_declare_arcs_handler(
     Json(req): Json<Vec<OCDeclareArc>>,
 ) -> Json<Option<Vec<f64>>> {
     Json(with_ocel_from_state(&state, |locel| {
-        todo!("TODO")
-        // req.iter()
-        //     .map(|arc| arc.get_for_all_evs_perf(&locel))
-        //     .collect()
+        req.iter()
+            .map(|arc| arc.get_for_all_evs_perf(&locel))
+            .collect()
     }))
 }
 pub async fn get_activity_statistics_handler(
@@ -346,7 +368,7 @@ pub async fn get_event_info_req<'a>(
     Json(
         with_ocel_from_state(&state, |ocel| {
             ocel.get_ev_by_id(event_id)
-                .map(|e_index| ocel.get_ev(&e_index).into_owned())
+                .map(|e_index| ocel.get_full_ev(&e_index).into_owned())
         })
         .unwrap_or_default(),
     )
@@ -358,7 +380,7 @@ pub async fn get_object_info_req<'a>(
     Json(
         with_ocel_from_state(&state, |ocel| {
             ocel.get_ob_by_id(&object_id)
-                .map(|o_index| ocel.get_ob(&o_index).into_owned())
+                .map(|o_index| ocel.get_full_ob(&o_index).into_owned())
         })
         .unwrap_or_default(),
     )

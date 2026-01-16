@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use process_mining::core::event_data::object_centric::linked_ocel::{
-    LinkedOCELAccess, SlimLinkedOCEL,
+    slim_linked_ocel::ObjectIndex, LinkedOCELAccess, SlimLinkedOCEL,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -8,14 +8,14 @@ use super::structs::{Binding, BindingBox, BindingStep};
 const MAX_NUM_BINDINGS: usize = 10_000_000;
 /// This can slightly reduce memory usage by filtering out unfitting bindings before collecting into a vec
 /// However, the filters may be checked multiple times
-#[inline(always)]
+// #[inline(always)]
 fn check_next_filters(
     b: Binding,
-    next_step: usize,
+    last_considered_index: usize,
     steps: &[BindingStep],
     ocel: &SlimLinkedOCEL,
 ) -> Option<Binding> {
-    for step in steps.iter().skip(next_step) {
+    for step in steps.iter().skip(last_considered_index + 1) {
         if let BindingStep::Filter(f) = &step {
             if f.check_binding(&b, ocel).ok()? {
                 continue;
@@ -57,11 +57,14 @@ impl BindingBox {
         ocel: &SlimLinkedOCEL,
         steps: &[BindingStep],
     ) -> Result<(Vec<Binding>, bool), String> {
+        // println!("Steps: {:?}", steps);
         let mut ret = vec![parent_binding];
         let mut bindings_skipped = false;
-        // let mut sizes_per_step: Vec<usize> = Vec::with_capacity(steps.len());
         for step_index in 0..steps.len() {
             let step = &steps[step_index];
+            if step_index > 0 && matches!(step, BindingStep::Filter(_)) {
+                continue;
+            }
             match &step {
                 BindingStep::BindEv(ev_var, time_constr) => {
                     let ev_types = self
@@ -99,7 +102,7 @@ impl BindingBox {
                                     {
                                         check_next_filters(
                                             b.clone().expand_with_ev(*ev_var, *e_index),
-                                            step_index + 1,
+                                            step_index,
                                             steps,
                                             ocel,
                                         )
@@ -125,7 +128,7 @@ impl BindingBox {
                                 .filter_map(move |o_index| {
                                     check_next_filters(
                                         b.clone().expand_with_ob(*ob_var, *o_index),
-                                        step_index + 1,
+                                        step_index,
                                         steps,
                                         ocel,
                                     )
@@ -141,21 +144,25 @@ impl BindingBox {
                             let e = b
                                 .get_ev_index(from_ev_var)
                                 .ok_or_else(|| format!("Could not get {ob_var}"))?;
-                            let obs: Vec<_> = ocel.get_e2o(e).collect();
                             let obj_types = self
                                 .new_object_vars
                                 .get(ob_var)
                                 .ok_or_else(|| format!("Could not get {ob_var}"))?;
-                            let re = Ok(obs
-                                .into_iter()
-                                .filter(|(q, o)| {
-                                    obj_types.contains(ocel.get_ob_type_of(o))
-                                        && qualifier.as_ref().is_none_or(|qual| qual == *q)
+                            let re = Ok(obj_types
+                                .iter()
+                                .map(|ot| {
+                                    ocel.get_e2o_of_type(e, ot)
+                                        .filter(|(q, _o)| {
+                                            qualifier.as_ref().is_none_or(|qual| qual == *q)
+                                        })
+                                        .map(|(_q, o)| o)
                                 })
-                                .filter_map(move |(_q, o)| {
+                                .kmerge()
+                                .dedup()
+                                .filter_map(|o| {
                                     check_next_filters(
                                         b.clone().expand_with_ob(*ob_var, *o),
-                                        step_index + 1,
+                                        step_index,
                                         steps,
                                         ocel,
                                     )
@@ -176,32 +183,43 @@ impl BindingBox {
                             let ob_index = b
                                 .get_ob_index(from_ob_var_name)
                                 .ok_or_else(|| format!("Could not get {from_ob_var_name}"))?;
-                            let o2os: Vec<_> = if *reversed {
-                                ocel.get_o2o_rev(ob_index).collect()
+                            let obj_types = self
+                                .new_object_vars
+                                .get(ob_var_name)
+                                .ok_or_else(|| format!("Could not get {ob_var_name}"))?;
+                            let o2os: Box<dyn Iterator<Item = &ObjectIndex>> = if *reversed {
+                                Box::new(
+                                    ocel.get_o2o_rev(ob_index)
+                                        .filter(|(q, to_obj_index)| {
+                                            let to_ob_type = ocel.get_ob_type_of(*to_obj_index);
+                                            obj_types.contains(to_ob_type)
+                                                && qualifier.as_ref().is_none_or(|qual| q == qual)
+                                        })
+                                        .map(|(_q, o)| o),
+                                )
                             } else {
-                                ocel.get_o2o(ob_index).collect()
+                                Box::new(
+                                    obj_types
+                                        .iter()
+                                        .map(|ot| {
+                                            ocel.get_o2o_of_type(ob_index, ot)
+                                                .filter(|(q, _to_obj_index)| {
+                                                    qualifier.as_ref().is_none_or(|qual| q == qual)
+                                                })
+                                                .map(|(_q, o)| o)
+                                        })
+                                        .kmerge()
+                                        .dedup(),
+                                )
                             };
                             let vec = o2os
-                                .into_iter()
-                                .filter_map(move |(qual, to_ob_index)| {
-                                    if qualifier.as_ref().is_none_or(|q| q == qual) {
-                                        let allowed_types =
-                                            self.new_object_vars.get(ob_var_name)?;
-                                        let to_obj_type = ocel.get_ob_type_of(to_ob_index);
-                                        if allowed_types.contains(to_obj_type) {
-                                            check_next_filters(
-                                                b.clone()
-                                                    .expand_with_ob(*ob_var_name, *to_ob_index),
-                                                step_index + 1,
-                                                steps,
-                                                ocel,
-                                            )
-                                        } else {
-                                            None
-                                        }
-                                    } else {
-                                        None
-                                    }
+                                .filter_map(|to_ob_index| {
+                                    check_next_filters(
+                                        b.clone().expand_with_ob(*ob_var_name, *to_ob_index),
+                                        step_index,
+                                        steps,
+                                        ocel,
+                                    )
                                 })
                                 .collect_vec();
 
@@ -226,14 +244,14 @@ impl BindingBox {
                                 .ok_or_else(|| format!("Could not get {ev_var_name}"))?;
                             let e2o_rev = ocel
                                 .get_e2o_rev(ob_index)
-                                .filter(|(_q, ev)| ev_types.contains(ocel.get_ev_type_of(ev)));
+                                .filter(|(_q, ev)| ev_types.contains(ocel.get_ev_type_of(*ev)));
                             let vec = e2o_rev
                                 .into_iter()
                                 .filter_map(|(q, to_ev_index)| {
                                     if qualifier.as_ref().is_none_or(move |qual| qual == q) {
                                         check_next_filters(
                                             b.clone().expand_with_ev(*ev_var_name, *to_ev_index),
-                                            step_index + 1,
+                                            step_index,
                                             steps,
                                             ocel,
                                         )
@@ -250,7 +268,6 @@ impl BindingBox {
                         .flatten()
                         .collect();
                 }
-                // _ => {}
                 BindingStep::Filter(f) => {
                     ret = ret
                         .into_par_iter()
@@ -266,24 +283,8 @@ impl BindingBox {
                 // Remove extra element (was just used to test if there are more)
                 ret.pop();
             }
-            // sizes_per_step.push(ret.len());
-            // 16_937_065
-            // let ret_size = ret.len() * ret.first().map(|b| b.event_map.len() + b.object_map.len() + 10 * b.label_map.len()).unwrap_or(1);
-            // println!("ret_size: {}",ret_size);
-            // if ret_size > 10_00_000 {
-            //     println!("Too large bindings! {} with {}",ret.len(),ret_size);
-            //     ret = ret.into_iter().take(100_000).collect();
-            // }
         }
 
-        // if bindings_skipped {
-        //     println!("Skipped some elements!");
-        // }
-
-        // if !steps.is_empty() {
-        //     println!("Steps: {:?}", steps);
-        // println!("Set sizes: {:?}", sizes_per_step);
-        // }
         Ok((ret, bindings_skipped))
     }
 }

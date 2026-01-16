@@ -1,4 +1,3 @@
-import { OcelInfoContext } from "@/App";
 import { BackendProviderContext } from "@/BackendProviderContext";
 import AlertHelper from "@/components/AlertHelper";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -12,6 +11,7 @@ import { TbArrowRight, TbDatabaseEdit } from "react-icons/tb";
 import { EventTypeNodeData, GateNodeData, EventTypeLinkData } from "./types";
 import { evaluateConstraints } from "./evaluation/evaluate-constraints";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
 
 function getTranslationValue(typeNames: string[], replaceSpace = " ", capitalizeAfterSplit = false, lowercase = false): Record<string, string> {
   const ret: Record<string, string> = {};

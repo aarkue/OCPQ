@@ -4,7 +4,12 @@ import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  plugins: [react(),tailwindcss()],
+  plugins: [react(), tailwindcss()],
+  server: {
+    watch: {
+      ignored: ['**/*.bck']
+    }
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

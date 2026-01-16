@@ -1,19 +1,11 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-};
+use std::collections::{HashMap, HashSet};
 
 pub use process_mining;
-use process_mining::{
-    core::event_data::object_centric::{
-        linked_ocel::{index_linked_ocel::EventIndex, LinkedOCELAccess, SlimLinkedOCEL},
-        OCELEvent, OCELObject, OCELType,
-    },
-    Importable, OCEL,
+use process_mining::core::event_data::object_centric::{
+    linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
+    OCELEvent, OCELObject, OCELType,
 };
 use serde::{Deserialize, Serialize};
-
-use crate::binding_box::evaluate_box_tree;
 
 pub mod ocel_qualifiers {
     pub mod qualifiers;
@@ -72,10 +64,10 @@ impl From<&SlimLinkedOCEL> for OCELInfo {
             })
             .collect();
 
-        for ob in val.get_all_obs_ref() {
-            let ob_type = &val.get_ob(ob).object_type;
-            for (q, ev) in val.get_e2o_rev(ob) {
-                let ev_type = &val.get_ev(ev).event_type;
+        for ob in val.get_all_obs() {
+            let ob_type = val.get_ob_type_of(&ob);
+            for (q, ev) in val.get_e2o_rev(&ob) {
+                let ev_type = val.get_ev_type_of(ev);
                 let (ref mut count, ref mut qualifiers) = e2o_types
                     .get_mut(ev_type)
                     .unwrap()
@@ -87,8 +79,8 @@ impl From<&SlimLinkedOCEL> for OCELInfo {
                 }
             }
 
-            for (q, ob2) in val.get_o2o(ob) {
-                let ob2_type = &val.get_ob(ob2).object_type;
+            for (q, ob2) in val.get_o2o(&ob) {
+                let ob2_type = val.get_ob_type_of(ob2);
                 let (ref mut count, ref mut qualifiers) = o2o_types
                     .get_mut(ob_type)
                     .unwrap()
@@ -102,23 +94,23 @@ impl From<&SlimLinkedOCEL> for OCELInfo {
         }
 
         OCELInfo {
-            num_objects: val.get_all_obs_ref().count(),
-            num_events: val.get_all_evs_ref().count(),
+            num_objects: val.get_num_obs(),
+            num_events: val.get_num_evs(),
             object_types: val
                 .get_ob_types()
-                .map(|ot| val.get_ob_type(ot).clone())
+                .flat_map(|ot| val.get_ob_type(ot).cloned())
                 .collect(),
             event_types: val
                 .get_ev_types()
-                .map(|ot| val.get_ev_type(ot).clone())
+                .flat_map(|ot| val.get_ev_type(ot).cloned())
                 .collect(),
             event_ids: val
-                .get_all_evs_ref()
-                .map(|ev| val.get_ev_id(ev).to_string())
+                .get_all_evs()
+                .map(|ev| val.get_ev_id(&ev).to_string())
                 .collect(),
             object_ids: val
-                .get_all_obs_ref()
-                .map(|ob| val.get_ob_id(ob).to_string())
+                .get_all_obs()
+                .map(|ob| val.get_ob_id(&ob).to_string())
                 .collect(),
             e2o_types,
             o2o_types,
@@ -152,10 +144,10 @@ pub fn get_event_info(ocel: &SlimLinkedOCEL, req: IndexOrID) -> Option<EventWith
     let ev_with_index = match req {
         IndexOrID::ID(id) => {
             let ev_index = ocel.get_ev_by_id(id)?;
-            let ev = ocel.get_ev(&ev_index);
+            let ev = ocel.get_full_ev(&ev_index);
             Some((ev.into_owned(), ev_index.into_inner()))
         }
-        IndexOrID::Index(index) => Some((ocel.get_ev(&index.into()).into_owned(), index)),
+        IndexOrID::Index(index) => Some((ocel.get_full_ev(&index.into()).into_owned(), index)),
     };
     ev_with_index.map(|(event, index)| EventWithIndex { event, index })
 }
@@ -164,23 +156,10 @@ pub fn get_object_info(ocel: &SlimLinkedOCEL, req: IndexOrID) -> Option<ObjectWi
     let ob_with_index = match req {
         IndexOrID::ID(id) => {
             let ob_index = ocel.get_ob_by_id(id)?;
-            let ev = ocel.get_ob(&ob_index);
+            let ev = ocel.get_full_ob(&ob_index);
             Some((ev.into_owned(), ob_index.into_inner()))
         }
-        IndexOrID::Index(index) => Some((ocel.get_ob(&index.into()).into_owned(), index)),
+        IndexOrID::Index(index) => Some((ocel.get_full_ob(&index.into()).into_owned(), index)),
     };
     ob_with_index.map(|(object, index)| ObjectWithIndex { object, index })
-}
-
-#[test]
-fn test_perf() {
-    let ocel =
-        OCEL::import_from_path("/home/aarkue/dow/ocpq-refactor/order-management.json").unwrap();
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
-    let tree =
-        serde_json::from_reader(File::open("/home/aarkue/dow/ocpq-refactor/tree.json").unwrap())
-            .unwrap();
-
-    let res = evaluate_box_tree(tree, &locel, true);
-    println!("DONE");
 }

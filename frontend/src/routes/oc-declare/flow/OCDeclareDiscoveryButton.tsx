@@ -9,9 +9,9 @@ import { BackendProviderContext } from "@/BackendProviderContext";
 import toast from "react-hot-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MultiSelect from "@/components/ui/multi-select";
-import { OcelInfoContext } from "@/App";
 import { Switch } from "@/components/ui/switch";
 import { OCDeclareArcType } from "../types/OCDeclareArcType";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
 
 export type OCDeclareDiscoveryOptions = {
   noise_threshold: number,

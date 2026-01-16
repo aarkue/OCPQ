@@ -1,4 +1,3 @@
-import { OcelInfoContext } from "@/App";
 import AlertHelper from "@/components/AlertHelper";
 
 import {
@@ -39,6 +38,7 @@ import { QUERY_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META, QUERY_LOCALSTORAGE_SAVE_K
 import { TbTrash } from "react-icons/tb";
 import AutoSizer from "react-virtualized-auto-sizer";
 import TotalViolationInfo from "../TotalViolationInfo";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
 
 export default function VisualEditorOuter() {
   const ocelInfo = useContext(OcelInfoContext);

@@ -1,5 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import { BackendProviderContext } from "@/BackendProviderContext";
 import type {
   OCELEvent,
@@ -7,12 +6,13 @@ import type {
   OCELRelationship,
   OCELType,
 } from "@/types/ocel";
-import JSONEditor from "@/components/JsonEditor";
-import { OcelInfoContext } from "@/App";
 import { IconForDataType } from "@/routes/ocel-info/OcelTypeViewer";
 import { VisualEditorContext } from "@/routes/visual-editor/helper/VisualEditorContext";
 import { Button } from "./ui/button";
 import OcelGraphViewer from "@/routes/OcelGraphViewer";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
+import { BsArrowsCollapse, BsArrowsExpand } from "react-icons/bs";
+import { ClipboardButton } from "./ClipboardButton";
 
 export default function OcelElementInfo({
   type,
@@ -97,28 +97,44 @@ export default function OcelElementInfo({
   );
 }
 
+
+
 function RelationshipViewer({ rels }: { rels?: OCELRelationship[] }) {
+  const [showAll, setShowAll] = useState(false);
   const { showElementInfo } = useContext(VisualEditorContext);
   return (
-    <div className="mt-4">
-      Relationships
-      <ul className="list-disc ml-6">
-        {rels?.map((rel, i) => (
-          <li key={i} className="my-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                showElementInfo({ type: "object", req: { id: rel.objectId } });
-              }}
-            >
-              {rel.objectId} @ {rel.qualifier}
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+    <Fragment>
+      {(rels == undefined || rels.length === 0) && <Fragment><span className="text-xs">No relationships found.</span><span></span></Fragment>}
+      {rels?.slice(0, showAll ? undefined : 20).map((rel, i) => (<Fragment key={i}>
+        <span className="italic text-large ml-2 max-w-36 truncate">
+          {rel.qualifier}
+        </span>
+        <div className="flex items-center gap-x-0.5">
+          <Button className="h-7"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              showElementInfo({ type: "object", req: { id: rel.objectId } });
+            }}
+          >
+            <span className="w-20 truncate">
+              {rel.objectId}
+            </span>
+          </Button>
+          <ClipboardButton name="ID" value={rel.objectId} />
+        </div>
+      </Fragment>)
+      )}
+      {(rels?.length !== undefined && rels.length > 20) && <Fragment>
+        <div className="overflow-visible w-32 flex ml-3 gap-x-2">
+          <Button variant="ghost" className="w-fit" size="sm" onClick={() => setShowAll((t) => !t)}>
+            {showAll ? "Collapse relationships" : "... Expand all relationships"}
+            {showAll ? <BsArrowsCollapse className="ml-1" /> : <BsArrowsExpand className="ml-1" />}
+          </Button>
+        </div>
+        <span></span>
+      </Fragment>}
+    </Fragment>);
 }
 
 function OcelObjectViewer({
@@ -132,38 +148,44 @@ function OcelObjectViewer({
     <div
       className={`block h-full p-1 bg-white text-left`}
     >
-      <h4 className="font-semibold text-2xl">{object.id}</h4>
-      <span className="text-gray-600 text-xl block mb-2">
-        Type: {object.type}
-      </span>
-      <ul className="text-left text-xl space-y-1">
+      <div className="text-xl grid grid-cols-[fit-content(50%)_1fr] gap-x-2 gap-y-0.5">
+        <h4 className="font-bold">ID</h4>
+        <h4 className="font-bold">{object.id}
+          <ClipboardButton name="ID" value={object.id} />
+        </h4>
+        <h4>Object Type</h4>
+        <h4>{object.type}
+          <ClipboardButton name="Type" value={object.type} />
+        </h4>
+        <hr className="mt-1.5" /> <hr className="mt-1.5" />
+        <h4 className="font-bold">Attributes</h4> <div></div>
+
+        {(type?.attributes == undefined || type.attributes.length === 0) && <Fragment><span className="text-xs">No attributes found.</span><span></span></Fragment>}
         {type?.attributes.map((attr) => (
-          <li key={attr.name}>
-            <div className="flex gap-x-1 items-center w-full">
-              <div className="flex self-start">
-                <span className="flex justify-center -mt-1 w-8">
-                  <IconForDataType dtype={attr.type} />
-                </span>
-                <div className="font-mono self-start">{attr.name}:</div>
-              </div>
-              <div className="font-mono text-blue-700 w-full flex flex-wrap overflow-hidden">
-                {object.attributes
-                  .filter((a) => a.name === attr.name)
-                  .map((a) => (
-                    <div
-                      key={a.time}
-                      className="mr-4 text-base border p-0.5 rounded-sm w-fit max-w-full truncate"
-                      title={`${a.value} at ${a.time}`}
-                    >
-                      {String(a.value)}
-                    </div>
-                  ))}
-              </div>
+          <Fragment key={attr.name}>
+            <div className="flex self-start gap-x-1">
+              <IconForDataType dtype={attr.type} />
+              <div className="self-start max-w-34 truncate" title={attr.name}>{attr.name}</div>
             </div>
-          </li>
+            <div className="font-mono text-blue-700 w-full flex flex-wrap overflow-hidden gap-x-4 ">
+              {object.attributes
+                .filter((a) => a.name === attr.name)
+                .map((a) => (
+                  <div
+                    key={a.time}
+                    className="w-fit max-w-full truncate"
+                    title={`${a.value} at ${a.time}`}
+                  >
+                    {String(a.value)}
+                  </div>
+                ))}
+            </div>
+          </Fragment>
         ))}
-      </ul>
-      <RelationshipViewer rels={object.relationships} />
+        <hr className="mt-1.5" /> <hr className="mt-1.5" />
+        <h4 className="font-bold">Relationships</h4> <div></div>
+        <RelationshipViewer rels={object.relationships} />
+      </div>
     </div>
   );
 }
@@ -177,32 +199,50 @@ function OcelEventViewer({
 }) {
   return (
     <div
-      className={`block p-1 bg-white text-left`}
+      className={`block h-full p-1 bg-white text-left`}
     >
-      <h4 className="font-semibold text-2xl">{event.id}</h4>
-      <span className="text-gray-800 text-xl block">
-        Type: {event.type}
-      </span>
-      <span className="text-gray-800 text-xl block">
-        Time: <span className="font-medium font-mono">{event.time}</span>
-      </span>
-      <ul className="text-left text-xl space-y-1 ">
+      <div className="text-xl grid grid-cols-[fit-content(50%)_1fr] gap-x-2 gap-y-0.5">
+        <h4 className="font-bold">ID</h4>
+        <h4 className="font-bold">{event.id}
+          <ClipboardButton name="ID" value={event.id} />
+        </h4>
+        <h4>Event Type</h4>
+        <h4>{event.type}
+          <ClipboardButton name="Type" value={event.type} />
+        </h4>
+        <h4>Timestamp</h4>
+        <h4>{event.time}
+          <ClipboardButton name="Timestamp" value={event.time} />
+        </h4>
+        <hr className="mt-1.5" /> <hr className="mt-1.5" />
+        <h4 className="font-bold">Attributes</h4> <div></div>
+
+        {(type?.attributes == undefined || type.attributes.length === 0) && <Fragment><span className="text-xs">No attributes found.</span><span></span></Fragment>}
         {type?.attributes.map((attr) => (
-          <li key={attr.name}>
-            <div className="flex gap-x-1 items-center">
-              <span className="flex justify-center -mt-1 w-8">
-                {/* {attr.name} */}
-                <IconForDataType dtype={attr.type} />
-              </span>
-              <span className="font-mono">{attr.name}:</span>{" "}
-              <span className="font-mono text-blue-700 truncate">
-                {String(event.attributes.find((a) => a.name === attr.name)?.value ?? "-")}
-              </span>
+          <Fragment key={attr.name}>
+            <div className="flex self-start gap-x-1">
+              <IconForDataType dtype={attr.type} />
+              <div className="self-start max-w-34 truncate" title={attr.name}>{attr.name}</div>
             </div>
-          </li>
+            <div className="font-mono text-blue-700 w-full flex flex-wrap overflow-hidden gap-x-4 ">
+              {event.attributes
+                .filter((a) => a.name === attr.name)
+                .map((a, i) => (
+                  <div
+                    key={i}
+                    className="w-fit max-w-full truncate"
+                    title={`${a.value}`}
+                  >
+                    {String(a.value)}
+                  </div>
+                ))}
+            </div>
+          </Fragment>
         ))}
-      </ul>
-      <RelationshipViewer rels={event.relationships} />
+        <hr className="mt-1.5" /> <hr className="mt-1.5" />
+        <h4 className="font-bold">Relationships</h4> <div></div>
+        <RelationshipViewer rels={event.relationships} />
+      </div>
     </div>
   );
 }

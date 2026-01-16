@@ -194,12 +194,12 @@ pub fn evaluate_box_tree(
     Ok(EvaluateBoxTreeResult {
         evaluation_results,
         object_ids: ocel
-            .get_all_obs_ref()
-            .map(|o| ocel.get_ob_id(o).to_string())
+            .get_all_obs()
+            .map(|o| ocel.get_ob_id(&o).to_string())
             .collect(),
         event_ids: ocel
-            .get_all_evs_ref()
-            .map(|e| ocel.get_ev_id(e).to_string())
+            .get_all_evs()
+            .map(|e| ocel.get_ev_id(&e).to_string())
             .collect(),
         bindings_skipped,
     })
@@ -226,12 +226,12 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
     // Filter/Export
     let filter_now = Instant::now();
     let mut ob_included_indices: HashSet<ObjectIndex> = if assume_all_included {
-        ocel.get_all_obs_ref().copied().collect()
+        ocel.get_all_obs().collect()
     } else {
         HashSet::new()
     };
     let mut ev_included_indices: HashSet<EventIndex> = if assume_all_included {
-        ocel.get_all_evs_ref().copied().collect()
+        ocel.get_all_evs().collect()
     } else {
         HashSet::new()
     };
@@ -241,8 +241,11 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
 
     let mut e2o_rels_included: HashSet<(EventIndex, ObjectIndex, Option<String>)> =
         if assume_all_included {
-            ocel.get_all_evs_ref()
-                .flat_map(|e| ocel.get_e2o(e).map(|r| (*e, *r.1, Some(r.0.to_string()))))
+            ocel.get_all_evs()
+                .flat_map(move |e| {
+                    ocel.get_e2o(e)
+                        .map(move |r| (e, *r.1, Some(r.0.to_string())))
+                })
                 .collect()
         } else {
             HashSet::new()
@@ -251,8 +254,11 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
 
     let mut o2o_rels_included: HashSet<(ObjectIndex, ObjectIndex, Option<String>)> =
         if assume_all_included {
-            ocel.get_all_obs_ref()
-                .flat_map(|o| ocel.get_o2o(o).map(|r| (*o, *r.1, Some(r.0.to_string()))))
+            ocel.get_all_obs()
+                .flat_map(|o| {
+                    ocel.get_o2o(o)
+                        .map(move |r| (o, *r.1, Some(r.0.to_string())))
+                })
                 .collect()
         } else {
             HashSet::new()
@@ -389,13 +395,9 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
     };
     let mut added_ob_types: HashSet<String> = HashSet::new();
     for ob_index in &final_included_obs {
-        let ob = ocel.get_ob(ob_index);
+        let ob = ocel.get_full_ob(*ob_index);
         if !added_ob_types.contains(&ob.object_type) {
-            if let Some(ot) = ocel
-                .get_ob_types()
-                .find(|ot| **ot == ob.object_type)
-                .map(|ot_name| ocel.get_ob_type(ot_name))
-            {
+            if let Some(ot) = ocel.get_ob_type(ob.object_type.clone()) {
                 filtered_ocel.object_types.push(ot.clone());
             } else {
                 eprintln!("Failed to find object type: {}", ob.object_type);
@@ -403,13 +405,13 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
             added_ob_types.insert(ob.object_type.clone());
         }
         let mut ob = ob.into_owned();
-        let o2os = ocel.get_o2o(ob_index);
+        let o2os = ocel.get_o2o(*ob_index);
         ob.relationships = o2os
             .into_iter()
             .filter(|(q, other_ob)| check_o2o_inclusion(**ob_index, **other_ob, &q.to_string()))
             .map(|(q, other_ob)| OCELRelationship {
                 qualifier: q.to_string(),
-                object_id: ocel.get_ob(other_ob).id.clone(),
+                object_id: ocel.get_full_ob(other_ob).id.clone(),
             })
             .collect();
         filtered_ocel.objects.push(ob);
@@ -417,13 +419,9 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
 
     let mut added_ev_types: HashSet<String> = HashSet::new();
     for ev_index in &final_included_evs {
-        let ev = ocel.get_ev(ev_index);
+        let ev = ocel.get_full_ev(*ev_index);
         if !added_ev_types.contains(&ev.event_type) {
-            if let Some(et) = ocel
-                .get_ev_types()
-                .find(|et| **et == ev.event_type)
-                .map(|et| ocel.get_ev_type(et))
-            {
+            if let Some(et) = ocel.get_ev_type(&ev.event_type) {
                 filtered_ocel.event_types.push(et.clone());
             } else {
                 eprintln!("Failed to find object type: {}", ev.event_type);
@@ -431,18 +429,17 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
             added_ev_types.insert(ev.event_type.clone());
         }
         let mut ev = ev.into_owned();
-        let e2os = ocel.get_e2o(ev_index);
+        let e2os = ocel.get_e2o(*ev_index);
         ev.relationships = e2os
             .into_iter()
             .filter(|(q, o_index)| check_e2o_inclusion(**ev_index, **o_index, &q.to_string()))
             .map(|(q, o_index)| OCELRelationship {
-                object_id: ocel.get_ob(o_index).id.clone(),
+                object_id: ocel.get_full_ob(o_index).id.clone(),
                 qualifier: q.to_string(),
             })
             .collect();
         filtered_ocel.events.push(ev);
     }
     println!("Filtering (excl. export) took {:?}", filter_now.elapsed());
-    OCEL::export_to_path(&filtered_ocel, "filtered-ocel.json").map_err(|e| e.to_string())?;
     Ok(filtered_ocel)
 }

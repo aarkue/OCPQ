@@ -63,6 +63,7 @@ import InfoSheetViewer from "./InfoSheetViewer";
 import { TbBinaryTree, TbTable } from "react-icons/tb";
 import { PiGraphFill } from "react-icons/pi";
 import { CgArrowsExpandUpRight } from "react-icons/cg";
+import { OcelInfoContext } from "./lib/ocel-info-context";
 const VALID_OCEL_MIME_TYPES = [
   "application/json",
   "text/json",
@@ -72,7 +73,6 @@ const VALID_OCEL_MIME_TYPES = [
   "application/vnd.sqlite",
 ];
 
-export const OcelInfoContext = createContext<OCELInfo | undefined>(undefined);
 
 const queryClient = new QueryClient()
 

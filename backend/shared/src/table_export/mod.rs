@@ -1,9 +1,9 @@
-use std::{borrow::Cow, collections::HashSet, hash::Hash};
+use std::{borrow::Cow, collections::HashSet};
 
 use anyhow::{Error, Ok};
 use itertools::Itertools;
 use process_mining::core::event_data::object_centric::{
-    linked_ocel::{SlimLinkedOCEL, LinkedOCELAccess},
+    linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
     OCELAttributeType, OCELAttributeValue,
 };
 use rust_xlsxwriter::{
@@ -105,28 +105,14 @@ impl From<&CellContent<'_>> for Vec<u8> {
     fn from(val: &CellContent<'_>) -> Self {
         match val {
             CellContent::String(s) => s.as_bytes().to_vec(),
-            CellContent::Value(v) => {
-                match v {
-                    // OCELAttributeValue::Time(date_time) => todo!(),
-                    // OCELAttributeValue::Integer(_) => todo!(),
-                    // OCELAttributeValue::Float(_) => todo!(),
-                    // OCELAttributeValue::Boolean(_) => todo!(),
-                    // OCELAttributeValue::String(_) => todo!(),
-                    // OCELAttributeValue::Null => todo!(),
-                    v => format!("{v}").into_bytes(),
-                }
-            }
+            CellContent::Value(v) => format!("{v}").into_bytes(),
         }
     }
 }
 
 pub trait TableWriter<'a, W: std::io::Write> {
     fn new(w: &'a mut W) -> Self;
-    fn write_cell<'b>(
-        &mut self,
-        s: impl Into<CellContent<'b>>,
-        t: CellType,
-    ) -> Result<(), Error>;
+    fn write_cell<'b>(&mut self, s: impl Into<CellContent<'b>>, t: CellType) -> Result<(), Error>;
     fn new_row(&mut self) -> Result<(), Error>;
     fn save(self) -> Result<(), Error>;
 }
@@ -282,8 +268,8 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
     options: &'a TableExportOptions,
 ) -> Result<(), Error> {
     if let Some((b, _)) = bindings.situations.first() {
-        let ev_vars = b.event_map.keys().sorted().collect_vec();
-        let ob_vars = b.object_map.keys().sorted().collect_vec();
+        let ev_vars = b.get_all_ev_vars().sorted().collect_vec();
+        let ob_vars = b.get_all_ob_vars().sorted().collect_vec();
 
         let ev_attrs = ev_vars
             .iter()
@@ -292,7 +278,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                     .situations
                     .iter()
                     .flat_map(|(b, _)| {
-                        let ev = b.get_ev_index(&ev_var)?;
+                        let ev = b.get_ev_index(ev_var)?;
                         Some(ocel.get_ev_attrs(ev))
                     })
                     .flatten()
@@ -309,7 +295,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                     .situations
                     .iter()
                     .flat_map(|(b, _)| {
-                        let ob = b.get_ob_index(&ob_var)?;
+                        let ob = b.get_ob_index(ob_var)?;
                         Some(ocel.get_ob_attrs(ob))
                     })
                     .flatten()
@@ -358,7 +344,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                         if let Some(val) = ob
                             .attributes
                             .iter()
-                            .filter(|a| &&a.name == attr)
+                            .filter(|a| &a.name == attr)
                             .sorted_by_key(|a| a.time)
                             .next()
                         {
@@ -405,7 +391,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
             }
 
             for label in &options.labels {
-                match b.label_map.get(label) {
+                match b.get_label_value(label) {
                     // TODO: Also represent label values with correct types
                     Some(val) => w.write_cell(val.to_string(), CellType::DEFAULT)?,
                     None => w.write_cell("null", CellType::DEFAULT)?,

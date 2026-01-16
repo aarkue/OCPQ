@@ -1,5 +1,5 @@
 use process_mining::core::event_data::object_centric::{
-    linked_ocel::{slim_linked_ocel::EventOrObjectIndex, SlimLinkedOCEL, LinkedOCELAccess},
+    linked_ocel::{slim_linked_ocel::EventOrObjectIndex, LinkedOCELAccess, SlimLinkedOCEL},
     OCELEvent, OCELObject,
 };
 use serde::{Deserialize, Serialize};
@@ -88,10 +88,10 @@ pub fn get_ocel_graph(ocel: &SlimLinkedOCEL, options: OCELGraphOptions) -> Optio
             .iter()
             .map(|i| match i {
                 EventOrObjectIndex::Object(o_index) => {
-                    GraphNode::Object(ocel.get_ob(o_index).into_owned())
+                    GraphNode::Object(ocel.get_full_ob(o_index).into_owned())
                 }
                 EventOrObjectIndex::Event(e_index) => {
-                    GraphNode::Event(ocel.get_ev(e_index).into_owned())
+                    GraphNode::Event(ocel.get_full_ev(e_index).into_owned())
                 }
             })
             .collect();

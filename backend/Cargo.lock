@@ -299,6 +299,7 @@ dependencies = [
 [[package]]
 name = "binding_macros"
 version = "0.1.0"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat%2Foc-declare#972b7b0031b3c524e3f230be13dd6912e42d37e2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2265,6 +2266,7 @@ dependencies = [
 [[package]]
 name = "process_mining"
 version = "0.3.25"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat%2Foc-declare#972b7b0031b3c524e3f230be13dd6912e42d37e2"
 dependencies = [
  "binding_macros",
  "chrono",

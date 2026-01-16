@@ -1,9 +1,9 @@
-import { OcelInfoContext } from "@/App";
 import { BackendProviderContext } from "@/BackendProviderContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
 import type { OCELGraphOptions } from "@/types/generated/OCELGraphOptions";
 import type { OCELEvent, OCELObject } from "@/types/ocel";
 import { ImageIcon } from "@radix-ui/react-icons";

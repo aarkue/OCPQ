@@ -6,8 +6,8 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityNodeType } from './oc-declare-flow-types';
 import { InfoSheetContext } from '@/InfoSheet';
 import { MdBarChart } from 'react-icons/md';
-import { OcelInfoContext } from '@/App';
 import { MinMaxDisplayWithSugar } from './MinMaxSugar';
+import { OcelInfoContext } from '@/lib/ocel-info-context';
 const OBJECT_INIT = "<init>";
 const OBJECT_EXIT = "<exit>";
 export function OCDeclareFlowNode({

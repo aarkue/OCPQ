@@ -1,11 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
-use process_mining::core::event_data::object_centric::linked_ocel::{
-    index_linked_ocel::EventOrObjectIndex, LinkedOCELAccess, SlimLinkedOCEL,
-};
+use process_mining::core::event_data::object_centric::linked_ocel::SlimLinkedOCEL;
 
-use crate::discovery::advanced::EventOrObjectTypeRef;
 
 use super::{
     structs::{BindingBox, BindingStep, Filter, Qualifier, Variable},
@@ -23,8 +20,8 @@ impl BindingStep {
     /// For that, it e.g., could make sense to first bind an event variable and then use the bound event to bind object variables
     pub fn get_binding_order(
         bbox: &BindingBox,
-        parent_binding_opt: Option<&Binding>,
-        ocel: &SlimLinkedOCEL,
+        _parent_binding_opt: Option<&Binding>,
+        _ocel: &SlimLinkedOCEL,
     ) -> Vec<Self> {
         let mut ret = Vec::new();
 

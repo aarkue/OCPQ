@@ -3,6 +3,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -180,6 +181,10 @@ export default function FilterChooser({
                 {alertState?.mode === "add" ? "Add " : "Edit "}{" "}
                 {alertState.type !== "constraint" ? "Filter" : "Constraint"}
               </AlertDialogTitle>
+              <AlertDialogDescription className="hidden">
+                {alertState?.mode === "add" ? "Add " : "Edit "}{" "}
+                {alertState.type !== "constraint" ? "Filter" : "Constraint"}
+              </AlertDialogDescription>
               <div className="text-sm text-gray-700 grid grid-cols-1 gap-y-1.5">
                 <Label>Type</Label>
                 <Combobox

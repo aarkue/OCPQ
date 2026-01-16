@@ -1,10 +1,10 @@
-import { OcelInfoContext } from "@/App";
 import { Button } from "@/components/ui/button";
 import { useContext } from "react";
 import { RxArrowRight } from "react-icons/rx";
 import { Link } from "react-router-dom";
 import OcelTypeViewer from "./OcelTypeViewer";
 import MenuLink from "@/components/MenuLink";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
 
 export default function OcelInfoViewer() {
   const ocelInfo = useContext(OcelInfoContext);

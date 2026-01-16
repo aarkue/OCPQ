@@ -14,7 +14,6 @@ use process_mining::core::event_data::object_centric::{
     },
     OCELAttributeValue, OCELEvent, OCELObject,
 };
-use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use ts_rs::TS;
@@ -60,14 +59,19 @@ pub type Qualifier = Option<String>;
 
 #[derive(TS)]
 #[ts(export, export_to = "../../../frontend/src/types/generated/")]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct Binding {
+    // #[ts(as = "BTreeMap<EventVariable, usize>")]
+    // pub event_map: FxHashMap<EventVariable, EventIndex>,
     #[ts(as = "BTreeMap<EventVariable, usize>")]
-    pub event_map: FxHashMap<EventVariable, EventIndex>,
+    pub event_map: Vec<(EventVariable, EventIndex)>,
+    // #[ts(as = "BTreeMap<ObjectVariable, usize>")]
+    // pub object_map: FxHashMap<ObjectVariable, ObjectIndex>,
     #[ts(as = "BTreeMap<ObjectVariable, usize>")]
-    pub object_map: FxHashMap<ObjectVariable, ObjectIndex>,
-    pub label_map: FxHashMap<String, LabelValue>,
+    pub object_map: Vec<(ObjectVariable, ObjectIndex)>,
+    // pub label_map: FxHashMap<String, LabelValue>,
+    pub label_map: Vec<(String, LabelValue)>,
 }
 
 #[derive(TS)]
@@ -97,42 +101,94 @@ impl LabelValue {
 
 impl Binding {
     pub fn expand_with_ev(mut self, ev_var: EventVariable, ev_index: EventIndex) -> Self {
-        self.event_map.insert(ev_var, ev_index);
+        match self.event_map.binary_search_by_key(&ev_var, |x| x.0) {
+            Ok(i) => self.event_map[i] = (ev_var, ev_index),
+            Err(i) => self.event_map.insert(i, (ev_var, ev_index)),
+        }
+        // self.event_map.insert(ev_var, ev_index);
         self
     }
-    pub fn expand_with_ob(mut self, ev_var: ObjectVariable, ob_index: ObjectIndex) -> Self {
-        self.object_map.insert(ev_var, ob_index);
+    pub fn expand_with_ob(mut self, ob_var: ObjectVariable, ob_index: ObjectIndex) -> Self {
+        match self.object_map.binary_search_by_key(&ob_var, |x| x.0) {
+            Ok(i) => self.object_map[i] = (ob_var, ob_index),
+            Err(i) => self.object_map.insert(i, (ob_var, ob_index)),
+        }
+        // self.object_map.insert(ev_var, ob_index);
         self
     }
-    // The get_ev and get_ob function should likely be replaced with functions that don't require "fattening" the Cow
-    // In particular, things like the time of an event, the type etc. should be easily accessible
+    pub fn add_label(&mut self, label: String, value: LabelValue) {
+        match self.label_map.binary_search_by_key(&&label, |x| &x.0) {
+            Ok(i) => self.label_map[i] = (label, value),
+            Err(i) => self.label_map.insert(i, (label, value)),
+        }
+    }
 
+    /// get all object variables in this binding
+    /// guarantees that result is sorted
+    pub fn get_all_ob_vars(&self) -> impl Iterator<Item = &ObjectVariable> {
+        self.object_map.iter().map(|x| &x.0)
+    }
+    /// get all event variables in this binding
+    /// guarantees that result is sorted
+    pub fn get_all_ev_vars(&self) -> impl Iterator<Item = &EventVariable> {
+        self.event_map.iter().map(|x| &x.0)
+    }
+
+    pub fn get_label_value(&self, label: impl AsRef<str>) -> Option<&LabelValue> {
+        match self
+            .label_map
+            .binary_search_by_key(&label.as_ref(), |x| &x.0)
+        {
+            Ok(i) => Some(&self.label_map[i].1),
+            Err(_) => None,
+        }
+    }
     pub fn get_ev<'a>(
         &self,
         ev_var: &EventVariable,
         ocel: &'a SlimLinkedOCEL,
     ) -> Option<Cow<'a, OCELEvent>> {
-        match self.event_map.get(ev_var) {
-            Some(ev_index) => Some(ocel.get_ev(ev_index)),
-            None => None,
-        }
+        let ev_index = self.get_ev_index(ev_var)?;
+        Some(ocel.get_full_ev(ev_index))
     }
     pub fn get_ob<'a>(
         &self,
         ob_var: &ObjectVariable,
         ocel: &'a SlimLinkedOCEL,
     ) -> Option<Cow<'a, OCELObject>> {
-        match self.object_map.get(ob_var) {
-            Some(ob_index) => Some(ocel.get_ob(ob_index)),
-            None => None,
-        }
+        let ob_index = self.get_ob_index(ob_var)?;
+        Some(ocel.get_full_ob(ob_index))
     }
 
-    pub fn get_ev_index(&self, ev_var: &EventVariable) -> Option<&EventIndex> {
-        self.event_map.get(ev_var)
+    pub fn to_id_string<'a>(&self, ocel: &'a SlimLinkedOCEL) -> String {
+        let mut ret = String::new();
+        for (_ev_var, ev_val) in &self.event_map {
+            ret.push_str(ocel.get_ev_id(ev_val));
+            ret.push_str(", ");
+        }
+        for (_ob_var, ob_val) in &self.object_map {
+            ret.push_str(ocel.get_ob_id(ob_val));
+            ret.push_str(", ");
+        }
+
+        ret
     }
+
+    #[inline]
+    pub fn get_ev_index(&self, ev_var: &EventVariable) -> Option<&EventIndex> {
+        if let Ok(index) = self.event_map.binary_search_by_key(ev_var, |x| x.0) {
+            return Some(&self.event_map[index].1);
+        }
+        None
+        // self.event_map.get(ev_var)
+    }
+    #[inline]
     pub fn get_ob_index(&self, ob_var: &ObjectVariable) -> Option<&ObjectIndex> {
-        self.object_map.get(ob_var)
+        if let Ok(index) = self.object_map.binary_search_by_key(ob_var, |x| x.0) {
+            return Some(&self.object_map[index].1);
+        }
+        None
+        // self.object_map.get(ob_var)
     }
 
     pub fn get_any_index(&self, var: &Variable) -> Option<EventOrObjectIndex> {
@@ -254,11 +310,11 @@ pub enum BindingBoxTreeNode {
 }
 const UNNAMED: &str = "UNNAMED - ";
 impl BindingBoxTreeNode {
-    pub fn to_box(self) -> (BindingBox, Vec<usize>) {
+    pub fn to_box(&self) -> (Cow<'_, BindingBox>, Cow<'_, Vec<usize>>) {
         match self {
-            BindingBoxTreeNode::Box(b, children) => (b, children),
+            BindingBoxTreeNode::Box(b, children) => (Cow::Borrowed(b), Cow::Borrowed(children)),
             BindingBoxTreeNode::OR(c1, c2) => (
-                BindingBox {
+                Cow::Owned(BindingBox {
                     constraints: vec![Constraint::OR {
                         child_names: vec![
                             format!("{}{}", UNNAMED, c1),
@@ -266,11 +322,11 @@ impl BindingBoxTreeNode {
                         ],
                     }],
                     ..Default::default()
-                },
-                vec![c1, c2],
+                }),
+                Cow::Owned(vec![*c1, *c2]),
             ),
             BindingBoxTreeNode::AND(c1, c2) => (
-                BindingBox {
+                Cow::Owned(BindingBox {
                     constraints: vec![Constraint::AND {
                         child_names: vec![
                             format!("{}{}", UNNAMED, c1),
@@ -278,17 +334,17 @@ impl BindingBoxTreeNode {
                         ],
                     }],
                     ..Default::default()
-                },
-                vec![c1, c2],
+                }),
+                Cow::Owned(vec![*c1, *c2]),
             ),
             BindingBoxTreeNode::NOT(c1) => (
-                BindingBox {
+                Cow::Owned(BindingBox {
                     constraints: vec![Constraint::NOT {
                         child_names: vec![format!("{}{}", UNNAMED, c1)],
                     }],
                     ..Default::default()
-                },
-                vec![c1],
+                }),
+                Cow::Owned(vec![*c1]),
             ),
         }
     }
@@ -336,14 +392,9 @@ impl BindingBoxTreeNode {
         ),
         String,
     > {
-        let (bbox, children) = match self.clone() {
-            BindingBoxTreeNode::Box(b, cs) => (b, cs),
-            x => x.to_box(),
-        };
-        // match self {
-        //     BindingBoxTreeNode::Box(bbox, children) => {
+        let (bbox, children) = self.to_box();
         let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
-            bbox.expand(parent_binding.clone(), ocel)?;
+            bbox.expand(parent_binding, ocel)?;
         enum BindingResult {
             FilteredOutBySizeFilter(Binding, EvaluationResults),
             Sat(Binding, EvaluationResults),
@@ -354,13 +405,9 @@ impl BindingBoxTreeNode {
         let x = it.canceller();
         let re: Vec<BindingResult> = it
             .map(|mut b| {
-                let _passed_size_filter = true;
-                // let mut all_res: EvaluationResults = Vec::new();
-                // let mut child_res: HashMap<String, Vec<(Binding, Option<ViolationReason>)>> =
-                //     HashMap::new();
                 let mut all_res = Vec::new();
                 let mut child_res = HashMap::with_capacity(children.len());
-                for c in &children {
+                for c in children.as_ref() {
                     let c_name = tree
                         .edge_names
                         .get(&(own_index, *c))
@@ -694,8 +741,9 @@ impl Filter {
                 let ev_index = b
                     .get_ev_index(event)
                     .ok_or_else(|| format!("Event Variable {event} without value."))?;
+                let ob_type = ocel.get_ob_type_of(ob_index);
                 Ok(ocel
-                    .get_e2o(ev_index)
+                    .get_e2o_of_type(ev_index, ob_type)
                     .any(|(q, o)| o == ob_index && qualifier.as_ref().is_none_or(|qual| q == qual)))
             }
             Filter::O2O {
@@ -710,8 +758,9 @@ impl Filter {
                 let ob2 = b
                     .get_ob_index(other_object)
                     .ok_or_else(|| format!("Object Variable {other_object} without value"))?;
+                let ob2_type = ocel.get_ob_type_of(ob2);
                 Ok(ocel
-                    .get_o2o(ob1)
+                    .get_o2o_of_type(ob1, ob2_type)
                     .any(|(q, o)| o == ob2 && qualifier.as_ref().is_none_or(|qual| q == qual)))
             }
             Filter::TimeBetweenEvents {
@@ -976,22 +1025,19 @@ impl SizeFilter {
                 if child_names.is_empty() {
                     Ok(true)
                 } else if let Some(c_res) = child_res.get(&child_names[0]) {
-                    todo!()
-                //     let mut set: Vec<_> = c_res.iter().map(|(binding, _)| binding).collect();
-                //     // set.sort_unstable();
-                //     // set.dedup();
-                //     for other_c in child_names.iter().skip(1) {
-                //         if let Some(c2_res) = child_res.get(other_c) {
-                //             let set2: HashSet<_> =
-                //                 c2_res.iter().map(|(binding, _)| binding).collect();
-                //             if set != set2 {
-                //                 return Ok(false);
-                //             }
-                //         } else {
-                //             return Ok(false);
-                //         }
-                //     }
-                //     Ok(true)
+                    let mut set1: HashSet<_> = c_res.iter().map(|(binding, _)| binding).collect();
+                    for other_c in child_names.iter().skip(1) {
+                        if let Some(c2_res) = child_res.get(other_c) {
+                            let set2: HashSet<_> =
+                                c2_res.iter().map(|(binding, _)| binding).collect();
+                            if set1 != set2 {
+                                return Ok(false);
+                            }
+                        } else {
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
                 } else {
                     Ok(false)
                 }
