@@ -4,6 +4,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -91,6 +92,9 @@ export default function FilterChooser({
               <AlertDialogTitle>
                 {alertState?.mode === "add" ? "Add " : "Edit "} Label Function
               </AlertDialogTitle>
+              <AlertDialogDescription className="hidden">
+                {alertState?.mode === "add" ? "Add " : "Edit "} Label Function
+              </AlertDialogDescription>
             </AlertDialogHeader>
             {alertState.value !== undefined && (
               <div className=" flex flex-col">

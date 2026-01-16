@@ -88,14 +88,14 @@ function EventTypeNode({ data, id, selected }: NodeProps<Node<EventTypeNodeData>
           </div>
           <div>
             <Handle
-              className="w-3! h-3!"
+              className="w-3! h-3! border-none!"
               position={Position.Top}
               type="target"
               id={id + "-target"}
             />
 
             <Handle
-              className="w-3! h-3!"
+              className="w-3! h-3! border-none!"
               position={Position.Bottom}
               type="source"
               id={id + "-source"}

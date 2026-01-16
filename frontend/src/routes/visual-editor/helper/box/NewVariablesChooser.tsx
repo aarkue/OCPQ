@@ -4,6 +4,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -226,37 +227,43 @@ export default function NewVariableChooser({
                   ? "Event Variable"
                   : "Object Variable"}
               </AlertDialogTitle>
+              <AlertDialogDescription className="hidden">
+                {alertState?.mode === "add" ? "Add " : "Edit "}
+                {alertState?.variant === "event"
+                  ? "Event Variable"
+                  : "Object Variable"}
+              </AlertDialogDescription>
               <div className="text-sm text-gray-700 pt-4 grid grid-cols-[1fr_3fr] gap-x-2 gap-y-1.5">
                 <Label>Variable</Label>
                 <Label>
-                  {alertState?.variant === "event" ? "Event" : "Object"} Types<br/>
+                  {alertState?.variant === "event" ? "Event" : "Object"} Types<br />
                   <span className="text-xs font-normal">Multiple types are considered with OR-semantics (e.g., an <span className="font-bold text-blue-600">A</span> or <span className="font-bold text-purple-600">B</span> {alertState.variant === "event" ? <>event</> : <>object</>}).</span>
                 </Label>
                 <Combobox
                   options={
                     alertState?.variant === "object"
                       ? getAvailableObjVars(
-                          alertState.mode === "edit"
-                            ? alertState.key
-                            : undefined,
-                        ).map((i) => ({
-                          value:
-                            i.toString() +
-                            " --- " +
-                            getVarName(i, "object").name,
-                          label: getObVarName(i),
-                        }))
+                        alertState.mode === "edit"
+                          ? alertState.key
+                          : undefined,
+                      ).map((i) => ({
+                        value:
+                          i.toString() +
+                          " --- " +
+                          getVarName(i, "object").name,
+                        label: getObVarName(i),
+                      }))
                       : getAvailableEvVars(
-                          alertState.mode === "edit"
-                            ? alertState.key
-                            : undefined,
-                        ).map((i) => ({
-                          value:
-                            i.toString() +
-                            " --- " +
-                            getVarName(i, "event").name,
-                          label: getEvVarName(i),
-                        }))
+                        alertState.mode === "edit"
+                          ? alertState.key
+                          : undefined,
+                      ).map((i) => ({
+                        value:
+                          i.toString() +
+                          " --- " +
+                          getVarName(i, "event").name,
+                        label: getEvVarName(i),
+                      }))
                   }
                   onChange={(value: string) => {
                     const variableKey = parseInt(value.split(" --- ")[0]);

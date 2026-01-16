@@ -25,7 +25,6 @@ import {
   ObjectVarSelector,
 } from "./FilterChooser";
 import { EvOrObVarName, EvVarName, ObVarName } from "./variable-names";
-// import CELEditor from "@/components/CELEditor";
 import Spinner from "@/components/Spinner";
 import clsx from "clsx";
 import { PiCodeFill } from "react-icons/pi";
@@ -1389,8 +1388,4 @@ export function SupportDisplay({ support, text }: { support: number | null, text
       support === 0 && "bg-red-200 text-red-800")}>
       {support} {text ?? "Supporting Relations"}
     </div>
-  //  <div className="relative">
-    {/* absolute left-1/2 -translate-x-1/2  -bottom-7*/}
-    // </div>
-
 }

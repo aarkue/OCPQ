@@ -5,7 +5,6 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use std::{
-    collections::{HashMap, HashSet},
     fs::File,
     io::{Cursor, Write},
     path::Path,
@@ -14,8 +13,7 @@ use std::{
 
 use ocpq_shared::{
     binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
-        ExportFormat, FilterExportWithBoxTreeRequest,
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult, FilterExportWithBoxTreeRequest,
     },
     db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
@@ -29,19 +27,21 @@ use ocpq_shared::{
     },
     oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
-    ocel_qualifiers::qualifiers::{get_qualifiers_for_event_types, QualifiersForEventType},
-    preprocessing::preprocess::get_object_rels_per_type,
-    process_mining::{import_xes_file, object_centric::oc_declare},
+    process_mining::{
+        core::{
+            event_data::{
+                case_centric::xes::{import_xes_path, import_xes_slice, XESImportOptions},
+                object_centric::linked_ocel::SlimLinkedOCEL,
+            },
+            process_models::oc_declare::OCDeclareArc,
+        },
+        discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions, Exportable, Importable, OCEL,
+    },
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
 };
 use ocpq_shared::{
-    process_mining::{
-        export_ocel_json_path, export_ocel_sqlite_to_path, export_ocel_xml_path,
-        import_ocel_json_from_path, import_ocel_json_from_slice, import_ocel_sqlite_from_path,
-        import_ocel_sqlite_from_slice, import_ocel_xml_file, import_ocel_xml_slice,
-        import_xes_slice, ocel::linked_ocel::IndexLinkedOCEL, XESImportOptions, OCEL,
-    },
+    process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints,
     trad_event_log::trad_log_to_ocel,
 };
 use tauri::{
@@ -52,7 +52,7 @@ use tauri_plugin_dialog::DialogExt;
 
 #[derive(Clone, Debug, Default)]
 pub struct AppState {
-    ocel: Arc<RwLock<Option<IndexLinkedOCEL>>>,
+    ocel: Arc<RwLock<Option<SlimLinkedOCEL>>>,
     client: Arc<RwLock<Option<Client>>>,
     jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
@@ -62,20 +62,14 @@ pub struct AppState {
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
     let path = path.as_ref();
     println!("{path:?}");
-    let path_str = path.to_string_lossy();
-    let ocel = match path_str.ends_with(".json") || path_str.ends_with(".jsonocel") {
-        true => import_ocel_json_from_path(path).map_err(|e| e.to_string())?,
-        false => match path_str.ends_with(".xml") || path_str.ends_with(".xmlocel") {
-            true => import_ocel_xml_file(path),
-            false => import_ocel_sqlite_from_path(path).map_err(|e| e.to_string())?,
-        },
-    };
+    let _path_str = path.to_string_lossy();
+    let ocel = OCEL::import_from_path(path).map_err(|e| e.to_string())?;
     Ok(ocel)
 }
 #[tauri::command(async)]
 async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
     let ocel = import_ocel_from_path(path)?;
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
@@ -88,15 +82,8 @@ async fn import_ocel_slice(
     format: &str,
     state: tauri::State<'_, AppState>,
 ) -> Result<OCELInfo, String> {
-    let ocel = match format {
-        "xml" => import_ocel_xml_slice(&data),
-        "json" => import_ocel_json_from_slice(&data).map_err(|e| e.to_string())?,
-        "sqlite" => import_ocel_sqlite_from_slice(&data).map_err(|e| e.to_string())?,
-        _ => {
-            return Err("Unknown OCEL format {format}.".to_string());
-        }
-    };
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let ocel = OCEL::import_from_bytes(&data, format).map_err(|e| e.to_string())?;
+    let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
@@ -108,10 +95,10 @@ async fn import_xes_path_as_ocel(
     path: &str,
     state: tauri::State<'_, AppState>,
 ) -> Result<OCELInfo, String> {
-    let xes = import_xes_file(path, XESImportOptions::default()).map_err(|e| e.to_string())?;
+    let xes = import_xes_path(path, XESImportOptions::default()).map_err(|e| e.to_string())?;
     let ocel = trad_log_to_ocel(&xes);
 
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
@@ -125,7 +112,7 @@ async fn import_xes_slice_as_ocel(
 ) -> Result<OCELInfo, String> {
     let xes = import_xes_slice(&data, format == ".xes.gz", XESImportOptions::default()).unwrap();
     let ocel = trad_log_to_ocel(&xes);
-    let locel = IndexLinkedOCEL::from_ocel(ocel);
+    let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
@@ -141,29 +128,6 @@ async fn get_current_ocel_info(
         None => Ok(None),
     };
     res
-}
-
-#[tauri::command(async)]
-async fn get_event_qualifiers(
-    state: State<'_, AppState>,
-) -> Result<HashMap<String, HashMap<String, QualifiersForEventType>>, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(get_qualifiers_for_event_types(ocel.get_ocel_ref())),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn get_object_qualifiers(
-    state: State<'_, AppState>,
-) -> Result<HashMap<String, HashSet<(String, String)>>, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => {
-            let object_rels_per_type = get_object_rels_per_type(ocel);
-            Ok(object_rels_per_type)
-        }
-        None => Err("No OCEL loaded".to_string()),
-    }
 }
 
 #[tauri::command(async)]
@@ -211,17 +175,9 @@ async fn export_filter_box(
                     if let Ok(_file) = File::open(path) {
                         let _ = std::fs::remove_file(path);
                     }
-                    match req.export_format {
-                        ExportFormat::XML => {
-                            export_ocel_xml_path(&res, path).unwrap();
-                        }
-                        ExportFormat::JSON => {
-                            export_ocel_json_path(&res, path).unwrap();
-                        }
-                        ExportFormat::SQLITE => {
-                            export_ocel_sqlite_to_path(&res, path).unwrap();
-                        }
-                    }
+                    // TODO: Handle error correctly
+                    // Maybe even change to blocking dialog
+                    OCEL::export_to_path(&res, path).unwrap();
                 }
             }
         });
@@ -240,25 +196,25 @@ async fn auto_discover_constraints(
 }
 #[tauri::command(async)]
 async fn auto_discover_oc_declare(
-    options: oc_declare::OCDeclareDiscoveryOptions,
+    options: OCDeclareDiscoveryOptions,
     state: State<'_, AppState>,
-) -> Result<Vec<oc_declare::OCDeclareArc>, String> {
+) -> Result<Vec<OCDeclareArc>, String> {
     match state.ocel.read().await.as_ref() {
-        Some(locel) => Ok(oc_declare::discover_behavior_constraints(&locel, options)),
+        Some(locel) => Ok(discover_behavior_constraints(locel, options)),
         None => Err("No OCEL loaded".to_string()),
     }
 }
 
 #[tauri::command(async)]
 async fn evaluate_oc_declare_arcs(
-    arcs: Vec<oc_declare::OCDeclareArc>,
+    arcs: Vec<OCDeclareArc>,
     state: State<'_, AppState>,
 ) -> Result<Vec<f64>, String> {
     match state.ocel.read().await.as_ref() {
         Some(locel) => {
             let res = arcs
                 .iter()
-                .map(|arc| arc.get_for_all_evs_perf(&locel))
+                .map(|arc| arc.get_for_all_evs_perf(locel))
                 .collect();
             Ok(res)
         }
@@ -269,7 +225,7 @@ async fn evaluate_oc_declare_arcs(
 
 #[tauri::command(async)]
 async fn get_oc_declare_edge_statistics(
-    arc: oc_declare::OCDeclareArc,
+    arc: OCDeclareArc,
     state: State<'_, AppState>,
 ) -> Result<Vec<i64>, String> {
     match state.ocel.read().await.as_ref() {
@@ -354,7 +310,7 @@ async fn ocel_graph(
 #[tauri::command(async)]
 async fn create_db_query(
     input: DBTranslationInput,
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
 ) -> Result<String, String> {
     Ok(translate_to_sql_shared(input))
 }
@@ -500,8 +456,6 @@ fn main() {
             import_xes_path_as_ocel,
             import_xes_slice_as_ocel,
             get_current_ocel_info,
-            get_event_qualifiers,
-            get_object_qualifiers,
             export_filter_box,
             check_with_box_tree,
             auto_discover_constraints,

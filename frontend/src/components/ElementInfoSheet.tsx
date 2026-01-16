@@ -1,11 +1,10 @@
 import { useContext } from "react";
-import { Sheet, SheetContent } from "./ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./ui/sheet";
 import { VisualEditorContext } from "@/routes/visual-editor/helper/VisualEditorContext";
 import OcelElementInfo from "./OcelElementInfo";
 import AlertHelper from "./AlertHelper";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { Toggle } from "./ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { Label } from "./ui/label";
 import { LuFileSearch } from "react-icons/lu";
@@ -33,6 +32,10 @@ export default function ElementInfoSheet({
           ev.preventDefault();
         }}
       >
+        <SheetHeader className="hidden">
+          <SheetTitle>Element Info</SheetTitle>
+          <SheetDescription>Shows information about a selected object or event</SheetDescription>
+        </SheetHeader>
         <div className="absolute left-0 -top-11 p-2 z-20">
           {elInfo !== undefined && (
             <AlertHelper

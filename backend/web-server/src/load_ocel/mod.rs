@@ -1,20 +1,9 @@
-use std::{
-    fs::{self, File},
-    io::BufReader,
-};
+use std::fs;
 
 use axum::{extract::State, http::StatusCode, Json};
-use ocpq_shared::OCELInfo;
+use ocpq_shared::{OCELInfo, process_mining::{Importable, OCEL, core::event_data::object_centric::{io::OCELIOError, linked_ocel::SlimLinkedOCEL}}};
 use serde::{Deserialize, Serialize};
 
-use ocpq_shared::process_mining::{
-    event_log::ocel::ocel_struct::OCEL,
-    import_ocel_sqlite_from_path,
-    ocel::{
-        linked_ocel::IndexLinkedOCEL,
-        xml_ocel_import::{import_ocel_xml_file_with, OCELImportOptions},
-    },
-};
 
 use crate::AppState;
 
@@ -63,7 +52,7 @@ pub fn load_ocel_file_to_state(
 ) -> Option<OCELInfo> {
     match load_ocel_file(name) {
         Ok(ocel) => {
-            let locel = IndexLinkedOCEL::from_ocel(ocel);
+            let locel = SlimLinkedOCEL::from_ocel(ocel);
             let ocel_info: OCELInfo = (&locel).into();
             let mut x = state.ocel.write().unwrap();
             *x = Some(locel);
@@ -78,19 +67,8 @@ pub fn load_ocel_file_to_state(
     }
 }
 
-pub fn load_ocel_file(name: &str) -> Result<OCEL, std::io::Error> {
+pub fn load_ocel_file(name: &str) -> Result<OCEL, OCELIOError> {
     let path = format!("{DATA_PATH}{name}");
-    if name.ends_with(".json")  || name.ends_with(".jsonocel") {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        let ocel: OCEL = serde_json::from_reader(reader)?;
-        Ok(ocel)
-    } else if name.ends_with(".xml") || name.ends_with(".xmlocel") {
-        let ocel = import_ocel_xml_file_with(&path, OCELImportOptions::default());
-        Ok(ocel)
-    } else {
-        let ocel = import_ocel_sqlite_from_path(&path)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::FileTooLarge, e))?;
-        Ok(ocel)
-    }
+    let ocel = OCEL::import_from_path(path)?;
+    Ok(ocel)
 }

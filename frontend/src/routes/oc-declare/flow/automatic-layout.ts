@@ -120,7 +120,8 @@ export async function applyLayoutToNodes<N extends Record<string, unknown>>(
       },
     })),
   };
-  await elk.layout(graph as any).then(({ children }: ElkNode) => {
+  await elk.layout(graph as any).then(({ children, edges }: ElkNode) => {
+    console.log({edges});
     if (children !== undefined) {
       children.forEach((node: any) => {
         const n = nodes.find((n) => n.id === node.id);

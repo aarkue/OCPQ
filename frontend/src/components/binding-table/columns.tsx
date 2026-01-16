@@ -11,6 +11,8 @@ import { Link } from "react-router-dom";
 import { Checkbox } from "../ui/checkbox";
 import { type LabelValue } from "@/types/generated/LabelValue";
 import { LabelLabel } from "@/routes/visual-editor/helper/box/LabelFunctionChooser";
+import { ObjectVariable } from "@/types/generated/ObjectVariable";
+import { EventVariable } from "@/types/generated/EventVariable";
 
 function getLabelValuePrimitive(l: LabelValue | null) {
   if (l == null) {
@@ -45,13 +47,13 @@ export function columnsForBinding(
   addViolationStatus: boolean,
 ): ColumnDef<BindingInfo>[] {
   // Use labels if they are present in (sample) binding
-  const labels = Object.keys(binding.labelMap);
+  const labels = binding.labelMap.map(b => b[0]);
 
   return [
-    ...Object.entries(binding.objectMap).map(
-      ([obVarName, _obIndex]) =>
+    ...binding.objectMap.map(
+      ([obVarName, __obIndex]) =>
         ({
-          id: "o" + (parseInt(obVarName) + 1),
+          id: "o" + (obVarName + 1),
           cell: (c) => (
             <Link
               to={{
@@ -74,14 +76,14 @@ export function columnsForBinding(
               {c.getValue<string>()}
             </Link>
           ),
-          header: () => <ObVarName obVar={parseInt(obVarName)} />,
-          accessorFn: ([b, _x]) => objectIds[b.objectMap[parseInt(obVarName)]],
+          header: () => <ObVarName obVar={obVarName} />,
+          accessorFn: ([b,_]) => objectIds[b.objectMap.find((om:[ObjectVariable,number])  => om[0] === obVarName)![1]],
         }) satisfies ColumnDef<BindingInfo>,
     ),
-    ...Object.entries(binding.eventMap).map(
+    ...binding.eventMap.map(
       ([evVarName, _evIndex]) =>
         ({
-          id: "e" + (parseInt(evVarName) + 1),
+          id: "e" + (evVarName + 1),
           cell: (c) => (
             <Link
               to={{
@@ -104,8 +106,8 @@ export function columnsForBinding(
               {c.getValue<string>()}
             </Link>
           ),
-          header: () => <EvVarName eventVar={parseInt(evVarName)} />,
-          accessorFn: ([b, _x]) => eventIds[b.eventMap[parseInt(evVarName)]],
+          header: () => <EvVarName eventVar={evVarName} />,
+          accessorFn: ([b,_]) => eventIds[b.eventMap.find((om:[EventVariable,number])  => om[0] === evVarName)![1]],
         }) satisfies ColumnDef<BindingInfo>,
     ),
     ...labels.map(
@@ -121,7 +123,7 @@ export function columnsForBinding(
             </span>
           ),
           header: () => <LabelLabel label={label} />,
-          accessorFn: ([b, _x]) => getLabelValuePrimitive(b.labelMap[label]),
+          accessorFn: ([b, _x]) => getLabelValuePrimitive(b.labelMap.find((lm) => lm[0] === label)![1]),
         }) satisfies ColumnDef<BindingInfo>,
     ),
     ...(addViolationStatus

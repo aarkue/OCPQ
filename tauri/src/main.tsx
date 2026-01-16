@@ -89,12 +89,6 @@ const tauriBackend: BackendProvider = {
       }
     })
   },
-  "ocel/event-qualifiers": async () => {
-    return await invoke<EventTypeQualifiers>("get_event_qualifiers");
-  },
-  "ocel/object-qualifiers": async () => {
-    return await invoke<ObjectTypeQualifiers>("get_object_qualifiers");
-  },
   "ocel/discover-constraints": async (options) => {
     return await invoke<DiscoverConstraintsResponse>(
       "auto_discover_constraints",

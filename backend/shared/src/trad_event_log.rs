@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
 use chrono::DateTime;
-use process_mining::{
-    event_log::{
+use process_mining::core::event_data::{
+    case_centric::{
         constants::{ACTIVITY_NAME, TRACE_ID_NAME},
         AttributeValue, XESEditableAttribute,
     },
-    ocel::ocel_struct::{
+    object_centric::{
         OCELAttributeType, OCELAttributeValue, OCELEvent, OCELEventAttribute, OCELObject,
         OCELObjectAttribute, OCELRelationship, OCELType, OCELTypeAttribute,
     },
-    EventLog, OCEL,
 };
+use process_mining::{EventLog, OCEL};
 
 fn xes_att_to_ocel_attr(attribute: &AttributeValue) -> OCELAttributeValue {
     match attribute {

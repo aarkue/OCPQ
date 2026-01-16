@@ -2,7 +2,6 @@ import "./globals.css";
 import "./index.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Toaster } from "react-hot-toast";
 import {
   BackendProviderContext,
   DEFAULT_BACKEND_URL,

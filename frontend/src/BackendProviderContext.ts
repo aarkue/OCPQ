@@ -36,8 +36,6 @@ export type BackendProvider = {
     tree: BindingBoxTree,
     format: "XML" | "JSON" | "SQLITE",
   ) => Promise<Blob | void>;
-  "ocel/event-qualifiers": () => Promise<EventTypeQualifiers>;
-  "ocel/object-qualifiers": () => Promise<ObjectTypeQualifiers>;
   "ocel/discover-constraints": (
     autoDiscoveryOptions: DiscoverConstraintsRequest,
   ) => Promise<DiscoverConstraintsResponse>;
@@ -103,8 +101,6 @@ export const ErrorBackendContext: BackendProvider = {
   "ocel/check-constraints-box": warnForNoBackendProvider,
   "/ocel/create-db-query": warnForNoBackendProvider,
   "ocel/export-filter-box": warnForNoBackendProvider,
-  "ocel/event-qualifiers": warnForNoBackendProvider,
-  "ocel/object-qualifiers": warnForNoBackendProvider,
   "ocel/discover-constraints": warnForNoBackendProvider,
   "ocel/export-bindings": warnForNoBackendProvider,
   "ocel/graph": warnForNoBackendProvider,
@@ -205,14 +201,6 @@ export function getAPIServerBackendProvider(
         })
       ).blob();
     },
-    "ocel/event-qualifiers": async () => {
-      return await (
-        await fetch(localBackendURL + "/ocel/event-qualifiers", {
-          method: "get",
-          headers: {},
-        })
-      ).json();
-    },
     "/ocel/create-db-query": async (input) => {
       return await (
         await fetch(localBackendURL + "/ocel/create-db-query", {
@@ -221,14 +209,6 @@ export function getAPIServerBackendProvider(
           headers: { "Content-Type": "application/json" },
         })
       ).text();
-    },
-    "ocel/object-qualifiers": async () => {
-      return await (
-        await fetch(localBackendURL + "/ocel/object-qualifiers", {
-          method: "get",
-          headers: {},
-        })
-      ).json();
     },
     "ocel/export-bindings": async (nodeId, options) => {
       const res = await fetch(localBackendURL + "/ocel/export-bindings", {

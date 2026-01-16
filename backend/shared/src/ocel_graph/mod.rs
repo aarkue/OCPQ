@@ -1,6 +1,6 @@
-use process_mining::ocel::{
-    linked_ocel::{index_linked_ocel::EventOrObjectIndex, IndexLinkedOCEL, LinkedOCELAccess},
-    ocel_struct::{OCELEvent, OCELObject},
+use process_mining::core::event_data::object_centric::{
+    linked_ocel::{slim_linked_ocel::EventOrObjectIndex, LinkedOCELAccess, SlimLinkedOCEL},
+    OCELEvent, OCELObject,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -41,14 +41,14 @@ pub struct OCELGraphOptions {
     spanning_tree: bool,
 }
 
-pub fn get_ocel_graph(ocel: &IndexLinkedOCEL, options: OCELGraphOptions) -> Option<OCELGraph> {
+pub fn get_ocel_graph(ocel: &SlimLinkedOCEL, options: OCELGraphOptions) -> Option<OCELGraph> {
     let root_index_opt = match options.root_is_object {
         true => ocel
-            .get_ob_index(options.root)
+            .get_ob_by_id(options.root)
             .map(EventOrObjectIndex::Object),
 
         false => ocel
-            .get_ev_index(options.root)
+            .get_ev_by_id(options.root)
             .map(EventOrObjectIndex::Event),
     };
     if let Some(root_index) = root_index_opt {
@@ -88,18 +88,18 @@ pub fn get_ocel_graph(ocel: &IndexLinkedOCEL, options: OCELGraphOptions) -> Opti
             .iter()
             .map(|i| match i {
                 EventOrObjectIndex::Object(o_index) => {
-                    GraphNode::Object(ocel.get_ob(o_index).clone())
+                    GraphNode::Object(ocel.get_full_ob(o_index).into_owned())
                 }
                 EventOrObjectIndex::Event(e_index) => {
-                    GraphNode::Event(ocel.get_ev(e_index).clone())
+                    GraphNode::Event(ocel.get_full_ev(e_index).into_owned())
                 }
             })
             .collect();
         let links = expanded_arcs
             .iter()
             .map(|(from, to, qualifier)| {
-                let from = event_or_object_from_index(*from, ocel).cloned();
-                let to = event_or_object_from_index(*to, ocel).cloned();
+                let from = event_or_object_from_index(*from, ocel);
+                let to = event_or_object_from_index(*to, ocel);
 
                 GraphLink {
                     source: from.get_id().clone(),

@@ -3,7 +3,7 @@
 // use itertools::Itertools;
 // use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-// use crate::preprocessing::{linked_ocel::{IndexLinkedOCEL, ObjectIndex}, preprocess::{get_events_of_type_associated_with_objects, LinkedOCEL}};
+// use crate::preprocessing::{linked_ocel::{SlimLinkedOCEL, ObjectIndex}, preprocess::{get_events_of_type_associated_with_objects, LinkedOCEL}};
 
 // use super::{EventuallyFollowsConstraints, SimpleDiscoveredCountConstraints};
 
@@ -13,7 +13,7 @@
 // /// Only evaluates the passed object IDs
 // ///
 // pub fn get_count_constraint_fraction(
-//     linked_ocel: &IndexLinkedOCEL,
+//     linked_ocel: &SlimLinkedOCEL,
 //     c: &SimpleDiscoveredCountConstraints,
 //     object_ids: &HashSet<String>,
 //     return_supporting_objs: bool,
@@ -59,7 +59,7 @@
 // /// Also returns supporting object IDs (i.e. objects for which  _ALL_ from even types have an appropriate "to" event )
 // ///
 // pub fn get_ef_constraint_fraction(
-//     linked_ocel: &IndexLinkedOCEL,
+//     linked_ocel: &SlimLinkedOCEL,
 //     c: &EventuallyFollowsConstraints,
 //     object_ids: &HashSet<ObjectIndex>,
 //     return_supporting_objs: bool,

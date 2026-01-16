@@ -20,7 +20,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
-import { Edge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
+import { Edge, EdgeLabelRenderer, getBezierPath, useReactFlow, type EdgeProps } from "@xyflow/react";
 import QuantifiedObjectEdge from "./QuantifiedObjectEdge";
 import { VisualEditorContext } from "./VisualEditorContext";
 import type { EventTypeLinkData } from "./types";
@@ -60,6 +60,7 @@ export default function EventTypeLink(props: EdgeProps<Edge<EventTypeLinkData>>)
         i++;
       }
       console.log(namesUsedAlready, i);
+      console.log("onEdgeDataChange init");
       onEdgeDataChange(id, {
         color: "#969696",
         maxCount: null,
@@ -73,7 +74,6 @@ export default function EventTypeLink(props: EdgeProps<Edge<EventTypeLinkData>>)
   return (
     <>
       <QuantifiedObjectEdge {...props} />
-      {data !== undefined && (
         <EdgeLabelRenderer>
           <ContextMenu>
             <ContextMenuTrigger id={`edge-context-menu-${id}`}>
@@ -86,14 +86,16 @@ export default function EventTypeLink(props: EdgeProps<Edge<EventTypeLinkData>>)
                 }}
                 className="nodrag nopan flex flex-col items-center -mt-1"
               >
-                <NameChangeDialog
+                {data != undefined && (
+                  <NameChangeDialog
                   open={dialogOpen}
                   onOpenChange={(o) => setDialogOpen(o)}
                   data={data}
                   onChange={(name) => {
                     onEdgeDataChange(id, { name });
                   }}
-                />
+                  />
+                )}
               </div>
             </ContextMenuTrigger>
             <ContextMenuPortal>
@@ -122,7 +124,6 @@ export default function EventTypeLink(props: EdgeProps<Edge<EventTypeLinkData>>)
             </ContextMenuPortal>
           </ContextMenu>
         </EdgeLabelRenderer>
-      )}
     </>
   );
 }

@@ -16,8 +16,8 @@ import { LuAlignStartVertical, LuClipboardCopy, LuClipboardPaste } from "react-i
 import { applyLayoutToNodes, useLayoutedElements } from "./automatic-layout";
 import { isEditorElementTarget } from "@/lib/flow-helper";
 import toast from "react-hot-toast";
-import { OcelInfoContext } from "@/App";
 import { RxReset } from "react-icons/rx";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
 
 export const nodeTypes = {
   'activity': OCDeclareFlowNode,

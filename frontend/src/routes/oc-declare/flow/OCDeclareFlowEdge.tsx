@@ -354,11 +354,11 @@ import { MinMaxDisplayWithSugar } from "./MinMaxSugar";
 import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
 import { ActivityNodeData, ActivityNodeType, ALL_EDGE_TYPES, CustomEdgeType, EdgeType } from "./oc-declare-flow-types";
 import { getMarkersForEdge } from "./OCDeclareFlowEditor";
-import { OcelInfoContext } from "@/App";
 import { getTypesRelationshipSupport, SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
 import toast from "react-hot-toast";
 import { BackendProviderContext } from "@/BackendProviderContext";
 import { TbDiscountCheckFilled } from "react-icons/tb";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
 
 function EditEdgeLabelsDialog({ open, initialValue, onClose, colors, sourceAct, targetAct }: { open: boolean, initialValue: OCDeclareArcLabel, sourceAct: ActivityNodeData, targetAct: ActivityNodeData, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
   const [value, setValue] = useState({ ...initialValue });

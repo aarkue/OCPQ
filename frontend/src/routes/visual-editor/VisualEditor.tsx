@@ -644,16 +644,17 @@ export default function VisualEditor(props: VisualEditorProps) {
         },
         onEdgeDataChange: (id, newData) => {
           if (newData !== undefined) {
-            instance.setEdges((es) => {
-              const newEdges = [...es];
-              const changedEdge = newEdges.find((e) => e.id === id);
-              if (changedEdge !== undefined) {
-                changedEdge.data = { ...changedEdge.data, ...newData };
-              } else {
-                console.warn("Did not find changed edge data for id: " + id);
-              }
-              return newEdges;
-            });
+            instance.updateEdgeData(id,newData);
+            // instance.setEdges((es) => {
+            //   const newEdges = [...es];
+            //   const changedEdge = newEdges.find((e) => e.id === id);
+            //   if (changedEdge !== undefined) {
+            //     changedEdge.data = { ...changedEdge.data, ...newData };
+            //   } else {
+            //     console.warn("Did not find changed edge data for id: " + id);
+            //   }
+            //   return newEdges;
+            // });
           } else {
             instance.setEdges((edges) => {
               const newEdges = edges.filter((e) => e.id !== id);
@@ -695,6 +696,7 @@ export default function VisualEditor(props: VisualEditorProps) {
         minZoom={0.33}
         edgeTypes={edgeTypes}
         nodeTypes={nodeTypes}
+        connectionLineStyle={{ stroke: "#646464", strokeWidth: 3 }}
         defaultNodes={otherData?.nodes ?? [] as Node<EventTypeNodeData | GateNodeData>[]}
         defaultEdges={otherData?.edges ?? [] as Edge<EventTypeLinkData>[]}
         isValidConnection={isValidConnection}
@@ -721,8 +723,8 @@ export default function VisualEditor(props: VisualEditorProps) {
             color: "#000000ff",
           },
           style: {
-            strokeWidth: 2,
-            stroke: "#969696",
+            strokeWidth: 4,
+            stroke: "#646464",
           },
         }}
         onEdgeContextMenu={onEdgeContextMenu}
