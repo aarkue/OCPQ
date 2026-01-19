@@ -1025,7 +1025,7 @@ impl SizeFilter {
                 if child_names.is_empty() {
                     Ok(true)
                 } else if let Some(c_res) = child_res.get(&child_names[0]) {
-                    let mut set1: HashSet<_> = c_res.iter().map(|(binding, _)| binding).collect();
+                    let set1: HashSet<_> = c_res.iter().map(|(binding, _)| binding).collect();
                     for other_c in child_names.iter().skip(1) {
                         if let Some(c2_res) = child_res.get(other_c) {
                             let set2: HashSet<_> =

@@ -3605,7 +3605,6 @@ dependencies = [
  "rayon",
  "rayon-cancel",
  "rust_xlsxwriter",
- "rustc-hash",
  "serde",
  "serde_json",
  "serde_with",
@@ -3619,6 +3618,7 @@ dependencies = [
 name = "ocpq-tauri"
 version = "0.0.3"
 dependencies = [
+ "itertools 0.11.0",
  "log",
  "mimalloc",
  "ocpq-shared",

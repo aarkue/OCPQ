@@ -1,4 +1,4 @@
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META, OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA, parseLocalStorageValue } from "@/lib/local-storage";
 import clsx from "clsx";
@@ -64,6 +64,9 @@ export default function OCDeclareListPage() {
       <AlertDialogContent className="flex flex-col max-h-full justify-between">
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {deletePromptForIndex === 'ALL' ? 'all' : ''} OC-DECLARE Constraint{deletePromptForIndex === 'ALL' ? 's' : ''}</AlertDialogTitle>
+          <AlertDialogDescription className="hidden">
+            Are you sure you want to delete {deletePromptForIndex === 'ALL' ? 'all ' : ''}the selected OC-DECLARE constraint{deletePromptForIndex === 'ALL' ? 's' : ''}? This action cannot be undone.
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="text-base text-gray-700 max-h-full overflow-auto px-2">
           {deletePromptForIndex !== undefined && deletePromptForIndex !== 'ALL' && (

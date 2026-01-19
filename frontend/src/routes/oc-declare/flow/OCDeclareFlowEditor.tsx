@@ -1,23 +1,30 @@
 import { BackendProviderContext } from "@/BackendProviderContext";
+import AlertHelper from "@/components/AlertHelper";
+import { ClipboardButton } from "@/components/ClipboardButton";
+import { DownloadButton } from "@/components/DownloadButton";
 import { Button } from "@/components/ui/button";
-import { ImageIcon } from "@radix-ui/react-icons";
-import { toBlob, toSvg } from "html-to-image";
-import { useCallback, useContext, useEffect, useRef } from "react";
-import { ReactFlow, EdgeTypes, NodeTypes, OnConnect, ReactFlowInstance, useEdgesState, Edge, Background, Controls, Panel, ConnectionLineType, ReactFlowJsonObject } from "@xyflow/react";;
-import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { v4 as uuidv4, v4 } from 'uuid';
-import { ActivityNodeType, CustomEdgeType, CustomEdgeData, EdgeType } from "./oc-declare-flow-types";
-import { OCDeclareFlowNode } from "./OCDeclareFlowNode";
-import OCDeclareFlowEdge from "./OCDeclareFlowEdge";
-import { addArcsToFlow, flowEdgeToOCDECLARE } from "./oc-declare-flow-type-conversions";
-import debounce from "lodash.debounce";
-import { LuAlignStartVertical, LuClipboardCopy, LuClipboardPaste } from "react-icons/lu";
-import { applyLayoutToNodes, useLayoutedElements } from "./automatic-layout";
+import { Label } from "@/components/ui/label";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { isEditorElementTarget } from "@/lib/flow-helper";
-import toast from "react-hot-toast";
-import { RxReset } from "react-icons/rx";
 import { OcelInfoContext } from "@/lib/ocel-info-context";
+import { ImageIcon } from "@radix-ui/react-icons";
+import { useQuery } from "@tanstack/react-query";
+import { Background, ConnectionLineType, Controls, Edge, EdgeTypes, NodeTypes, OnConnect, Panel, ReactFlow, ReactFlowInstance, ReactFlowJsonObject, useEdgesState } from "@xyflow/react";
+import { toBlob, toSvg } from "html-to-image";
+import debounce from "lodash.debounce";
+import { useCallback, useContext, useEffect, useRef } from "react";
+import toast from "react-hot-toast";
+import { LuAlignStartVertical, LuClipboardCopy, LuClipboardPaste, LuShare } from "react-icons/lu";
+import { RxReset } from "react-icons/rx";
+import { v4 as uuidv4, v4 } from 'uuid';
+import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
+import { applyLayoutToNodes, useLayoutedElements } from "./automatic-layout";
+import { addArcsToFlow, flowEdgeToOCDECLARE } from "./oc-declare-flow-type-conversions";
+import { ActivityNodeType, CustomEdgeData, CustomEdgeType, EdgeType } from "./oc-declare-flow-types";
+import OCDeclareFlowEdge from "./OCDeclareFlowEdge";
+import { OCDeclareFlowNode } from "./OCDeclareFlowNode";
+;
 
 export const nodeTypes = {
   'activity': OCDeclareFlowNode,
@@ -111,7 +118,7 @@ export function getMarkersForEdge(edgeType: EdgeType, id?: string): { markerStar
   }
 }
 
-export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit, name }: {name: string, initialFlowJson?: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>, onInit?: (ref: ReactFlowInstance<ActivityNodeType, CustomEdgeType>) => unknown, onChange: (json: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>) => unknown }) {
+export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit, name }: { name: string, initialFlowJson?: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>, onInit?: (ref: ReactFlowInstance<ActivityNodeType, CustomEdgeType>) => unknown, onChange: (json: ReactFlowJsonObject<ActivityNodeType, CustomEdgeType>) => unknown }) {
   const backend = useContext(BackendProviderContext);
   const flowRef = useRef<ReactFlowInstance<ActivityNodeType, CustomEdgeType>>();
   const ocelInfo = useContext(OcelInfoContext);
@@ -478,6 +485,45 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit,
         <Background className='hide-in-image' />
         <Controls className='hide-in-image' />
         <Panel position="top-right" className='flex gap-x-1 hide-in-image'>
+          <AlertHelper initialData={{ format: "text" as "text" | "json" }}
+          trigger={<Button title="Export model" variant="outline" size="icon"><LuShare/></Button>}
+          mode="normal" title="Export OC-DECLARE" content={({ data, setData }) => {
+            const result = useQuery({
+              queryKey: ["export-oc-declare", data.format, edges],
+              queryFn: async () => {
+                if (data.format === "text") {
+                  return await backend["oc-declare/template-string"](flowRef.current!.getEdges().map(e => flowEdgeToOCDECLARE(e, flowRef.current!)));
+                } else {
+                  return (JSON.stringify(flowRef.current!.getEdges().map(e => flowEdgeToOCDECLARE(e, flowRef.current!)), undefined, 2));
+                }
+              }
+            });
+            return <>
+              <div className="mb-2">Export the current OC-DECLARE model as JSON or as text representation.</div>
+              <div className="flex flex-col gap-y-2">
+                <div className="mr-2 flex flex-col  items-start  gap-2">
+                  <Label>Format
+                  </Label>
+                  <ToggleGroup type="single" value={data.format}>
+                    <ToggleGroupItem value="text" onClick={() => setData({ ...data, format: "text" })}>Text</ToggleGroupItem>
+                    <ToggleGroupItem value="json" onClick={() => setData({ ...data, format: "json" })}>JSON</ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+                <div>
+                  <pre className="h-96 w-full overflow-auto rounded-md border p-2 bg-muted"><code>{
+                    result.data ? result.data : (result.isLoading ? "Loading..." : (result.isError ? "Error: " + (result.error as Error).message : "Unknown state"))
+                  }</code></pre>
+                  <div className="flex justify-end">
+
+                  <ClipboardButton value={result.data ?? ""} name="OC-DECLARE Model" hideValueInToast />
+                  <DownloadButton value={result.data ?? ""} fileName={`oc-declare.${data.format === "json" ? 'json' : 'txt'}`} />
+                  </div>
+                </div>
+              </div>
+            </>
+          }} onSubmit={(data) => {
+
+          }} />
 
           {/* const flow = loadData();
               if (flow && flowRef.current) {
@@ -502,7 +548,7 @@ export default function OCDeclareFlowEditor({ initialFlowJson, onChange, onInit,
                 flowRef.current?.updateEdgeData(edgeIDs[i], { violationInfo: { violationPercentage: 100 * res[i] } })
               }
             }}>Evaluate</Button>
-            {edges.find(e => e.data?.violationInfo) !== undefined &&<Button
+            {edges.find(e => e.data?.violationInfo) !== undefined && <Button
               size="icon"
               variant="outline"
               title={"Clear evaluation"}

@@ -17,7 +17,7 @@ import { getEdgeParams } from './edge-helpers';
 import { getRandomStringColor } from "@/lib/random-colors";
 import { ContextMenuArrow } from '@radix-ui/react-context-menu';
 import React, { Fragment, useContext, useEffect, useMemo, useState } from "react";
-import { LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuBadgeCheck, LuBadgePercent, LuHash, LuShapes, LuTrendingUp, LuXCircle } from 'react-icons/lu';
+import { LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuHash, LuShapes, LuTrendingUp, LuXCircle } from 'react-icons/lu';
 const asSvg = "/as.svg";
 const dfSvg = "/df.svg";
 const dpSvg = "/dp.svg";
@@ -333,6 +333,7 @@ function EdgeLabel({ transform, label }: { transform: string; label: string | Re
 
 
 
+import { BackendProviderContext } from "@/BackendProviderContext";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -347,18 +348,18 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { InfoSheetContext } from "@/InfoSheet";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
+import { getTypesRelationshipSupport } from "@/lib/variable-hints";
+import { SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
+import toast from "react-hot-toast";
 import { MdBarChart } from "react-icons/md";
+import { TbDiscountCheckFilled } from "react-icons/tb";
 import { ObjectTypeAssociation } from "../types/ObjectTypeAssociation";
 import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
 import { MinMaxDisplayWithSugar } from "./MinMaxSugar";
 import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
 import { ActivityNodeData, ActivityNodeType, ALL_EDGE_TYPES, CustomEdgeType, EdgeType } from "./oc-declare-flow-types";
 import { getMarkersForEdge } from "./OCDeclareFlowEditor";
-import { getTypesRelationshipSupport, SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
-import toast from "react-hot-toast";
-import { BackendProviderContext } from "@/BackendProviderContext";
-import { TbDiscountCheckFilled } from "react-icons/tb";
-import { OcelInfoContext } from "@/lib/ocel-info-context";
 
 function EditEdgeLabelsDialog({ open, initialValue, onClose, colors, sourceAct, targetAct }: { open: boolean, initialValue: OCDeclareArcLabel, sourceAct: ActivityNodeData, targetAct: ActivityNodeData, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
   const [value, setValue] = useState({ ...initialValue });

@@ -1,3 +1,4 @@
+import FilterLabelIcon from "@/components/FilterLabelIcon";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,23 +12,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
+import { getPossibleE2OVariables, getPossibleO2OVariables } from "@/lib/variable-hints";
 import type { BindingBox } from "@/types/generated/BindingBox";
 import type { Constraint } from "@/types/generated/Constraint";
 import type { EventVariable } from "@/types/generated/EventVariable";
 import type { Filter } from "@/types/generated/Filter";
+import { type FilterLabel } from "@/types/generated/FilterLabel";
 import type { ObjectVariable } from "@/types/generated/ObjectVariable";
 import type { SizeFilter } from "@/types/generated/SizeFilter";
+import { Edge, Node, useEdges, useReactFlow } from "@xyflow/react";
 import { useContext, useState } from "react";
 import { LuPlus } from "react-icons/lu";
+import { getParentsNodeIDs } from "../evaluation/evaluate-constraints";
+import { EventTypeLinkData, EventTypeNodeData, GateNodeData } from "../types";
 import { VisualEditorContext } from "../VisualEditorContext";
 import FilterOrConstraintEditor, {
   FilterOrConstraintDisplay,
 } from "./FilterOrConstraintEditor";
 import { getEvVarName, getObVarName } from "./variable-names";
-import FilterLabelIcon from "@/components/FilterLabelIcon";
-import { type FilterLabel } from "@/types/generated/FilterLabel";
-import { MdDisabledVisible } from "react-icons/md";
-
+export const INVALID_VARIABLE_PLACEHOLDER = 99999;
 export default function FilterChooser({
   id,
   box,
@@ -39,24 +43,33 @@ export default function FilterChooser({
   updateBox: (box: BindingBox) => unknown;
   type: "filter" | "constraint";
 }) {
-  const { getAvailableVars, getAvailableChildNames, filterMode } =
+  const { getAvailableVars, getAvailableChildNames, filterMode, getTypesForVariable } =
     useContext(VisualEditorContext);
+  const edges = useEdges();
+  const { getNode } = useReactFlow<Node<EventTypeNodeData | GateNodeData>, Edge<EventTypeLinkData>>();
   const availableObjectVars = getAvailableVars(id, "object");
   const availableEventVars = getAvailableVars(id, "event");
   const availableChildSets = getAvailableChildNames(id);
+  const parentIDs = getParentsNodeIDs(id, edges);
+  const allBoxes = [...parentIDs.map(pid => {
+    const node = getNode(pid); if (node?.data !== undefined && 'box' in node?.data) { return node.data.box } else {
+      return undefined;
+    }
+  }).filter(b => b !== undefined), box];
+  const ocelInfo = useContext(OcelInfoContext);
   const [alertState, setAlertState] = useState<
     (
       | {
-          type: "filter";
-          value?: Filter | SizeFilter | Constraint;
-        }
+        type: "filter";
+        value?: Filter | SizeFilter | Constraint;
+      }
       | { type: "sizeFilter"; value?: Filter | SizeFilter | Constraint }
       | { type: "constraint"; value?: Filter | SizeFilter | Constraint }
     ) &
-      (
-        | { mode: "add" }
-        | { mode: "edit"; editIndex: number; wasSizeFilter: boolean }
-      )
+    (
+      | { mode: "add" }
+      | { mode: "edit"; editIndex: number; wasSizeFilter: boolean }
+    )
   >();
 
   return (
@@ -194,8 +207,8 @@ export default function FilterChooser({
                       ? alertState.value.type === "Filter"
                         ? alertState.value.filter.type
                         : alertState.value.type === "SizeFilter"
-                        ? alertState.value.filter.type
-                        : alertState.value.type
+                          ? alertState.value.filter.type
+                          : alertState.value.type
                       : ""
                   }
                   options={[
@@ -228,57 +241,60 @@ export default function FilterChooser({
                       value: "BasicFilterCEL",
                     },
                     ...(alertState.type !== "filter" ||
-                    alertState.mode !== "edit" ||
-                    alertState.wasSizeFilter
+                      alertState.mode !== "edit" ||
+                      alertState.wasSizeFilter
                       ? [
-                          {
-                            label: "CBS: Child Bindings Set Size",
-                            value: "NumChilds",
-                          },
-                          {
-                            label: "CBE: Child Binding Sets Equal",
-                            value: "BindingSetEqual",
-                          },
-                          {
-                            label: "CBPS: Projected Child Bindings Set Size",
-                            value: "NumChildsProj",
-                          },
-                          {
-                            label: "CBPE: Projected Child Binding Sets Equal",
-                            value: "BindingSetProjectionEqual",
-                          },
-                          {
-                            label: "AdvCEL: Advanced CEL Script",
-                            value: "AdvancedCEL",
-                          },
-                        ]
+                        {
+                          label: "CBS: Child Bindings Set Size",
+                          value: "NumChilds",
+                        },
+                        {
+                          label: "CBE: Child Binding Sets Equal",
+                          value: "BindingSetEqual",
+                        },
+                        {
+                          label: "CBPS: Projected Child Bindings Set Size",
+                          value: "NumChildsProj",
+                        },
+                        {
+                          label: "CBPE: Projected Child Binding Sets Equal",
+                          value: "BindingSetProjectionEqual",
+                        },
+                        {
+                          label: "AdvCEL: Advanced CEL Script",
+                          value: "AdvancedCEL",
+                        },
+                      ]
                       : []),
 
                     ...(alertState.type === "constraint"
                       ? [
-                          {
-                            label: "SAT: All Child Bindings Satisfied",
-                            value: "SAT",
-                          },
-                          {
-                            label: "ANY: Any Child Binding Satisfied",
-                            value: "ANY",
-                          },
-                          { label: "ALL NOT: Logic NOT (ALL)", value: "NOT" },
-                          { label: "OR ALL: Logic OR (ALL)", value: "OR" },
-                          { label: "AND ALL: Logic AND", value: "AND" },
-                        ]
+                        {
+                          label: "SAT: All Child Bindings Satisfied",
+                          value: "SAT",
+                        },
+                        {
+                          label: "ANY: Any Child Binding Satisfied",
+                          value: "ANY",
+                        },
+                        { label: "ALL NOT: Logic NOT (ALL)", value: "NOT" },
+                        { label: "OR ALL: Logic OR (ALL)", value: "OR" },
+                        { label: "AND ALL: Logic AND", value: "AND" },
+                      ]
                       : []),
                   ]}
                   onChange={(val) => {
                     const childVars = getAvailableChildNames(id);
+                    const objectVariables = getAvailableVars(id, "object");
+                    const eventVariables = getAvailableVars(id, "event");
                     if (val === "O2E") {
                       setAlertState({
                         ...alertState,
                         value: {
                           type: "O2E",
-                          object: 0,
-                          event: 0,
+                          object: INVALID_VARIABLE_PLACEHOLDER,
+                          event: INVALID_VARIABLE_PLACEHOLDER,
+                          ...getPossibleE2OVariables(ocelInfo, getTypesForVariable, id, objectVariables, eventVariables, allBoxes),
                           qualifier: null,
                         },
                       });
@@ -287,8 +303,9 @@ export default function FilterChooser({
                         ...alertState,
                         value: {
                           type: "O2O",
-                          object: 0,
-                          other_object: 1,
+                          object: INVALID_VARIABLE_PLACEHOLDER,
+                          other_object: INVALID_VARIABLE_PLACEHOLDER,
+                          ...getPossibleO2OVariables(ocelInfo, getTypesForVariable, id, objectVariables, allBoxes),
                           qualifier: null,
                         },
                       });
@@ -497,7 +514,7 @@ export default function FilterChooser({
                 </Button>
               )}
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
+              <AlertDialogAction disabled={alertState.value?.type === "O2E" && (alertState.value.event >= INVALID_VARIABLE_PLACEHOLDER || alertState.value.object >= INVALID_VARIABLE_PLACEHOLDER) || alertState.value?.type === "O2O" && (alertState.value.other_object >= INVALID_VARIABLE_PLACEHOLDER || alertState.value.object >= INVALID_VARIABLE_PLACEHOLDER)}
                 onClick={() => {
                   const newBox = { ...box };
                   if (alertState.value !== undefined) {
@@ -517,11 +534,11 @@ export default function FilterChooser({
                       alertState.mode === "edit"
                         ? alertState.editIndex
                         : (alertState.type === "filter"
-                            ? newBox.filters
-                            : alertState.type === "sizeFilter"
+                          ? newBox.filters
+                          : alertState.type === "sizeFilter"
                             ? newBox.sizeFilters
                             : newBox.constraints
-                          ).length;
+                        ).length;
                     console.log({ newBox, index, alertState }, alertState.type);
                     if (alertState.type === "filter") {
                       newBox.filters[index] = alertState.value as Filter;
@@ -648,9 +665,9 @@ export function ObjectOrEventVarSelector({
   objectVars: ObjectVariable[];
   eventVars: EventVariable[];
   value:
-    | { type: "object"; value: ObjectVariable }
-    | { type: "event"; value: EventVariable }
-    | undefined;
+  | { type: "object"; value: ObjectVariable }
+  | { type: "event"; value: EventVariable }
+  | undefined;
   onChange: (
     value:
       | { type: "object"; value: ObjectVariable }
@@ -683,9 +700,8 @@ export function ObjectOrEventVarSelector({
       name={"Object/Event Variable"}
       value={
         value !== undefined
-          ? `${value.value} --- ${value.type} --- ${
-              getVarName(value.value, value.type).name
-            }`
+          ? `${value.value} --- ${value.type} --- ${getVarName(value.value, value.type).name
+          }`
           : ""
       }
     />
@@ -707,7 +723,7 @@ export function ObjectVarSelector({
   return (
     <Combobox
       options={objectVars.map((v) => ({
-        label: getObVarName(v,disabledStyleObjectVars !== undefined ? disabledStyleObjectVars.includes(v) : undefined),
+        label: getObVarName(v, disabledStyleObjectVars !== undefined ? disabledStyleObjectVars.includes(v) : undefined),
         value: `${v} --- ${getVarName(v, "object").name}`,
       }))}
       onChange={(val) => {
@@ -719,9 +735,8 @@ export function ObjectVarSelector({
         }
       }}
       name={"Object Variable"}
-      value={`${value} --- ${
-        value !== undefined ? getVarName(value, "object").name : ""
-      }`}
+      value={`${value} --- ${value !== undefined ? getVarName(value, "object").name : ""
+        }`}
     />
   );
 }
@@ -751,9 +766,8 @@ export function EventVarSelector({
         }
       }}
       name={"Event Variable"}
-      value={`${value} --- ${
-        value !== undefined ? getVarName(value, "event").name : ""
-      }`}
+      value={`${value} --- ${value !== undefined ? getVarName(value, "event").name : ""
+        }`}
     />
   );
 }
