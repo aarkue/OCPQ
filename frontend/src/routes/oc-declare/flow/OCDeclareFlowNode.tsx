@@ -1,13 +1,12 @@
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
+import { InfoSheetContext } from '@/InfoSheet';
+import { OcelInfoContext } from '@/lib/ocel-info-context';
 import { getRandomStringColor } from '@/lib/random-colors';
 import { Handle, NodeProps, Position, useConnection, useReactFlow } from '@xyflow/react';
 import clsx from 'clsx';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityNodeType } from './oc-declare-flow-types';
-import { InfoSheetContext } from '@/InfoSheet';
 import { MdBarChart } from 'react-icons/md';
-import { MinMaxDisplayWithSugar } from './MinMaxSugar';
-import { OcelInfoContext } from '@/lib/ocel-info-context';
+import { ActivityNodeType } from './oc-declare-flow-types';
 const OBJECT_INIT = "<init>";
 const OBJECT_EXIT = "<exit>";
 export function OCDeclareFlowNode({
@@ -30,8 +29,7 @@ export function OCDeclareFlowNode({
       | React.MouseEvent<HTMLDivElement, MouseEvent>,
   ) {
     // Use innerHTML instead of innerText to avoid stripping whitespaces
-    const newName = 
-ev.currentTarget.innerHTML;
+    const newName = ev.currentTarget.innerHTML.includes("&") ? ev.currentTarget.innerText : ev.currentTarget.innerHTML;
     const objectMode = newName.includes(OBJECT_INIT) ? "init" : ev.currentTarget.innerText.includes(OBJECT_EXIT) ? "exit" : undefined;
     const newLabel = newName.replace("\n", "").replace(OBJECT_INIT + " ", "").replace(OBJECT_EXIT + " ", "");
     setEditMode(false);

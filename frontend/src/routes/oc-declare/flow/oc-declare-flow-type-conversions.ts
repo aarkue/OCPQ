@@ -69,15 +69,14 @@ export function flowEdgeToOCDECLARE(e: CustomEdgeType, flow: ReactFlowInstance<A
 }
 
 
-
-import { v4 as uuidv4 } from 'uuid';
-import { applyLayoutToNodes } from "./automatic-layout";
-import { ActivityNodeType, CustomEdgeType, EdgeType } from './oc-declare-flow-types'
-import { OCDeclareArcType } from '../types/OCDeclareArcType'
 import { ReactFlowInstance } from '@xyflow/react'
+import { v4 as uuidv4 } from 'uuid'
 import { OCDeclareArc } from '../types/OCDeclareArc'
-import { getMarkersForEdge } from './OCDeclareFlowEditor'
+import { OCDeclareArcType } from '../types/OCDeclareArcType'
 import { OCDeclareNode } from '../types/OCDeclareNode'
+import { applyLayoutToNodes } from "./automatic-layout"
+import { ActivityNodeType, CustomEdgeType, EdgeType } from './oc-declare-flow-types'
+import { getMarkersForEdge } from './OCDeclareFlowEditor'
 // import { ObjectTypeAssociation } from "crates/shared/bindings/ObjectTypeAssociation";
 export async function addArcsToFlow(discoverdArcs: OCDeclareArc[], flow: ReactFlowInstance<ActivityNodeType, CustomEdgeType>) {
   const nodeNameToIDs: Record<string, string> = {};

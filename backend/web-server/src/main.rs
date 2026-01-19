@@ -145,6 +145,7 @@ async fn main() {
             "/ocel/get-oc-declare-edge-statistics",
             post(get_oc_declare_edge_statistics_handler),
         )
+        .route("/oc-declare/template-string", post(async |arcs: Json<Vec<OCDeclareArc>>| arcs.0.iter().map(|arc| arc.as_template_string()).join("\n")))
         .route(
             "/ocel/export-bindings",
             post(export_bindings_table).layer(DefaultBodyLimit::disable()),

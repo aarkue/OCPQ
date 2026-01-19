@@ -106,7 +106,9 @@ const tauriBackend: BackendProvider = {
   },
   "ocel/get-oc-declare-edge-statistics": async (arc) => {
     return await invoke("get_oc_declare_edge_statistics", { arc })
-
+  },
+  "oc-declare/template-string": async (arcs) => {
+    return await invoke("get_oc_declare_template_string", { arcs })
   },
   "ocel/get-activity-statistics": async (activity) => {
     return await invoke("get_oc_declare_activity_statistics", { activity })
@@ -121,9 +123,8 @@ const tauriBackend: BackendProvider = {
   "ocel/get-event": async (req) => {
     return await invoke("get_event", { req });
   },
-  "/ocel/create-db-query": async (req: DBTranslationInput) => {
+  "ocel/create-db-query": async (req: DBTranslationInput) => {
     return await invoke("create_db_query", { input: req })
-
   },
   "ocel/get-object": async (req) => {
     return await invoke("get_object", { req });

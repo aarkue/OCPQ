@@ -1,8 +1,12 @@
 import { createContext } from "react";
+import { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
+import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
 import type {
   DiscoverConstraintsRequest,
   DiscoverConstraintsResponse,
 } from "./routes/visual-editor/helper/types";
+import { DBTranslationInput } from "./types/DBTranslationInput";
+import { ActivityStatistics } from "./types/generated/ActivityStatistics";
 import type { BindingBoxTree } from "./types/generated/BindingBoxTree";
 import type { EvaluateBoxTreeResult } from "./types/generated/EvaluateBoxTreeResult";
 import type { OCELGraphOptions } from "./types/generated/OCELGraphOptions";
@@ -10,17 +14,10 @@ import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 import { type TableExportOptions } from "./types/generated/TableExportOptions";
 import { type ConnectionConfig, type JobStatus } from "./types/hpc-backend";
 import type {
-  EventTypeQualifiers,
   OCELEvent,
   OCELInfo,
-  OCELObject,
-  ObjectTypeQualifiers,
+  OCELObject
 } from "./types/ocel";
-import { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
-import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
-import { ActivityStatistics } from "./types/generated/ActivityStatistics";
-import { warn } from "console";
-import { DBTranslationInput } from "./types/DBTranslationInput";
 export type BackendProvider = {
   "ocel/info": () => Promise<OCELInfo | undefined>;
   "ocel/upload"?: (file: File) => Promise<OCELInfo>;
@@ -57,10 +54,11 @@ export type BackendProvider = {
   "hpc/start": (jobOptions: OCPQJobOptions) => Promise<string>;
   "hpc/job-status": (jobID: string) => Promise<JobStatus>;
   "download-blob": (blob: Blob, fileName: string) => unknown;
-  "/ocel/create-db-query": (req: DBTranslationInput) => Promise<string>;
+  "ocel/create-db-query": (req: DBTranslationInput) => Promise<string>;
   // Register drag/drop listener, returns unregister function
   "drag-drop-listener"?: (f: (args: ({ type: "enter", path: string } | { type: "leave" } | { type: "drop", path: string })) => unknown) => Promise<(() => unknown)>,
   "ocel/get-initial-files"?: () => Promise<string[]>,
+  "oc-declare/template-string": (arcs: OCDeclareArc[]) => Promise<string>,
   "check-for-updates"?: () => Promise<UpdateInfo | null>,
   "restart"?: () => Promise<void>,
   "get-version"?: () => Promise<string>,
@@ -99,8 +97,9 @@ export async function warnForNoBackendProvider<T>(): Promise<T> {
 export const ErrorBackendContext: BackendProvider = {
   "ocel/info": warnForNoBackendProvider,
   "ocel/check-constraints-box": warnForNoBackendProvider,
-  "/ocel/create-db-query": warnForNoBackendProvider,
+  "ocel/create-db-query": warnForNoBackendProvider,
   "ocel/export-filter-box": warnForNoBackendProvider,
+  "oc-declare/template-string": warnForNoBackendProvider,
   "ocel/discover-constraints": warnForNoBackendProvider,
   "ocel/export-bindings": warnForNoBackendProvider,
   "ocel/graph": warnForNoBackendProvider,
@@ -201,7 +200,7 @@ export function getAPIServerBackendProvider(
         })
       ).blob();
     },
-    "/ocel/create-db-query": async (input) => {
+    "ocel/create-db-query": async (input) => {
       return await (
         await fetch(localBackendURL + "/ocel/create-db-query", {
           method: "post",
@@ -340,6 +339,18 @@ export function getAPIServerBackendProvider(
       });
       if (res.ok) {
         return await res.json();
+      } else {
+        throw Error(await res.text());
+      }
+    },
+    "oc-declare/template-string": async (arcs) => {
+      const res = await fetch(localBackendURL + `/oc-declare/template-string`, {
+        method: "post",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(arcs)
+      });
+      if (res.ok) {
+        return await res.text();
       } else {
         throw Error(await res.text());
       }

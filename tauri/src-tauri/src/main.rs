@@ -10,10 +10,11 @@ use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
-
+use itertools::Itertools;
 use ocpq_shared::{
     binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult, FilterExportWithBoxTreeRequest,
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
+        FilterExportWithBoxTreeRequest,
     },
     db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
@@ -35,7 +36,8 @@ use ocpq_shared::{
             },
             process_models::oc_declare::OCDeclareArc,
         },
-        discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions, Exportable, Importable, OCEL,
+        discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions,
+        Exportable, Importable, OCEL,
     },
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
     EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
@@ -233,6 +235,13 @@ async fn get_oc_declare_edge_statistics(
         None => Err("No OCEL loaded".to_string()),
     }
 }
+
+#[tauri::command(async)]
+async fn get_oc_declare_template_string(arcs: Vec<OCDeclareArc>) -> Result<String, String> {
+    let result = arcs.iter().map(|a| a.as_template_string()).join("\n");
+    Ok(result)
+}
+
 #[tauri::command(async)]
 async fn get_oc_declare_activity_statistics(
     activity: String,
@@ -471,6 +480,7 @@ fn main() {
             evaluate_oc_declare_arcs,
             get_oc_declare_edge_statistics,
             get_oc_declare_activity_statistics,
+            get_oc_declare_template_string,
             create_db_query
         ])
         .build(tauri::generate_context!())

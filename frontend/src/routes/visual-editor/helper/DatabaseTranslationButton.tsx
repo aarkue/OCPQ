@@ -3,15 +3,15 @@ import AlertHelper from "@/components/AlertHelper";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ReactFlowInstance, Edge, type Node } from "@xyflow/react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OcelInfoContext } from "@/lib/ocel-info-context";
+import { Edge, ReactFlowInstance, type Node } from "@xyflow/react";
 import { useContext, useState } from "react";
 import toast from "react-hot-toast";
 import { LuClipboard } from "react-icons/lu";
 import { TbArrowRight, TbDatabaseEdit } from "react-icons/tb";
-import { EventTypeNodeData, GateNodeData, EventTypeLinkData } from "./types";
 import { evaluateConstraints } from "./evaluation/evaluate-constraints";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { OcelInfoContext } from "@/lib/ocel-info-context";
+import { EventTypeLinkData, EventTypeNodeData, GateNodeData } from "./types";
 
 function getTranslationValue(typeNames: string[], replaceSpace = " ", capitalizeAfterSplit = false, lowercase = false): Record<string, string> {
   const ret: Record<string, string> = {};
@@ -148,7 +148,7 @@ export default function DatabaseTranslationButton({ instance }: { instance: Reac
         toast.error("No query to translate!");
       }
       const query = treeRes[0].tree;
-      const res = await backend['/ocel/create-db-query']({ table_mappings: { event_tables: mapping.eventMapping, object_tables: mapping.objectMapping }, tree: query, database: mapping.dialect })
+      const res = await backend['ocel/create-db-query']({ table_mappings: { event_tables: mapping.eventMapping, object_tables: mapping.objectMapping }, tree: query, database: mapping.dialect })
       setResult(res);
       return false;
     }}

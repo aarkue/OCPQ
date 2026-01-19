@@ -1,3 +1,4 @@
+import Spinner from "@/components/Spinner";
 import TimeDurationInput, {
   formatSeconds,
 } from "@/components/TimeDurationInput";
@@ -6,10 +7,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { deDupe, getNodeRelationshipSupport } from "@/lib/variable-hints";
 import type { Constraint } from "@/types/generated/Constraint";
 import type { Filter } from "@/types/generated/Filter";
 import type { SizeFilter } from "@/types/generated/SizeFilter";
 import type { ValueFilter } from "@/types/generated/ValueFilter";
+import clsx from "clsx";
 import { lazy, type ReactNode, Suspense, useContext } from "react";
 import {
   LuArrowRight,
@@ -18,20 +21,15 @@ import {
   LuLink,
   LuTrash,
 } from "react-icons/lu";
-import { VisualEditorContext, VisualEditorContextValue } from "../VisualEditorContext";
+import { MdSwapHoriz } from "react-icons/md";
+import { PiCodeFill } from "react-icons/pi";
+import { VisualEditorContext } from "../VisualEditorContext";
 import {
   EventVarSelector,
   ObjectOrEventVarSelector,
   ObjectVarSelector,
 } from "./FilterChooser";
 import { EvOrObVarName, EvVarName, ObVarName } from "./variable-names";
-import Spinner from "@/components/Spinner";
-import clsx from "clsx";
-import { PiCodeFill } from "react-icons/pi";
-import { ObjectVariable } from "@/types/generated/ObjectVariable";
-import { EventVariable } from "@/types/generated/EventVariable";
-import { OCELInfo } from "@/types/ocel";
-import { MdSwapHoriz } from "react-icons/md";
 
 const CELEditor = lazy(async () => await import("@/components/CELEditor"));
 export default function FilterOrConstraintEditor<
@@ -1348,29 +1346,6 @@ function AttributeValueFilterSelector({
   );
 }
 
-function deDupe<T>(values: T[]): T[] {
-  return [...new Set(values).values()];
-}
-
-
-export function getNodeRelationshipSupport(ocelInfo: OCELInfo, getTypesForVariable: VisualEditorContextValue['getTypesForVariable'], nodeID: string, var1: ObjectVariable | EventVariable, var2: ObjectVariable, isE2O: boolean): number {
-  const types1 = getTypesForVariable(nodeID, var1, isE2O ? "event" : "object");
-  const types2 = getTypesForVariable(nodeID, var2, "object");
-  return getTypesRelationshipSupport(ocelInfo, types1.map(t => t.name), types2.map(t => t.name), isE2O);
-}
-
-
-export function getTypesRelationshipSupport(ocelInfo: OCELInfo, firstTypes: string[], secondTypes: string[], isE2O: boolean): number {
-  let support = 0;
-  for (const type1 of firstTypes) {
-    for (const type2 of secondTypes) {
-      support += (isE2O ? ocelInfo?.e2o_types : ocelInfo?.o2o_types)[type1]?.[type2]?.[0] ?? 0;
-
-    }
-  }
-  return support;
-
-}
 
 function AbsolutePositionedSupportDisplay({ support, text }: { support: number | null, text?: string }) {
   return <div className="relative">
