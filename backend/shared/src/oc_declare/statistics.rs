@@ -77,31 +77,30 @@ pub fn get_activity_statistics(locel: &SlimLinkedOCEL, activity: &str) -> Activi
     }
 }
 
-pub fn get_edge_stats(_locel: &SlimLinkedOCEL, _arc: &OCDeclareArc) -> Vec<i64> {
-    todo!();
-    //    EventOrSynthetic::get_all_syn_evs(
-    //         locel,
-    //         arc.from.as_str(),
-    //     )
-    //     .iter()
-    //     .flat_map(|ev_index| {
-    //         let ev_time = ev_index.get_timestamp(locel);
-    //         arc.label
-    //             .get_bindings(ev_index, locel)
-    //             .flat_map(move |binding| {
-    //                 let target_ev_iterator = get_evs_with_objs_perf(&binding, locel, arc.to.as_str())
-    //                     .filter(|ev2| {
-    //                         let ev2_time = ev2.get_timestamp(locel);
-    //                         match arc.arc_type {
-    //                             OCDeclareArcType::EF | OCDeclareArcType::DF => ev_time < ev2_time,
-    //                             OCDeclareArcType::EP | OCDeclareArcType::DP => ev_time > ev2_time,
-    //                             OCDeclareArcType::AS => true,
-    //                         }
-    //                     });
-    //                 // First event (could also implement this for last, or all matching target events)
-    //                 let first_ev = target_ev_iterator.min_by_key(|e| e.get_timestamp(locel));
-    //                 first_ev.map(|ev2| (ev2.get_timestamp(locel) - ev_time).num_milliseconds())
-    //             })
-    //     })
-    //     .collect()
+pub fn get_edge_stats(locel: &SlimLinkedOCEL, arc: &OCDeclareArc) -> Vec<i64> {
+       EventOrSynthetic::get_all_syn_evs(
+            locel,
+            arc.from.as_str(),
+        )
+        .iter()
+        .flat_map(|ev_index| {
+            let ev_time = ev_index.get_timestamp(locel);
+            arc.label
+                .get_bindings(ev_index, locel)
+                .flat_map(move |binding| {
+                    let target_ev_iterator = process_mining::conformance::oc_declare::get_evs_with_objs_perf(&binding, locel, arc.to.as_str())
+                        .filter(|ev2| {
+                            let ev2_time = ev2.get_timestamp(locel);
+                            match arc.arc_type {
+                                OCDeclareArcType::EF | OCDeclareArcType::DF => ev_time < ev2_time,
+                                OCDeclareArcType::EP | OCDeclareArcType::DP => ev_time > ev2_time,
+                                OCDeclareArcType::AS => true,
+                            }
+                        });
+                    // First event (could also implement this for last, or all matching target events)
+                    let first_ev = target_ev_iterator.min_by_key(|e| e.get_timestamp(locel));
+                    first_ev.map(|ev2| (ev2.get_timestamp(locel) - ev_time).num_milliseconds())
+                })
+        })
+        .collect()
 }

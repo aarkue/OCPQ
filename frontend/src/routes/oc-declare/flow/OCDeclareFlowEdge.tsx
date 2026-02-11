@@ -17,7 +17,7 @@ import { getEdgeParams } from './edge-helpers';
 import { getRandomStringColor } from "@/lib/random-colors";
 import { ContextMenuArrow } from '@radix-ui/react-context-menu';
 import React, { Fragment, useContext, useEffect, useMemo, useState } from "react";
-import { LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuHash, LuShapes, LuTrendingUp, LuXCircle } from 'react-icons/lu';
+import { LuArrowLeft, LuArrowLeftRight, LuArrowRight, LuBadgeCent, LuBadgeCheck, LuCircleX, LuHash, LuShapes, LuTimer, LuTrendingUp } from 'react-icons/lu';
 const asSvg = "/as.svg";
 const dfSvg = "/df.svg";
 const dpSvg = "/dp.svg";
@@ -163,7 +163,7 @@ export default function OCDeclareFlowEdge(edge: EdgeProps<CustomEdgeType> & { da
             const res = await toast.promise(backend['ocel/evaluate-oc-declare-arcs']([flowEdgeToOCDECLARE(edge,flow)]), { loading: "Evaluating...", error: "Evaluation Failed", success: "Evaluated!" });
             flow.updateEdgeData(id, { violationInfo: { violationPercentage: 100 * res[0] } })
           }}>
-            <TbDiscountCheckFilled className='size-4 mr-1' />
+            <LuBadgeCheck className='size-4 mr-1' />
             Evaluate
           </ContextMenuItem>
 
@@ -353,13 +353,14 @@ import { getTypesRelationshipSupport } from "@/lib/variable-hints";
 import { SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
 import toast from "react-hot-toast";
 import { MdBarChart } from "react-icons/md";
-import { TbDiscountCheckFilled } from "react-icons/tb";
+import { TbTagFilled } from "react-icons/tb";
 import { ObjectTypeAssociation } from "../types/ObjectTypeAssociation";
 import { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
 import { MinMaxDisplayWithSugar } from "./MinMaxSugar";
 import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
 import { ActivityNodeData, ActivityNodeType, ALL_EDGE_TYPES, CustomEdgeType, EdgeType } from "./oc-declare-flow-types";
 import { getMarkersForEdge } from "./OCDeclareFlowEditor";
+import { IoPlay } from "react-icons/io5";
 
 function EditEdgeLabelsDialog({ open, initialValue, onClose, colors, sourceAct, targetAct }: { open: boolean, initialValue: OCDeclareArcLabel, sourceAct: ActivityNodeData, targetAct: ActivityNodeData, onClose: (newValue?: OCDeclareArcLabel) => unknown, colors?: { type: string, color: string }[] },) {
   const [value, setValue] = useState({ ...initialValue });
@@ -392,7 +393,7 @@ function EditEdgeLabelsDialog({ open, initialValue, onClose, colors, sourceAct, 
               setAddValue({ mode: t, t: ot })
             }} className="border p-1 rounded relative">
               <ShowObjectTypeAssociation t={ot} colors={colors} />
-              <LuXCircle className="absolute size-5 -right-2 -top-2 text-red-400 hover:text-red-600" tabIndex={1} onClick={() => {
+              <LuCircleX className="absolute size-5 -right-2 -top-2 text-red-400 hover:text-red-600" tabIndex={1} onClick={() => {
                 setValue((v) => {
                   const changed = [...v[t]];
                   changed.splice(i, 1);
