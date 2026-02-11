@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { LuCheck, LuChevronDown, LuXCircle } from "react-icons/lu";
+import { LuCheck, LuChevronDown, LuCircleX } from "react-icons/lu";
 
 const multiSelectVariants = cva(
   "m-1 transition ease-in-out delay-150 duration-300 py-1",
@@ -128,7 +128,7 @@ const MultiSelect = React.forwardRef<
                           <IconComponent className="h-4 w-4 mr-2" />
                         )}
                       <div className="max-w-[16rem] truncate">{option?.label}</div>
-                        <LuXCircle
+                        <LuCircleX
                           className="ml-2 h-4 w-4 cursor-pointer"
                           onClick={(
                             event: React.MouseEvent<SVGElement, MouseEvent>,

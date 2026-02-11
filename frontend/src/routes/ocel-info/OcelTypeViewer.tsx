@@ -1,9 +1,9 @@
 import type { OCELType } from "@/types/ocel";
 import {
-  Tb123,
   TbCalendar,
   TbDecimal,
   TbLetterCase,
+  TbNumber123,
   TbQuestionMark,
   TbToggleLeft,
 } from "react-icons/tb";
@@ -19,7 +19,7 @@ export function IconForDataType({ dtype }: { dtype: string }) {
   if (dtype === "float") {
     return <TbDecimal className="text-sky-400" size={size + 6} />;
   } else if (dtype === "integer") {
-    return <Tb123 className="text-blue-600" size={size + 6} />;
+    return <TbNumber123 className="text-blue-600" size={size + 6} />;
   } else if (dtype === "string") {
     return <TbLetterCase className="text-gray-400" size={size} />;
   } else if (dtype === "time") {
