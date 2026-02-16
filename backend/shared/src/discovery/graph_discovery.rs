@@ -1,28 +1,14 @@
 use core::f64;
-use std::{
-    borrow::Borrow,
-    collections::{HashMap, HashSet},
-    time::Instant,
-};
-
-// use plotly::{common::Title, layout::Axis, Histogram, Layout, Plot};
-
 use itertools::Itertools;
-
 use process_mining::core::event_data::object_centric::linked_ocel::{
     slim_linked_ocel::{EventOrObjectIndex, ObjectIndex},
     LinkedOCELAccess, SlimLinkedOCEL,
 };
-// use plotly::{
-//     common::Marker,
-//     layout::{Axis, ColorAxis},
-//     Layout, Plot, Scatter,
-// };
-use rand::{
-    // random,
-    rngs::StdRng,
-    seq::IteratorRandom,
-    SeedableRng,
+use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    time::Instant,
 };
 
 use crate::{
@@ -130,7 +116,6 @@ pub fn discover_count_constraints(
     coverage: f32,
     ocel_type: EventOrObjectType,
 ) -> Vec<CountConstraint> {
-    let now = Instant::now();
     let mut ret = Vec::new();
     let instances: Vec<_> = get_instances(ocel, &ocel_type);
     ret.extend(discover_count_constraints_for_supporting_instances(
@@ -139,7 +124,6 @@ pub fn discover_count_constraints(
         instances.into_iter(),
         &ocel_type,
     ));
-    println!("Graph Count Discovery took {:?}", now.elapsed());
     ret
 }
 
@@ -379,40 +363,6 @@ fn get_seconds_range_with_coverage(
     }
     Some((min, max))
 }
-
-// fn plot_scatter<S: AsRef<str>, P: AsRef<std::path::Path>>(
-//     counts: &Vec<usize>,
-//     title: S,
-//     filename: P,
-// ) {
-//     let mut plot = Plot::new();
-//     let y = counts.iter().map(|_c| random::<f32>()).collect();
-//     let trace = Scatter::new(counts.clone(), y)
-//         .marker(Marker::new().color("black").size(3))
-//         .mode(plotly::common::Mode::Markers);
-//     plot.add_trace(trace);
-//     println!("{}", title.as_ref());
-//     let layout = Layout::new()
-//         .color_axis(ColorAxis::new().auto_color_scale(true))
-//         // .title(title.as_ref())
-//         .x_axis(Axis::new().dtick(1.0).title("Count").show_grid(false))
-//         .y_axis(
-//             Axis::new()
-//                 .range(vec![-0.1, 1.1])
-//                 .n_ticks(0)
-//                 .tick_values(vec![])
-//                 .show_grid(false)
-//                 .show_dividers(false)
-//                 .show_line(false)
-//                 .zero_line(false)
-//                 .title(""),
-//         );
-
-//     // .bar_gap(0.05)
-//     // .bar_group_gap(0.05);
-//     plot.set_layout(layout);
-//     plot.write_image(filename, plotly::ImageFormat::SVG, 800, 300, 1.0)
-// }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CountConstraint {
@@ -799,7 +749,6 @@ pub fn discover_or_constraints_new(
     ocel_type: &EventOrObjectType,
     coverage: f32,
 ) -> Vec<(String, BindingBoxTree)> {
-    let mut now = Instant::now();
     let mut ret = Vec::new();
     let instances: Vec<_> = get_instances(ocel, ocel_type);
     let mut count_constraints: HashSet<CountConstraint> =
@@ -923,9 +872,6 @@ pub fn discover_or_constraints_new(
                 }
             })
     });
-
-    println!("Count OR EF Graph Discovery took {:?}", now.elapsed());
-    now = Instant::now();
     if let EventOrObjectType::Object(object_type) = ocel_type {
         //
         let ef_constraints = discover_ef_constraints_for_supporting_instances(
@@ -991,11 +937,7 @@ pub fn discover_or_constraints_new(
                 })
             }
         });
-        println!("EF OR EF Graph Discovery took {:?}", now.elapsed());
     }
-    //
-
-    // ret.into_inner().unwrap()
     ret
 }
 
@@ -1028,7 +970,6 @@ pub fn check_or_compat(
     let good_sat_frac = or_sat_count as f32 / bindings.len() as f32;
     // println!("Independent Factor: {independent_factor} {good_or_frac} {good_sat_frac} {coverage}");
     if good_sat_frac >= *coverage && independent_factor >= 1.1 {
-        println!("Pass");
         let or_tree = merge_or_tree(
             st2,
             st1.clone(),

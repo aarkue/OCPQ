@@ -17,8 +17,6 @@ pub mod ocel_graph;
 pub mod trad_event_log;
 pub mod preprocessing {
     pub mod linked_ocel;
-    pub mod preprocess;
-    pub mod tests;
 }
 pub mod cel;
 pub mod table_export;
@@ -26,6 +24,8 @@ pub mod oc_declare {
     pub mod statistics;
 }
 
+pub mod data_extraction;
+pub mod data_source;
 pub mod hpc_backend;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OCELInfo {

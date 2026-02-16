@@ -13,7 +13,6 @@ use itertools::Itertools;
 use tokio::{net::TcpListener, task::JoinHandle};
 
 use std::{
-    env,
     io::Cursor,
     sync::{Arc, RwLock},
 };
@@ -23,6 +22,11 @@ use ocpq_shared::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
         ExportFormat, FilterExportWithBoxTreeRequest,
     },
+    data_extraction::{
+        blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
+        ExecuteExtractionResponse,
+    },
+    data_source::{connect_and_get_metadata, ConnectDataSourceRequest, DataSourceMetadata},
     db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
         auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
@@ -88,8 +92,6 @@ impl From<String> for AppError {
 
 #[tokio::main]
 async fn main() {
-    let args = env::args().collect_vec();
-    dbg!(args);
     let state = AppState::default();
     let cors = CorsLayer::permissive();
     // .allow_methods([Method::GET, Method::POST])
@@ -145,7 +147,12 @@ async fn main() {
             "/ocel/get-oc-declare-edge-statistics",
             post(get_oc_declare_edge_statistics_handler),
         )
-        .route("/oc-declare/template-string", post(async |arcs: Json<Vec<OCDeclareArc>>| arcs.0.iter().map(|arc| arc.as_template_string()).join("\n")))
+        .route(
+            "/oc-declare/template-string",
+            post(async |arcs: Json<Vec<OCDeclareArc>>| {
+                arcs.0.iter().map(|arc| arc.as_template_string()).join("\n")
+            }),
+        )
         .route(
             "/ocel/export-bindings",
             post(export_bindings_table).layer(DefaultBodyLimit::disable()),
@@ -157,6 +164,8 @@ async fn main() {
         .route("/hpc/login", post(login_to_hpc_web))
         .route("/hpc/start", post(start_hpc_job_web))
         .route("/hpc/job-status/:job_id", get(get_hpc_job_status_web))
+        .route("/data-source/connect", post(connect_data_source_handler))
+        .route("/data-extraction/execute", post(execute_extraction_handler))
         .with_state(state)
         .route("/", get(|| async { "Hello, Aaron!" }))
         .layer(cors);
@@ -429,7 +438,7 @@ async fn start_hpc_job_web(
         .port
         .parse::<u16>()
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let (folder_id, job_id) = submit_hpc_job(c, options)
+    let (_folder_id, job_id) = submit_hpc_job(c, options)
         .await
         .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
     let p = start_port_forwarding(
@@ -441,7 +450,6 @@ async fn start_hpc_job_web(
     .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
 
     state.jobs.write().unwrap().push((job_id.clone(), port, p));
-    println!("Ceated job {job_id} in folder {folder_id}");
     Ok(Json(job_id))
 }
 
@@ -454,4 +462,32 @@ async fn get_hpc_job_status_web(
     let status = get_job_status(c, job_id).await;
     let status = status.map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
     Ok(Json(status))
+}
+
+async fn connect_data_source_handler(
+    Json(req): Json<ConnectDataSourceRequest>,
+) -> Result<Json<DataSourceMetadata>, (StatusCode, String)> {
+    let metadata = connect_and_get_metadata(req)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok(Json(metadata))
+}
+
+async fn execute_extraction_handler(
+    State(state): State<AppState>,
+    Json(req): Json<ExecuteExtractionRequest>,
+) -> Result<Json<ExecuteExtractionResponse>, (StatusCode, String)> {
+    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    // Replace the currently loaded OCEL with the extracted one
+    let mut ocel_guard = state.ocel.write().unwrap();
+    *ocel_guard = Some(locel);
+
+    // Clear the cached evaluation result (outdated)
+    let mut eval_guard = state.eval_res.write().unwrap();
+    *eval_guard = None;
+
+    Ok(Json(response))
 }

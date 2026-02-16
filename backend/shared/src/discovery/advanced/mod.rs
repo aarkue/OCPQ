@@ -7,7 +7,7 @@ use std::{cmp::max, collections::HashMap};
 use itertools::Itertools;
 
 use process_mining::core::event_data::object_centric::linked_ocel::{
-    slim_linked_ocel::EventOrObjectIndex, SlimLinkedOCEL, LinkedOCELAccess,
+    slim_linked_ocel::EventOrObjectIndex, LinkedOCELAccess, SlimLinkedOCEL,
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};

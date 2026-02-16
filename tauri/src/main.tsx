@@ -178,7 +178,13 @@ const tauriBackend: BackendProvider = {
   },
   "get-version": () => {
     return getVersion()
-  }
+  },
+  "data-source/connect": async (req) => {
+    return await invoke("connect_data_source", { req });
+  },
+  "data-extraction/execute": async (blueprint) => {
+    return await invoke("execute_extraction", { req: { blueprint } });
+  },
 };
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

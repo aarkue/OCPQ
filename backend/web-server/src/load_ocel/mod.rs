@@ -1,9 +1,14 @@
 use std::fs;
 
 use axum::{extract::State, http::StatusCode, Json};
-use ocpq_shared::{OCELInfo, process_mining::{Importable, OCEL, core::event_data::object_centric::{io::OCELIOError, linked_ocel::SlimLinkedOCEL}}};
+use ocpq_shared::{
+    process_mining::{
+        core::event_data::object_centric::{io::OCELIOError, linked_ocel::SlimLinkedOCEL},
+        Importable, OCEL,
+    },
+    OCELInfo,
+};
 use serde::{Deserialize, Serialize};
-
 
 use crate::AppState;
 

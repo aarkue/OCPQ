@@ -4,9 +4,6 @@ pub mod step_order;
 
 pub mod expand_step;
 
-#[cfg(test)]
-pub mod test;
-
 use std::{collections::HashSet, fs::File, io::BufWriter, time::Instant};
 
 use chrono::DateTime;
@@ -20,7 +17,7 @@ use process_mining::{
         },
         OCELRelationship,
     },
-    Exportable, OCEL,
+    OCEL,
 };
 use serde::{Deserialize, Serialize};
 pub use structs::{Binding, BindingBox, BindingBoxTree, BindingStep, ViolationReason};

@@ -4,18 +4,17 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use std::{
-    fs::File,
-    io::{Cursor, Write},
-    path::Path,
-    sync::{Arc, Mutex},
-};
 use itertools::Itertools;
 use ocpq_shared::{
     binding_box::{
         evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
         FilterExportWithBoxTreeRequest,
     },
+    data_extraction::{
+        blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
+        ExecuteExtractionResponse,
+    },
+    data_source::{connect_and_get_metadata, ConnectDataSourceRequest, DataSourceMetadata},
     db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
         auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
@@ -46,6 +45,12 @@ use ocpq_shared::{
     process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints,
     trad_event_log::trad_log_to_ocel,
 };
+use std::{
+    fs::File,
+    io::{Cursor, Write},
+    path::Path,
+    sync::{Arc, Mutex},
+};
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
     AppHandle, Manager, State,
@@ -62,9 +67,6 @@ pub struct AppState {
 }
 
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
-    let path = path.as_ref();
-    println!("{path:?}");
-    let _path_str = path.to_string_lossy();
     let ocel = OCEL::import_from_path(path).map_err(|e| e.to_string())?;
     Ok(ocel)
 }
@@ -363,7 +365,7 @@ async fn start_hpc_job_tauri(
     let c = Arc::new(x);
     let c2 = Arc::clone(&c);
     let port: u16 = options.port.parse::<u16>().map_err(|e| e.to_string())?;
-    let (folder_id, job_id) = submit_hpc_job(c, options)
+    let (_folder_id, job_id) = submit_hpc_job(c, options)
         .await
         .map_err(|er| er.to_string())?;
     let p = start_port_forwarding(
@@ -379,7 +381,6 @@ async fn start_hpc_job_tauri(
         port,
         tauri::async_runtime::JoinHandle::Tokio(p),
     ));
-    println!("Ceated job {job_id} in folder {folder_id}");
     Ok(job_id)
 }
 
@@ -403,6 +404,34 @@ fn get_initial_files(state: State<'_, AppState>) -> Result<Vec<String>, String> 
     } else {
         Ok(Vec::default())
     }
+}
+
+#[tauri::command(async)]
+async fn connect_data_source(req: ConnectDataSourceRequest) -> Result<DataSourceMetadata, String> {
+    connect_and_get_metadata(req)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+async fn execute_extraction(
+    req: ExecuteExtractionRequest,
+    state: State<'_, AppState>,
+) -> Result<ExecuteExtractionResponse, String> {
+    // Use optimized extraction that builds SlimLinkedOCEL directly
+    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Replace the currently loaded OCEL with the extracted one
+    let mut ocel_guard = state.ocel.write().await;
+    *ocel_guard = Some(locel);
+
+    // Clear the cached evaluation result since we have a new OCEL
+    let mut eval_guard = state.eval_res.write().await;
+    *eval_guard = None;
+
+    Ok(response)
 }
 
 fn main() {
@@ -481,7 +510,9 @@ fn main() {
             get_oc_declare_edge_statistics,
             get_oc_declare_activity_statistics,
             get_oc_declare_template_string,
-            create_db_query
+            create_db_query,
+            connect_data_source,
+            execute_extraction
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

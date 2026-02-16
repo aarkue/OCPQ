@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fmt::Display,
     hash::Hash,
 };
@@ -64,11 +64,11 @@ pub type Qualifier = Option<String>;
 pub struct Binding {
     // #[ts(as = "BTreeMap<EventVariable, usize>")]
     // pub event_map: FxHashMap<EventVariable, EventIndex>,
-    #[ts(as = "BTreeMap<EventVariable, usize>")]
+    #[ts(as = "Vec<(EventVariable, usize)>")]
     pub event_map: Vec<(EventVariable, EventIndex)>,
     // #[ts(as = "BTreeMap<ObjectVariable, usize>")]
     // pub object_map: FxHashMap<ObjectVariable, ObjectIndex>,
-    #[ts(as = "BTreeMap<ObjectVariable, usize>")]
+    #[ts(as = "Vec<(ObjectVariable, usize)>")]
     pub object_map: Vec<(ObjectVariable, ObjectIndex)>,
     // pub label_map: FxHashMap<String, LabelValue>,
     pub label_map: Vec<(String, LabelValue)>,
@@ -577,101 +577,6 @@ impl BindingBoxTreeNode {
                 ),
             expanding_skipped_bindings || recursive_calls_cancelled,
         ))
-
-        // let (passed_size_filter, sat, ret) = expanded
-        //     .into_par_iter()
-        //     .flat_map_iter(|b| {
-        //         let mut passed_size_filter = true;
-        //         children.iter().map(move |c| {
-        //             let (mut c_res, violation) =
-        //                 tree.nodes[*c].evaluate(*c, own_index, b.clone(), tree, ocel);
-        //             c_res.push((*c, b.clone(), violation));
-        //             passed_size_filter = if let Some(_x) = violation {
-        //                 (true, c_res)
-        //             } else {
-        //                 (false, c_res)
-        //             }
-        //         })
-        //     })
-        //     .reduce(
-        //         || (false, vec![]),
-        //         |(violated1, res1), (violated2, res2)| {
-        //             (
-        //                 violated1 || violated2,
-        //                 res1.iter().chain(res2.iter()).cloned().collect(),
-        //             )
-        //         },
-        //     );
-
-        // if vio.is_none() && sat {
-        //     vio = Some(ViolationReason::ChildNotSatisfied)
-        // }
-        // (ret, vio)
-    }
-    // BindingBoxTreeNode::OR(i1, i2) => {
-    //     let node1 = &tree.nodes[*i1];
-    //     let node2 = &tree.nodes[*i2];
-
-    //     let mut ret = vec![];
-
-    //     let (res_1, violation_1) =
-    //         node1.evaluate(*i1, own_index, parent_binding.clone(), tree, ocel);
-
-    //     ret.extend(res_1);
-    //     ret.push((*i1, parent_binding.clone(), violation_1));
-
-    //     let (res_2, violation_2) =
-    //         node2.evaluate(*i2, own_index, parent_binding.clone(), tree, ocel);
-
-    //     ret.extend(res_2);
-    //     ret.push((*i2, parent_binding.clone(), violation_2));
-
-    //     if violation_1.is_some() && violation_2.is_some() {
-    //         return (ret, Some(ViolationReason::NoChildrenOfORSatisfied));
-    //     }
-    //     (ret, None)
-    // }
-    // BindingBoxTreeNode::AND(i1, i2) => {
-    //     let node1 = &tree.nodes[*i1];
-    //     let node2 = &tree.nodes[*i2];
-
-    //     let mut ret = vec![];
-
-    //     let (res_1, violation_1) =
-    //         node1.evaluate(*i1, own_index, parent_binding.clone(), tree, ocel);
-
-    //     ret.push((*i1, parent_binding.clone(), violation_1));
-    //     ret.extend(res_1);
-    //     let (res_2, violation_2) =
-    //         node2.evaluate(*i2, own_index, parent_binding.clone(), tree, ocel);
-    //     ret.push((*i2, parent_binding.clone(), violation_2));
-    //     ret.extend(res_2);
-
-    //     if violation_1.is_some() {
-    //         return (ret, Some(ViolationReason::LeftChildOfANDUnsatisfied));
-    //     } else if violation_2.is_some() {
-    //         return (ret, Some(ViolationReason::RightChildOfANDUnsatisfied));
-    //     }
-    //     (ret, None)
-    // }
-    // BindingBoxTreeNode::NOT(i) => {
-    //     let mut ret = vec![];
-    //     let node = &tree.nodes[*i];
-
-    //     let (res_c, violation_c) =
-    //         node.evaluate(*i, own_index, parent_binding.clone(), tree, ocel);
-    //     ret.extend(res_c);
-    //     ret.push((*i, parent_binding.clone(), violation_c));
-    //     if violation_c.is_some() {
-    //         // NOT satisfied
-    //         (ret, None)
-    //     } else {
-    //         (ret, Some(ViolationReason::ChildrenOfNOTSatisfied))
-    //     }
-    // }
-    //     _ => todo!(),
-    // }
-    // }
 }
 
 #[derive(TS)]

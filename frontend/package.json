@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "format": "prettier . --write",
-    "lint": "eslint . --ext ts,tsx,js,jsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "biome lint ./src",
+    "format": "biome format --write ./src",
+    "check": "biome check ./src",
+    "check:fix": "biome check --write ./src",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -30,7 +32,7 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@tailwindcss/vite": "^4.1.17",
-    "@tanstack/react-query": "^4.42.0",
+    "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-table": "^8.20.5",
     "@types/lodash.debounce": "^4.0.9",
     "@xyflow/react": "^12.9.3",
@@ -60,25 +62,13 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@tanstack/eslint-plugin-query": "^4.39.1",
+    "@biomejs/biome": "^2.4.0",
     "@types/node": "^20.9.0",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@types/react-plotly.js": "^2.6.3",
     "@types/react-window": "^1.8.8",
-    "@typescript-eslint/eslint-plugin": "^6.10.0",
-    "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "eslint": "^8.53.0",
-    "eslint-config-prettier": "^9.0.0",
-    "eslint-config-standard-with-typescript": "^39.1.1",
-    "eslint-plugin-import": "^2.29.0",
-    "eslint-plugin-n": "^16.3.1",
-    "eslint-plugin-promise": "^6.1.1",
-    "eslint-plugin-react": "^7.33.2",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.3",
-    "prettier": "3.0.3",
     "tailwindcss": "^4.1.17",
     "typescript": "^5.2.2",
     "vite": "^5.4.1"

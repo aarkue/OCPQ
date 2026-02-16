@@ -78,17 +78,19 @@ pub fn get_activity_statistics(locel: &SlimLinkedOCEL, activity: &str) -> Activi
 }
 
 pub fn get_edge_stats(locel: &SlimLinkedOCEL, arc: &OCDeclareArc) -> Vec<i64> {
-       EventOrSynthetic::get_all_syn_evs(
-            locel,
-            arc.from.as_str(),
-        )
+    EventOrSynthetic::get_all_syn_evs(locel, arc.from.as_str())
         .iter()
         .flat_map(|ev_index| {
             let ev_time = ev_index.get_timestamp(locel);
             arc.label
                 .get_bindings(ev_index, locel)
                 .flat_map(move |binding| {
-                    let target_ev_iterator = process_mining::conformance::oc_declare::get_evs_with_objs_perf(&binding, locel, arc.to.as_str())
+                    let target_ev_iterator =
+                        process_mining::conformance::oc_declare::get_evs_with_objs_perf(
+                            &binding,
+                            locel,
+                            arc.to.as_str(),
+                        )
                         .filter(|ev2| {
                             let ev2_time = ev2.get_timestamp(locel);
                             match arc.arc_type {

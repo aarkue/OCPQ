@@ -1,371 +1,391 @@
 import { createContext } from "react";
-import { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
-import { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
+import type { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
+import type { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
 import type {
-  DiscoverConstraintsRequest,
-  DiscoverConstraintsResponse,
+	DiscoverConstraintsRequest,
+	DiscoverConstraintsResponse,
 } from "./routes/visual-editor/helper/types";
-import { DBTranslationInput } from "./types/DBTranslationInput";
-import { ActivityStatistics } from "./types/generated/ActivityStatistics";
+import type { DBTranslationInput } from "./types/DBTranslationInput";
+import type { ActivityStatistics } from "./types/generated/ActivityStatistics";
 import type { BindingBoxTree } from "./types/generated/BindingBoxTree";
+import type { ConnectDataSourceRequest } from "./types/generated/ConnectDataSourceRequest";
+import type { DataExtractionBlueprint } from "./types/generated/DataExtractionBlueprint";
+import type { DataSourceMetadata } from "./types/generated/DataSourceMetadata";
 import type { EvaluateBoxTreeResult } from "./types/generated/EvaluateBoxTreeResult";
+import type { ExecuteExtractionResponse } from "./types/generated/ExecuteExtractionResponse";
 import type { OCELGraphOptions } from "./types/generated/OCELGraphOptions";
-import { type OCPQJobOptions } from "./types/generated/OCPQJobOptions";
-import { type TableExportOptions } from "./types/generated/TableExportOptions";
-import { type ConnectionConfig, type JobStatus } from "./types/hpc-backend";
-import type {
-  OCELEvent,
-  OCELInfo,
-  OCELObject
-} from "./types/ocel";
+import type { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
+import type { TableExportOptions } from "./types/generated/TableExportOptions";
+import type { ConnectionConfig, JobStatus } from "./types/hpc-backend";
+import type { OCELEvent, OCELInfo, OCELObject } from "./types/ocel";
 export type BackendProvider = {
-  "ocel/info": () => Promise<OCELInfo | undefined>;
-  "ocel/upload"?: (file: File) => Promise<OCELInfo>;
-  "ocel/upload-from-xes"?: (file: File) => Promise<OCELInfo>;
-  "ocel/available"?: () => Promise<string[]>;
-  "ocel/load"?: (name: string) => Promise<OCELInfo>;
-  "ocel/picker"?: (path?: string) => Promise<OCELInfo>;
-  "ocel/check-constraints-box": (
-    tree: BindingBoxTree,
-    measurePerformance?: boolean,
-  ) => Promise<EvaluateBoxTreeResult>;
-  "ocel/export-filter-box": (
-    tree: BindingBoxTree,
-    format: "XML" | "JSON" | "SQLITE",
-  ) => Promise<Blob | void>;
-  "ocel/discover-constraints": (
-    autoDiscoveryOptions: DiscoverConstraintsRequest,
-  ) => Promise<DiscoverConstraintsResponse>;
-  "ocel/export-bindings": (
-    nodeIndex: number,
-    options: TableExportOptions,
-  ) => Promise<Blob | undefined>;
-  "ocel/graph": (options: OCELGraphOptions) => Promise<{
-    nodes: (OCELEvent | OCELObject)[];
-    links: { source: string; target: string; qualifier: string }[];
-  }>;
-  "ocel/get-object": (
-    specifier: { id: string } | { index: number },
-  ) => Promise<{ index: number; object: OCELObject }>;
-  "ocel/get-event": (
-    specifier: { id: string } | { index: number },
-  ) => Promise<{ index: number; event: OCELEvent }>;
-  "hpc/login": (connectionConfig: ConnectionConfig) => Promise<void>;
-  "hpc/start": (jobOptions: OCPQJobOptions) => Promise<string>;
-  "hpc/job-status": (jobID: string) => Promise<JobStatus>;
-  "download-blob": (blob: Blob, fileName: string) => unknown;
-  "ocel/create-db-query": (req: DBTranslationInput) => Promise<string>;
-  // Register drag/drop listener, returns unregister function
-  "drag-drop-listener"?: (f: (args: ({ type: "enter", path: string } | { type: "leave" } | { type: "drop", path: string })) => unknown) => Promise<(() => unknown)>,
-  "ocel/get-initial-files"?: () => Promise<string[]>,
-  "oc-declare/template-string": (arcs: OCDeclareArc[]) => Promise<string>,
-  "check-for-updates"?: () => Promise<UpdateInfo | null>,
-  "restart"?: () => Promise<void>,
-  "get-version"?: () => Promise<string>,
-  "ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>,
-  "ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>,
-  "ocel/get-activity-statistics": (activity: string) => Promise<ActivityStatistics>,
-  "ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<number[]>,
+	"ocel/info": () => Promise<OCELInfo | undefined>;
+	"ocel/upload"?: (file: File) => Promise<OCELInfo>;
+	"ocel/upload-from-xes"?: (file: File) => Promise<OCELInfo>;
+	"ocel/available"?: () => Promise<string[]>;
+	"ocel/load"?: (name: string) => Promise<OCELInfo>;
+	"ocel/picker"?: (path?: string) => Promise<OCELInfo>;
+	"ocel/check-constraints-box": (
+		tree: BindingBoxTree,
+		measurePerformance?: boolean,
+	) => Promise<EvaluateBoxTreeResult>;
+	"ocel/export-filter-box": (
+		tree: BindingBoxTree,
+		format: "XML" | "JSON" | "SQLITE",
+	) => Promise<Blob | undefined>;
+	"ocel/discover-constraints": (
+		autoDiscoveryOptions: DiscoverConstraintsRequest,
+	) => Promise<DiscoverConstraintsResponse>;
+	"ocel/export-bindings": (
+		nodeIndex: number,
+		options: TableExportOptions,
+	) => Promise<Blob | undefined>;
+	"ocel/graph": (options: OCELGraphOptions) => Promise<{
+		nodes: (OCELEvent | OCELObject)[];
+		links: { source: string; target: string; qualifier: string }[];
+	}>;
+	"ocel/get-object": (
+		specifier: { id: string } | { index: number },
+	) => Promise<{ index: number; object: OCELObject }>;
+	"ocel/get-event": (
+		specifier: { id: string } | { index: number },
+	) => Promise<{ index: number; event: OCELEvent }>;
+	"hpc/login": (connectionConfig: ConnectionConfig) => Promise<void>;
+	"hpc/start": (jobOptions: OCPQJobOptions) => Promise<string>;
+	"hpc/job-status": (jobID: string) => Promise<JobStatus>;
+	"download-blob": (blob: Blob, fileName: string) => unknown;
+	"ocel/create-db-query": (req: DBTranslationInput) => Promise<string>;
+	// Register drag/drop listener, returns unregister function
+	"drag-drop-listener"?: (
+		f: (
+			args: { type: "enter"; path: string } | { type: "leave" } | { type: "drop"; path: string },
+		) => unknown,
+	) => Promise<() => unknown>;
+	"ocel/get-initial-files"?: () => Promise<string[]>;
+	"oc-declare/template-string": (arcs: OCDeclareArc[]) => Promise<string>;
+	"check-for-updates"?: () => Promise<UpdateInfo | null>;
+	restart?: () => Promise<void>;
+	"get-version"?: () => Promise<string>;
+	"ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>;
+	"ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>;
+	"ocel/get-activity-statistics": (activity: string) => Promise<ActivityStatistics>;
+	"ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<number[]>;
+	"data-source/connect": (request: ConnectDataSourceRequest) => Promise<DataSourceMetadata>;
+	"data-extraction/execute": (
+		blueprint: DataExtractionBlueprint,
+	) => Promise<ExecuteExtractionResponse>;
 };
 
 export type UpdateInfo = {
-  currentVersion: string, version: string, date?: string, body?: string,
-  download: (onEvent: (progress: {
-    event: 'Started';
-    data: {
-      contentLength?: number;
-    };
-  } | {
-    event: 'Progress';
-    data: {
-      chunkLength: number;
-    };
-  } | {
-    event: 'Finished';
-  }) => void) => Promise<void>,
-  install: () => Promise<void>,
-  close: () => Promise<void>,
+	currentVersion: string;
+	version: string;
+	date?: string;
+	body?: string;
+	download: (
+		onEvent: (
+			progress:
+				| {
+						event: "Started";
+						data: {
+							contentLength?: number;
+						};
+				  }
+				| {
+						event: "Progress";
+						data: {
+							chunkLength: number;
+						};
+				  }
+				| {
+						event: "Finished";
+				  },
+		) => void,
+	) => Promise<void>;
+	install: () => Promise<void>;
+	close: () => Promise<void>;
 };
 
 export async function warnForNoBackendProvider<T>(): Promise<T> {
-  console.warn("No BackendProviderContext!");
-  return await new Promise<T>((_resolve, reject) => {
-    reject(Error("No BackendProviderContext"));
-  });
+	console.warn("No BackendProviderContext!");
+	return await new Promise<T>((_resolve, reject) => {
+		reject(Error("No BackendProviderContext"));
+	});
 }
 
 export const ErrorBackendContext: BackendProvider = {
-  "ocel/info": warnForNoBackendProvider,
-  "ocel/check-constraints-box": warnForNoBackendProvider,
-  "ocel/create-db-query": warnForNoBackendProvider,
-  "ocel/export-filter-box": warnForNoBackendProvider,
-  "oc-declare/template-string": warnForNoBackendProvider,
-  "ocel/discover-constraints": warnForNoBackendProvider,
-  "ocel/export-bindings": warnForNoBackendProvider,
-  "ocel/graph": warnForNoBackendProvider,
-  "ocel/get-event": warnForNoBackendProvider,
-  "ocel/get-object": warnForNoBackendProvider,
-  "hpc/login": warnForNoBackendProvider,
-  "hpc/start": warnForNoBackendProvider,
-  "hpc/job-status": warnForNoBackendProvider,
-  "download-blob": warnForNoBackendProvider,
-  "ocel/discover-oc-declare": warnForNoBackendProvider,
-  "ocel/evaluate-oc-declare-arcs": warnForNoBackendProvider,
-  "ocel/get-activity-statistics": warnForNoBackendProvider,
-  "ocel/get-oc-declare-edge-statistics": warnForNoBackendProvider,
+	"ocel/info": warnForNoBackendProvider,
+	"ocel/check-constraints-box": warnForNoBackendProvider,
+	"ocel/create-db-query": warnForNoBackendProvider,
+	"ocel/export-filter-box": warnForNoBackendProvider,
+	"oc-declare/template-string": warnForNoBackendProvider,
+	"ocel/discover-constraints": warnForNoBackendProvider,
+	"ocel/export-bindings": warnForNoBackendProvider,
+	"ocel/graph": warnForNoBackendProvider,
+	"ocel/get-event": warnForNoBackendProvider,
+	"ocel/get-object": warnForNoBackendProvider,
+	"hpc/login": warnForNoBackendProvider,
+	"hpc/start": warnForNoBackendProvider,
+	"hpc/job-status": warnForNoBackendProvider,
+	"download-blob": warnForNoBackendProvider,
+	"ocel/discover-oc-declare": warnForNoBackendProvider,
+	"ocel/evaluate-oc-declare-arcs": warnForNoBackendProvider,
+	"ocel/get-activity-statistics": warnForNoBackendProvider,
+	"ocel/get-oc-declare-edge-statistics": warnForNoBackendProvider,
+	"data-source/connect": warnForNoBackendProvider,
+	"data-extraction/execute": warnForNoBackendProvider,
 };
 
-export const BackendProviderContext =
-  createContext<BackendProvider>(ErrorBackendContext);
+export const BackendProviderContext = createContext<BackendProvider>(ErrorBackendContext);
 
 export const DEFAULT_BACKEND_URL = "http://localhost:3000";
 
-export function getAPIServerBackendProvider(
-  localBackendURL: string,
-): BackendProvider {
-  return {
-    "ocel/info": async () => {
-      const res = await fetch(localBackendURL + "/ocel/info", {
-        method: "get",
-        headers: {},
-      });
-      return await res.json();
-    },
-    "ocel/available": async () => {
-      return await (
-        await fetch(localBackendURL + "/ocel/available", {
-          method: "get",
-          headers: {},
-        })
-      ).json();
-    },
-    "ocel/upload": async (ocelFile) => {
-      const type = ocelFile.name.endsWith(".json")
-        ? "json"
-        : ocelFile.name.endsWith(".xml")
-          ? "xml"
-          : "sqlite";
-      return await (
-        await fetch(localBackendURL + `/ocel/upload-${type}`, {
-          method: "post",
-          body: ocelFile,
-          headers: {},
-        })
-      ).json();
-    },
-    "ocel/upload-from-xes": async (xesFile) => {
-      const format = xesFile.name.endsWith(".gz") ? ".xes.gz" : ".xes";
-      return await (
-        await fetch(localBackendURL + `/ocel/upload-xes-conversion/${format}`, {
-          method: "post",
-          body: xesFile,
-          headers: {},
-        })
-      ).json()
-    },
-    "ocel/load": async (name) => {
-      return await (
-        await fetch(localBackendURL + "/ocel/load", {
-          method: "post",
-          body: JSON.stringify({ name }),
-          headers: { "Content-Type": "application/json" },
-        })
-      ).json();
-    },
-    "ocel/check-constraints-box": (tree, measurePerformance) => {
-      return new Promise(async (res, rej) => {
-        try {
-          const result = await fetch(localBackendURL + "/ocel/check-constraints-box", {
-            method: "post",
-            body: JSON.stringify({ tree, measurePerformance }),
-            headers: { "Content-Type": "application/json" },
-          });
-          if (result.ok) {
-            res(await result.json())
-          } else {
-            rej(await result.text())
-          }
-        } catch (e) {
-          rej(e)
-        }
-      })
-
-    },
-    "ocel/export-filter-box": async (tree, exportFormat) => {
-      return await (
-        await fetch(localBackendURL + "/ocel/export-filter-box", {
-          method: "post",
-          body: JSON.stringify({ tree, exportFormat }),
-          headers: { "Content-Type": "application/json" },
-        })
-      ).blob();
-    },
-    "ocel/create-db-query": async (input) => {
-      return await (
-        await fetch(localBackendURL + "/ocel/create-db-query", {
-          method: "post",
-          body: JSON.stringify(input),
-          headers: { "Content-Type": "application/json" },
-        })
-      ).text();
-    },
-    "ocel/export-bindings": async (nodeId, options) => {
-      const res = await fetch(localBackendURL + "/ocel/export-bindings", {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([nodeId, options]),
-      });
-      if (res.ok) {
-        return await res.blob();
-      } else {
-        throw new Error(res.status + " " + res.statusText);
-      }
-    },
-    "ocel/discover-constraints": async (autoDiscoveryOptions) => {
-      return await (
-        await fetch(localBackendURL + "/ocel/discover-constraints", {
-          method: "post",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(autoDiscoveryOptions),
-        })
-      ).json();
-    },
-    "ocel/discover-oc-declare": async (options) => {
-      return await (
-        await fetch(localBackendURL + "/ocel/discover-oc-declare", {
-          method: "post",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(options),
-        })
-      ).json();
-    },
-    "ocel/evaluate-oc-declare-arcs": async (arcs) => {
-      return await (
-        await fetch(localBackendURL + "/ocel/evaluate-oc-declare-arcs", {
-          method: "post",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(arcs),
-        })
-      ).json();
-    },
-    "ocel/graph": async (options) => {
-      const res = await fetch(localBackendURL + "/ocel/graph", {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(options),
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw new Error(res.statusText);
-      }
-    },
-    "ocel/get-event": async (specifier) => {
-      const res = await fetch(localBackendURL + "/ocel/get-event", {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(specifier),
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw new Error(res.statusText);
-      }
-    },
-    "ocel/get-object": async (specifier) => {
-      const res = await fetch(localBackendURL + "/ocel/get-object", {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(specifier),
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw new Error(res.statusText);
-      }
-    },
-    "hpc/login": async (connectionConfig) => {
-      const res = await fetch(localBackendURL + "/hpc/login", {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(connectionConfig),
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw Error(await res.text());
-      }
-    },
-    "hpc/start": async (jobConfig) => {
-      const res = await fetch(localBackendURL + "/hpc/start", {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(jobConfig),
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw Error(await res.text());
-      }
-    },
-    "hpc/job-status": async (jobID) => {
-      const res = await fetch(localBackendURL + `/hpc/job-status/${jobID}`, {
-        method: "get",
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw Error(await res.text());
-      }
-    },
-    "ocel/get-activity-statistics": async (activity) => {
-      const res = await fetch(localBackendURL + `/ocel/get-activity-statistics`, {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(activity)
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw Error(await res.text());
-      }
-
-    },
-    "ocel/get-oc-declare-edge-statistics": async (edge) => {
-      const res = await fetch(localBackendURL + `/ocel/get-oc-declare-edge-statistics`, {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(edge)
-      });
-      if (res.ok) {
-        return await res.json();
-      } else {
-        throw Error(await res.text());
-      }
-    },
-    "oc-declare/template-string": async (arcs) => {
-      const res = await fetch(localBackendURL + `/oc-declare/template-string`, {
-        method: "post",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(arcs)
-      });
-      if (res.ok) {
-        return await res.text();
-      } else {
-        throw Error(await res.text());
-      }
-    },
-    "download-blob": async (blob, fileName) => {
-      const dataURL = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.setAttribute("download", fileName);
-      a.setAttribute("href", dataURL);
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => {
-        URL.revokeObjectURL(dataURL);
-      }, 2000);
-    },
-  };
+export function getAPIServerBackendProvider(localBackendURL: string): BackendProvider {
+	return {
+		"ocel/info": async () => {
+			const res = await fetch(`${localBackendURL}/ocel/info`, {
+				method: "get",
+				headers: {},
+			});
+			return await res.json();
+		},
+		"ocel/available": async () => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/available`, {
+					method: "get",
+					headers: {},
+				})
+			).json();
+		},
+		"ocel/upload": async (ocelFile) => {
+			const type = ocelFile.name.endsWith(".json")
+				? "json"
+				: ocelFile.name.endsWith(".xml")
+					? "xml"
+					: "sqlite";
+			return await (
+				await fetch(`${localBackendURL}/ocel/upload-${type}`, {
+					method: "post",
+					body: ocelFile,
+					headers: {},
+				})
+			).json();
+		},
+		"ocel/upload-from-xes": async (xesFile) => {
+			const format = xesFile.name.endsWith(".gz") ? ".xes.gz" : ".xes";
+			return await (
+				await fetch(`${localBackendURL}/ocel/upload-xes-conversion/${format}`, {
+					method: "post",
+					body: xesFile,
+					headers: {},
+				})
+			).json();
+		},
+		"ocel/load": async (name) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/load`, {
+					method: "post",
+					body: JSON.stringify({ name }),
+					headers: { "Content-Type": "application/json" },
+				})
+			).json();
+		},
+		"ocel/check-constraints-box": async (tree, measurePerformance) => {
+			const result = await fetch(`${localBackendURL}/ocel/check-constraints-box`, {
+				method: "post",
+				body: JSON.stringify({ tree, measurePerformance }),
+				headers: { "Content-Type": "application/json" },
+			});
+			if (result.ok) {
+				return await result.json();
+			}
+			throw new Error(await result.text());
+		},
+		"ocel/export-filter-box": async (tree, exportFormat) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/export-filter-box`, {
+					method: "post",
+					body: JSON.stringify({ tree, exportFormat }),
+					headers: { "Content-Type": "application/json" },
+				})
+			).blob();
+		},
+		"ocel/create-db-query": async (input) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/create-db-query`, {
+					method: "post",
+					body: JSON.stringify(input),
+					headers: { "Content-Type": "application/json" },
+				})
+			).text();
+		},
+		"ocel/export-bindings": async (nodeId, options) => {
+			const res = await fetch(`${localBackendURL}/ocel/export-bindings`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify([nodeId, options]),
+			});
+			if (res.ok) {
+				return await res.blob();
+			}
+			throw new Error(`${res.status} ${res.statusText}`);
+		},
+		"ocel/discover-constraints": async (autoDiscoveryOptions) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/discover-constraints`, {
+					method: "post",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(autoDiscoveryOptions),
+				})
+			).json();
+		},
+		"ocel/discover-oc-declare": async (options) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/discover-oc-declare`, {
+					method: "post",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(options),
+				})
+			).json();
+		},
+		"ocel/evaluate-oc-declare-arcs": async (arcs) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/evaluate-oc-declare-arcs`, {
+					method: "post",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(arcs),
+				})
+			).json();
+		},
+		"ocel/graph": async (options) => {
+			const res = await fetch(`${localBackendURL}/ocel/graph`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(options),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw new Error(res.statusText);
+		},
+		"ocel/get-event": async (specifier) => {
+			const res = await fetch(`${localBackendURL}/ocel/get-event`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(specifier),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw new Error(res.statusText);
+		},
+		"ocel/get-object": async (specifier) => {
+			const res = await fetch(`${localBackendURL}/ocel/get-object`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(specifier),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw new Error(res.statusText);
+		},
+		"hpc/login": async (connectionConfig) => {
+			const res = await fetch(`${localBackendURL}/hpc/login`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(connectionConfig),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw Error(await res.text());
+		},
+		"hpc/start": async (jobConfig) => {
+			const res = await fetch(`${localBackendURL}/hpc/start`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(jobConfig),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw Error(await res.text());
+		},
+		"hpc/job-status": async (jobID) => {
+			const res = await fetch(`${localBackendURL}/hpc/job-status/${jobID}`, {
+				method: "get",
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw Error(await res.text());
+		},
+		"ocel/get-activity-statistics": async (activity) => {
+			const res = await fetch(`${localBackendURL}/ocel/get-activity-statistics`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(activity),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw Error(await res.text());
+		},
+		"ocel/get-oc-declare-edge-statistics": async (edge) => {
+			const res = await fetch(`${localBackendURL}/ocel/get-oc-declare-edge-statistics`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(edge),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw Error(await res.text());
+		},
+		"oc-declare/template-string": async (arcs) => {
+			const res = await fetch(`${localBackendURL}/oc-declare/template-string`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(arcs),
+			});
+			if (res.ok) {
+				return await res.text();
+			}
+			throw Error(await res.text());
+		},
+		"download-blob": async (blob, fileName) => {
+			const dataURL = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.setAttribute("download", fileName);
+			a.setAttribute("href", dataURL);
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			setTimeout(() => {
+				URL.revokeObjectURL(dataURL);
+			}, 2000);
+		},
+		"data-source/connect": async (request) => {
+			const res = await fetch(`${localBackendURL}/data-source/connect`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(request),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw Error(await res.text());
+		},
+		"data-extraction/execute": async (blueprint) => {
+			const res = await fetch(`${localBackendURL}/data-extraction/execute`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ blueprint }),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw Error(await res.text());
+		},
+	};
 }

@@ -118,14 +118,11 @@ pub fn translate_to_sql_shared(input: DBTranslationInput) -> String {
 
     // Step 2: Translate the Intermediate Representation to SQL
 
-    
-
     translate_to_sql_from_intermediate(sql_parts)
 }
 
 pub fn convert_to_intermediate(tree: BindingBoxTree) -> InterMediateNode {
     // Recursive approach for each binding box, start with the root node
-    
 
     bindingbox_to_intermediate(&tree, 0)
 }
@@ -196,8 +193,6 @@ pub fn bindingbox_to_intermediate(tree: &BindingBoxTree, index: usize) -> InterM
         children.push((child_node, edge_name));
     }
 
-    
-
     InterMediateNode {
         event_vars,
         object_vars,
@@ -265,7 +260,6 @@ pub fn extract_basic_relations(filters: Vec<Filter>) -> Vec<Relation> {
 
 // Extract Constraints we want to translate
 pub fn extract_constraints(mut constraints: Vec<Constraint>) -> Vec<Constraint> {
-
     constraints.retain(|c| match c {
         Constraint::Filter { filter: _ } => false,
         Constraint::SizeFilter { filter: _ } => true,
@@ -276,7 +270,6 @@ pub fn extract_constraints(mut constraints: Vec<Constraint>) -> Vec<Constraint> 
         Constraint::AND { child_names: _ } => true,
     });
     constraints
-
 }
 
 // Extract other meaningful filters (maybe these in relations are enough, but CEL could be considered)
@@ -354,8 +347,6 @@ pub fn translate_to_sql_from_intermediate(mut sql_parts: SqlParts) -> String {
             o_alias(obj_var.0)
         ));
     }
-
-    
 
     construct_result(&mut sql_parts)
 }
@@ -961,11 +952,12 @@ pub fn construct_basic_operations(sql_parts: &mut SqlParts) -> (Vec<String>, Vec
 
     for relation in &sql_parts.node.relations {
         if let Relation::TimeBetweenEvents {
-                from_event,
-                to_event,
-                min_seconds,
-                max_seconds,
-            } = relation {
+            from_event,
+            to_event,
+            min_seconds,
+            max_seconds,
+        } = relation
+        {
             if let Some(min) = min_seconds {
                 where_clauses.push(format!(
                     "{time_left} - {time_right} >= {min}",
@@ -1282,10 +1274,11 @@ pub fn construct_filter_non_basic(sql_parts: &mut SqlParts) -> Vec<String> {
 
     for (i, sizefilter) in sql_parts.node.sizefilter.iter().enumerate() {
         if let SizeFilter::NumChilds {
-                child_name,
-                min,
-                max,
-            } = sizefilter {
+            child_name,
+            min,
+            max,
+        } = sizefilter
+        {
             for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                 if child_label == child_name {
                     let clause = match (min, max) {
@@ -1615,8 +1608,6 @@ pub fn translate_to_cypher_shared(tree: BindingBoxTree) -> String {
 
     get_object_table_cypher(&mut cypher_parts);
 
-    
-
     convert_to_cypher_from_inter(&mut cypher_parts)
 }
 
@@ -1631,8 +1622,6 @@ pub fn convert_to_cypher_from_inter(cypher_parts: &mut CypherParts) -> String {
     }
 
     construct_return_clauses(cypher_parts);
-
-    
 
     construct_result_cypher(cypher_parts)
 }
@@ -1667,13 +1656,14 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
                     .unwrap_or_else(|| "no type found object".to_string());
 
                 if mapped_event_type == "no type found event"
-                    && mapped_event_type == "no type found event" {
-                        mapped_event_type = cypher_parts
-                            .alias_type
-                            .get(&event_alias)
-                            .cloned()
-                            .unwrap_or_else(|| "unknown".to_string());
-                    }
+                    && mapped_event_type == "no type found event"
+                {
+                    mapped_event_type = cypher_parts
+                        .alias_type
+                        .get(&event_alias)
+                        .cloned()
+                        .unwrap_or_else(|| "unknown".to_string());
+                }
 
                 if mapped_object_type == "no type found object" {
                     mapped_object_type = cypher_parts
@@ -1694,7 +1684,6 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
                     .insert(object_alias.clone(), mapped_object_type.to_string());
 
                 cypher_parts.match_clauses.push(format!("({event_alias}:{mapped_event_type})-[:{event_object_alias}]->({object_alias}:{mapped_object_type})", 
-                
             ));
             }
 
@@ -2076,13 +2065,12 @@ pub fn construct_result_cypher(cypher_parts: &mut CypherParts) -> String {
 pub fn construct_filter_clauses(cypher_parts: &mut CypherParts) {
     for sizefilter in cypher_parts.node.sizefilter.iter() {
         if let SizeFilter::NumChilds {
-                child_name,
-                min,
-                max,
-            } = sizefilter {
-            for (child_cypher, child_label) in
-                cypher_parts.child_queries.iter()
-            {
+            child_name,
+            min,
+            max,
+        } = sizefilter
+        {
+            for (child_cypher, child_label) in cypher_parts.child_queries.iter() {
                 if child_label == child_name {
                     let clause = match (min, max) {
                         (Some(min), Some(max)) => format!("BETWEEN {min} AND {max}"),
@@ -2101,24 +2089,25 @@ pub fn construct_filter_clauses(cypher_parts: &mut CypherParts) {
 
     for filter in &cypher_parts.node.relations {
         if let Relation::TimeBetweenEvents {
-                from_event,
-                to_event,
-                min_seconds,
-                max_seconds,
-            } = filter {
+            from_event,
+            to_event,
+            min_seconds,
+            max_seconds,
+        } = filter
+        {
             let alias_eventto = format!("e{}", e_alias(to_event.0));
             let alias_eventfrom = format!("e{}", e_alias(from_event.0));
 
             if let Some(min) = min_seconds {
                 cypher_parts.where_clauses.push(format!(
-                "{alias_eventto}.time >= {alias_eventfrom}.time + INTERVAL('{min} SECONDS')",
-            ));
+                    "{alias_eventto}.time >= {alias_eventfrom}.time + INTERVAL('{min} SECONDS')",
+                ));
             }
 
             if let Some(max) = max_seconds {
                 cypher_parts.where_clauses.push(format!(
-                "{alias_eventto}.time <= {alias_eventfrom}.time + INTERVAL('{max} SECONDS')"
-            ));
+                    "{alias_eventto}.time <= {alias_eventfrom}.time + INTERVAL('{max} SECONDS')"
+                ));
             }
         }
     }
@@ -2152,8 +2141,6 @@ pub fn translate_to_cypher_from_child(cypher_parts: &mut CypherParts) -> String 
         construct_childstrings_cypher(cypher_parts);
         construct_filter_clauses(cypher_parts);
     }
-
-    
 
     construct_result_child_cypher(cypher_parts)
 }

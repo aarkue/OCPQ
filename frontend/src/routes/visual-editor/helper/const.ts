@@ -7,14 +7,14 @@ export const EVENT_TYPE_NODE_TYPE = "eventType";
 export const GATE_NODE_TYPE = "gate";
 
 export const nodeTypes = {
-  [EVENT_TYPE_NODE_TYPE]: EventTypeNode,
-  [GATE_NODE_TYPE]: GateNode,
+	[EVENT_TYPE_NODE_TYPE]: EventTypeNode,
+	[GATE_NODE_TYPE]: GateNode,
 };
 export const edgeTypes = {
-  [EVENT_TYPE_LINK_TYPE]: EventTypeLink,
+	[EVENT_TYPE_LINK_TYPE]: EventTypeLink,
 };
 
 export const NODE_TYPE_SIZE = {
-  [EVENT_TYPE_NODE_TYPE]: { width: 240, minHeight: 110.58 },
-  [GATE_NODE_TYPE]: { width: 128, minHeight: 80 },
+	[EVENT_TYPE_NODE_TYPE]: { width: 240, minHeight: 110.58 },
+	[GATE_NODE_TYPE]: { width: 128, minHeight: 80 },
 };

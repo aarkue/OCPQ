@@ -7,8 +7,8 @@ use process_mining::core::event_data::{
         AttributeValue, XESEditableAttribute,
     },
     object_centric::{
-        OCELAttributeType, OCELAttributeValue, OCELEvent, OCELEventAttribute, OCELObject,
-        OCELObjectAttribute, OCELRelationship, OCELType, OCELTypeAttribute,
+        OCELAttributeValue, OCELEvent, OCELEventAttribute, OCELObject, OCELObjectAttribute,
+        OCELRelationship, OCELType, OCELTypeAttribute,
     },
 };
 use process_mining::{EventLog, OCEL};
@@ -73,7 +73,7 @@ pub fn trad_log_to_ocel(log: &EventLog) -> OCEL {
             {
                 case_object_type.attributes.push(OCELTypeAttribute {
                     name: attr.name.to_string(),
-                    value_type: OCELAttributeType::from(&attr.value).to_type_string(),
+                    value_type: attr.value.get_type().to_type_string(),
                 })
             }
         }
@@ -115,7 +115,7 @@ pub fn trad_log_to_ocel(log: &EventLog) -> OCEL {
                     if !x.attributes.iter().any(|a| a.name == attr.name) {
                         x.attributes.push(OCELTypeAttribute {
                             name: attr.name.to_string(),
-                            value_type: OCELAttributeType::from(&attr.value).to_type_string(),
+                            value_type: attr.value.get_type().to_type_string(),
                         })
                     }
                 }

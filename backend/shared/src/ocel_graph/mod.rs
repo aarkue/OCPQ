@@ -29,7 +29,7 @@ pub struct OCELGraph {
     links: Vec<GraphLink>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(TS)]
 #[ts(export, export_to = "../../../frontend/src/types/generated/")]

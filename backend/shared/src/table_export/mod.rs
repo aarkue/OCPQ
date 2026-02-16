@@ -350,7 +350,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                         {
                             w.write_cell(
                                 CellContent::Value(&val.value),
-                                CellType::ValueType((&val.value).into()),
+                                CellType::ValueType(val.value.get_type()),
                             )?;
                         } else {
                             w.write_cell("", CellType::DEFAULT)?;
@@ -374,7 +374,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                         if let Some(val) = ev.attributes.iter().find(|a| &a.name == attr) {
                             w.write_cell(
                                 CellContent::Value(&val.value),
-                                CellType::ValueType((&val.value).into()),
+                                CellType::ValueType(val.value.get_type()),
                             )?;
                         } else {
                             w.write_cell("", CellType::DEFAULT)?;

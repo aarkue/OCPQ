@@ -1,63 +1,58 @@
 /* @import "tailwindcss"; */
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+	font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+	line-height: 1.5;
+	font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+	color-scheme: light dark;
+	color: rgba(255, 255, 255, 0.87);
+	background-color: #242424;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	-webkit-text-size-adjust: 100%;
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
+	:root {
+		color: #213547;
+		background-color: #ffffff;
+	}
 }
 
-
-
 .reset-handles .react-flow__handle {
-  position: unset !important;
-  left: unset !important;
-  top: unset !important;
-  transform: unset !important;
+	position: unset;
+	left: unset;
+	top: unset;
+	transform: unset;
 }
 
 .react-flow {
-  will-change: contents;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transform: translateZ(0) scale(1, 1);
-  -webkit-transform: translateZ(0) scale(1, 1);
+	will-change: contents;
+	backface-visibility: hidden;
+	-webkit-backface-visibility: hidden;
+	transform: translateZ(0) scale(1, 1);
+	-webkit-transform: translateZ(0) scale(1, 1);
 }
-
 
 .scrollbar-gutter-stable {
-  scrollbar-gutter: stable;
+	scrollbar-gutter: stable;
 }
 
-
-
 div.fullHandle {
-  width: 100%;
-  height: 100%;
-  background: blue;
-  position: absolute;
-  top: 0;
-  left: 0;
-  border-radius: 0;
-  transform: none;
-  border: none;
-  opacity: 0;
+	width: 100%;
+	height: 100%;
+	background: blue;
+	position: absolute;
+	top: 0;
+	left: 0;
+	border-radius: 0;
+	transform: none;
+	border: none;
+	opacity: 0;
 }
 
 /* Below: Fixes Monaco transparent bug in linux webview (gecko?) */
