@@ -59,7 +59,7 @@ export default function DataExtractionRoot() {
 				<br />
 				If you have any feedback or encounter any issues, please reach out via GitHub or email.
 			</div>
-			<div className="flex justify-between items-center my-1">
+			<div className="flex justify-between items-center mt-2 mb-3">
 				<Button
 					className="cursor-pointer"
 					onClick={() => {
@@ -117,7 +117,8 @@ export default function DataExtractionRoot() {
 								<br />
 							</>
 						)}
-						This blueprint and all contained datasources and extraction settings will be deleted.
+						This blueprint and all contained data sources and extraction settings will be deleted.
+						<br/>
 						This action cannot be undone.
 					</div>
 					<AlertDialogFooter>

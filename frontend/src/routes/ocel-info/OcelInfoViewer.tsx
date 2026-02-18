@@ -28,7 +28,7 @@ export default function OcelInfoViewer() {
 						</span>
 					</p>
 					<Link to="/constraints">
-						<Button className=" h-12 text-xl  bg-purple-700 text-white font-bold cursor-pointer">
+						<Button className=" h-12 text-xl  bg-purple-700 text-white font-bold cursor-pointer hover:bg-purple-600">
 							{" "}
 							<RxArrowRight className="mr-2" />
 							OCPQ Query Editor
@@ -44,7 +44,7 @@ export default function OcelInfoViewer() {
 						</span>
 					</p>
 					<Link to="/oc-declare">
-						<Button className="h-12 text-xl bg-emerald-600 text-white font-bold cursor-pointer">
+						<Button className="h-12 text-xl bg-emerald-600 text-white font-bold cursor-pointer hover:bg-emerald-500">
 							{" "}
 							<RxArrowRight className="mr-2" /> OC-DECLARE
 						</Button>

@@ -9,7 +9,6 @@ import {
 	useEdgesState,
 	useNodesState,
 } from "@xyflow/react";
-import { BackendProviderContext } from "@/BackendProviderContext";
 import { Button } from "@/components/ui/button";
 import {
 	ContextMenu,
@@ -20,12 +19,13 @@ import {
 	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import "@xyflow/react/dist/style.css";
 import { useQueryClient } from "@tanstack/react-query";
 import debounce from "lodash.debounce";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { LuDatabase, LuPlay, LuTable2, LuTrash2 } from "react-icons/lu";
+import { LuDatabase, LuPlay, LuPlus, LuSearch, LuTable2, LuTrash2 } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { useBackend } from "@/hooks";
@@ -138,7 +138,7 @@ export default function DataBlueprintFlowEditor({
 		[setNodes, debouncedSave],
 	);
 
-	// Track mouse position for node placement
+	// Track mouse position for context menu node placement
 	useEffect(() => {
 		function handleMouseMove(e: MouseEvent) {
 			mousePos.current = { x: e.clientX, y: e.clientY };
@@ -146,31 +146,6 @@ export default function DataBlueprintFlowEditor({
 		document.addEventListener("mousemove", handleMouseMove);
 		return () => document.removeEventListener("mousemove", handleMouseMove);
 	}, []);
-
-	const onDragOver = useCallback((event: React.DragEvent) => {
-		event.preventDefault();
-		event.dataTransfer.dropEffect = "move";
-	}, []);
-
-	const onDrop = useCallback(
-		(event: React.DragEvent) => {
-			event.preventDefault();
-			const type = event.dataTransfer.getData("application/reactflow");
-			if (typeof type === "undefined" || !type) return;
-			const [sourceID, tableName] = event.dataTransfer.getData("application/dataId").split("||");
-			const source = sources.find((s) => s.id === sourceID);
-			if (!source) {
-				return;
-			}
-
-			const pos = flowRef.current!.screenToFlowPosition({
-				x: event.clientX,
-				y: event.clientY,
-			});
-			addTableNode(source, tableName, pos);
-		},
-		[addTableNode, sources],
-	);
 
 	// Get sources with cached metadata
 	const connectedSources = sources.filter(
@@ -212,6 +187,10 @@ export default function DataBlueprintFlowEditor({
 			setIsExecuting(false);
 		}
 	}, [sources, backend, navigate, queryClient]);
+
+	const [addMenuOpen, setAddMenuOpen] = useState(false);
+	const [tableSearch, setTableSearch] = useState("");
+	const searchInputRef = useRef<HTMLInputElement>(null);
 
 	return (
 		<div className="w-full h-full mt-1.5 pb-1">
@@ -256,8 +235,6 @@ export default function DataBlueprintFlowEditor({
 				className="react-flow border"
 				nodes={nodes}
 				edges={edges}
-				onDrop={onDrop}
-				onDragOver={onDragOver}
 				onNodesChange={onNodesChangeWrapped}
 				onEdgesChange={onEdgesChangeWrapped}
 				onConnect={onConnect}
@@ -288,49 +265,62 @@ export default function DataBlueprintFlowEditor({
 			>
 				<Background />
 				<Controls />
-				<Panel position="top-left" className="flex gap-2">
-					<div className="bg-white/90 backdrop-blur-sm rounded-lg border shadow-sm p-2">
-						<div className=" font-semibold mb-1 text-lg">
-							Add Tables
-							<p className="text-sm text-muted-foreground font-normal">
-								Drag and drop tables to add them to the blueprint.
-							</p>
-						</div>
-						<div className="flex flex-wrap gap-1 max-w-xs max-h-100 overflow-auto">
+				<Panel position="top-left">
+					<Popover open={addMenuOpen} onOpenChange={(open) => {
+						setAddMenuOpen(open);
+						if (!open) setTableSearch("");
+					}}>
+						<PopoverTrigger asChild>
+							<Button size="sm" variant="outline" className="bg-white/90 shadow-sm">
+								<LuPlus className="w-4 h-4 mr-1.5" />
+								Add Table
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent
+							align="start"
+							side="bottom"
+							className="w-64 p-1.5"
+							onOpenAutoFocus={(e) => {
+								e.preventDefault();
+								searchInputRef.current?.focus();
+							}}
+						>
 							{connectedSources.length === 0 ? (
-								<span className="text-xs text-slate-400">Connect a data source first</span>
+								<p className="text-sm text-muted-foreground px-2 py-3 text-center">
+									No connected data sources
+								</p>
 							) : (
-								connectedSources.map((source) => (
-									<div key={source.id} className="w-full border-b  mb-1 pb-2">
-										<div className="font-semibold flex text-lg items-center gap-x-1">
-											<LuDatabase className="w-3.5 h-3.5 text-slate-600" />
-											{source.name}
-										</div>
-										{Object.keys(source.cachedMetadata?.tables ?? {}).map((tableName) => (
-											<button
-												tabIndex={-1}
-												type="button"
-												key={tableName}
-												draggable
-												onDragStart={(event) => {
-													event.dataTransfer.setData("application/reactflow", "primitive");
-													event.dataTransfer.setData(
-														"application/dataId",
-														`${source.id}||${tableName}`,
-													);
-													event.dataTransfer.effectAllowed = "move";
-												}}
-												className="px-2 m-1 py-1 inline-flex items-center text-center bg-white border border-gray-200 rounded shadow-sm cursor-grab hover:border-blue-400 transition-colors  truncate"
-											>
-												<LuTable2 className="w-3 h-3 mr-1" />
-												{tableName}
-											</button>
-										))}
+								<>
+									<div className="relative mb-1.5">
+										<LuSearch className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+										<input
+											ref={searchInputRef}
+											type="text"
+											value={tableSearch}
+											onChange={(e) => setTableSearch(e.target.value)}
+											placeholder="Search tables..."
+											className="w-full pl-7 pr-2 py-1.5 text-sm rounded border bg-transparent outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+										/>
 									</div>
-								))
+									{connectedSources.map((source) => (
+										<SourceTableMenu
+											key={source.id}
+											source={source}
+											search={tableSearch}
+											onSelectTable={(tableName) => {
+												const center = flowRef.current?.screenToFlowPosition({
+													x: window.innerWidth / 2,
+													y: window.innerHeight / 2,
+												}) ?? { x: 100, y: 100 };
+												addTableNode(source, tableName, center);
+												setAddMenuOpen(false);
+											}}
+										/>
+									))}
+								</>
 							)}
-						</div>
-					</div>
+						</PopoverContent>
+					</Popover>
 				</Panel>
 				{nodes.length > 0 && (
 					<Panel position="top-right" className="flex gap-2">
@@ -362,6 +352,80 @@ export default function DataBlueprintFlowEditor({
 					</Panel>
 				)}
 			</ReactFlow>
+		</div>
+	);
+}
+
+function HighlightMatch({ text, search }: { text: string; search: string }) {
+	if (!search) return <>{text}</>;
+	const idx = text.toLowerCase().indexOf(search.toLowerCase());
+	if (idx === -1) return <>{text}</>;
+	return (
+		<>
+			{text.slice(0, idx)}
+			<mark className="bg-yellow-200 text-inherit rounded-sm px-px">{text.slice(idx, idx + search.length)}</mark>
+			{text.slice(idx + search.length)}
+		</>
+	);
+}
+
+function SourceTableMenu({
+	source,
+	search,
+	onSelectTable,
+}: {
+	source: DataSource;
+	search: string;
+	onSelectTable: (tableName: string) => void;
+}) {
+	const [manualExpanded, setManualExpanded] = useState(false);
+	const tableNames = Object.keys(source.cachedMetadata?.tables ?? {});
+
+	if (tableNames.length === 0) return null;
+
+	const query = search.toLowerCase();
+	const sourceMatches = query && source.name.toLowerCase().includes(query);
+	const matchingTables = query
+		? tableNames.filter((t) => t.toLowerCase().includes(query))
+		: tableNames;
+
+	// Hide this source entirely if searching and nothing matches
+	if (query && !sourceMatches && matchingTables.length === 0) return null;
+
+	// Auto-expand when there's a search match, otherwise use manual toggle
+	const expanded = query ? (sourceMatches || matchingTables.length > 0) : manualExpanded;
+	const displayedTables = query && !sourceMatches ? matchingTables : tableNames;
+
+	return (
+		<div className="mb-0.5">
+			<button
+				type="button"
+				onClick={() => !query && setManualExpanded(!manualExpanded)}
+				className="flex items-center gap-1.5 w-full px-2 py-1.5 text-sm font-medium text-left rounded hover:bg-accent transition-colors"
+			>
+				<LuDatabase className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+				<span className="truncate">
+					<HighlightMatch text={source.name} search={search} />
+				</span>
+				<span className="text-xs text-muted-foreground ml-auto shrink-0">{displayedTables.length}</span>
+			</button>
+			{expanded && (
+				<div className="ml-2 border-l pl-1">
+					{displayedTables.map((tableName) => (
+						<button
+							type="button"
+							key={tableName}
+							onClick={() => onSelectTable(tableName)}
+							className="flex items-center gap-1.5 w-full px-2 py-1 text-sm text-left rounded hover:bg-accent transition-colors"
+						>
+							<LuTable2 className="w-3 h-3 text-muted-foreground shrink-0" />
+							<span className="truncate">
+								<HighlightMatch text={tableName} search={search} />
+							</span>
+						</button>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }
