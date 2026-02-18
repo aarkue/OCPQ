@@ -577,6 +577,7 @@ impl BindingBoxTreeNode {
                 ),
             expanding_skipped_bindings || recursive_calls_cancelled,
         ))
+    }
 }
 
 #[derive(TS)]
