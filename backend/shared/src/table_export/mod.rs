@@ -234,7 +234,7 @@ impl<'a, W: std::io::Write + std::io::Seek + std::marker::Send> TableWriter<'a, 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 pub struct TableExportOptions {
     pub include_violation_status: bool,
     pub include_ids: bool,
@@ -243,7 +243,7 @@ pub struct TableExportOptions {
     pub format: TableExportFormat,
 }
 #[derive(Debug, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 pub enum TableExportFormat {
     CSV,
     XLSX,
@@ -350,7 +350,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                         {
                             w.write_cell(
                                 CellContent::Value(&val.value),
-                                CellType::ValueType((&val.value).into()),
+                                CellType::ValueType(val.value.get_type()),
                             )?;
                         } else {
                             w.write_cell("", CellType::DEFAULT)?;
@@ -374,7 +374,7 @@ pub fn export_bindings_to_table_writer<'a, W: std::io::Write>(
                         if let Some(val) = ev.attributes.iter().find(|a| &a.name == attr) {
                             w.write_cell(
                                 CellContent::Value(&val.value),
-                                CellType::ValueType((&val.value).into()),
+                                CellType::ValueType(val.value.get_type()),
                             )?;
                         } else {
                             w.write_cell("", CellType::DEFAULT)?;

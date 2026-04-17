@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet};
 use itertools::Itertools;
 use process_mining::core::event_data::object_centric::linked_ocel::SlimLinkedOCEL;
 
-
 use super::{
     structs::{BindingBox, BindingStep, Filter, Qualifier, Variable},
     Binding,

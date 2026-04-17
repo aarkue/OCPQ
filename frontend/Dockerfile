@@ -6,11 +6,11 @@ RUN corepack enable
 
 WORKDIR /app-frontend
 
-COPY package.json .
-
-RUN pnpm install
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
 RUN pnpm run build
+EXPOSE 4567
 CMD [ "pnpm", "run", "preview", "--host", "--port", "4567" ]

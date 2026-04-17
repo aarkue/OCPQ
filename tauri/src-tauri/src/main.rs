@@ -4,18 +4,18 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use std::{
-    fs::File,
-    io::{Cursor, Write},
-    path::Path,
-    sync::{Arc, Mutex},
-};
 use itertools::Itertools;
 use ocpq_shared::{
     binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvalPageRequest,
+        EvalPageResponse, EvaluateBoxTreeResult, EvaluateBoxTreeSummary, ExportFormat,
         FilterExportWithBoxTreeRequest,
     },
+    data_extraction::{
+        blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
+        ExecuteExtractionResponse,
+    },
+    data_source::{connect_and_get_metadata, ConnectDataSourceRequest, DataSourceMetadata},
     db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
         auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
@@ -26,13 +26,15 @@ use ocpq_shared::{
         get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
         ConnectionConfig, JobStatus, OCPQJobOptions,
     },
-    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
+    oc_declare::statistics::{
+        get_activity_statistics, get_edge_stats, ActivityStatistics, BinnedEdgeDurationStats,
+    },
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     process_mining::{
         core::{
             event_data::{
                 case_centric::xes::{import_xes_path, import_xes_slice, XESImportOptions},
-                object_centric::linked_ocel::SlimLinkedOCEL,
+                object_centric::linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
             },
             process_models::oc_declare::OCDeclareArc,
         },
@@ -46,6 +48,15 @@ use ocpq_shared::{
     process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints,
     trad_event_log::trad_log_to_ocel,
 };
+use std::{
+    fs::File,
+    io::{Cursor, Write},
+    path::Path,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+};
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
     AppHandle, Manager, State,
@@ -58,15 +69,17 @@ pub struct AppState {
     client: Arc<RwLock<Option<Client>>>,
     jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
+    eval_version_counter: Arc<AtomicU64>,
     initial_files: Arc<Mutex<Option<Vec<String>>>>,
 }
 
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
-    let path = path.as_ref();
-    println!("{path:?}");
-    let _path_str = path.to_string_lossy();
     let ocel = OCEL::import_from_path(path).map_err(|e| e.to_string())?;
     Ok(ocel)
+}
+
+async fn clear_eval_res(state: &AppState) {
+    *state.eval_res.write().await = None;
 }
 #[tauri::command(async)]
 async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
@@ -75,6 +88,8 @@ async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OC
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 
@@ -89,6 +104,8 @@ async fn import_ocel_slice(
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 
@@ -104,6 +121,8 @@ async fn import_xes_path_as_ocel(
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 #[tauri::command(async)]
@@ -118,6 +137,8 @@ async fn import_xes_slice_as_ocel(
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 
@@ -133,19 +154,74 @@ async fn get_current_ocel_info(
 }
 
 #[tauri::command(async)]
+async fn get_sample_ids(
+    limit: usize,
+    state: tauri::State<'_, AppState>,
+) -> Result<ocpq_shared::SampleIds, String> {
+    let guard = state.ocel.read().await;
+    let ocel = guard.as_ref().ok_or_else(|| "No OCEL loaded".to_string())?;
+    Ok(ocpq_shared::get_sample_ids(ocel, limit))
+}
+
+#[tauri::command(async)]
 async fn check_with_box_tree(
     req: CheckWithBoxTreeRequest,
     state: State<'_, AppState>,
-) -> Result<EvaluateBoxTreeResult, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => {
-            let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))?;
-            let res_to_ret: EvaluateBoxTreeResult = res.clone_first_few();
-            *state.eval_res.write().await = Some(res);
-            Ok(res_to_ret)
-        }
-        None => Err("No OCEL loaded".to_string()),
-    }
+) -> Result<EvaluateBoxTreeSummary, String> {
+    let ocel_guard = state.ocel.read().await;
+    let Some(ocel) = ocel_guard.as_ref() else {
+        return Err("No OCEL loaded".to_string());
+    };
+    let mut res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))?;
+    drop(ocel_guard);
+    // Hold the eval_res lock while assigning the version so the cached snapshot
+    // and the version we hand to the client are always consistent, even under
+    // concurrent evaluations.
+    let mut eval_guard = state.eval_res.write().await;
+    res.eval_version = state.eval_version_counter.fetch_add(1, Ordering::SeqCst) + 1;
+    let summary = res.summary();
+    *eval_guard = Some(res);
+    Ok(summary)
+}
+
+#[tauri::command(async)]
+async fn get_eval_result_page(
+    req: EvalPageRequest,
+    state: State<'_, AppState>,
+) -> Result<EvalPageResponse, String> {
+    let guard = state.eval_res.read().await;
+    let res = guard
+        .as_ref()
+        .ok_or_else(|| "No evaluation result cached".to_string())?;
+    res.get_page(&req)
+}
+
+#[tauri::command(async)]
+async fn export_ocel(
+    format: ExportFormat,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let ocel = match state.ocel.read().await.as_ref() {
+        Some(locel) => locel.construct_ocel(),
+        None => return Err("No OCEL loaded".to_string()),
+    };
+
+    let ext = format.to_extension();
+    app.dialog()
+        .file()
+        .set_title("Export OCEL")
+        .add_filter(format!("OCEL {:?} Files", format), &[ext])
+        .set_file_name(format!("ocel-export.{}", ext).as_str())
+        .save_file(move |f| {
+            if let Some(path) = f {
+                if let Some(path) = path.as_path() {
+                    let _ = std::fs::remove_file(path);
+                    OCEL::export_to_path(&ocel, path).unwrap();
+                }
+            }
+        });
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -229,7 +305,7 @@ async fn evaluate_oc_declare_arcs(
 async fn get_oc_declare_edge_statistics(
     arc: OCDeclareArc,
     state: State<'_, AppState>,
-) -> Result<Vec<i64>, String> {
+) -> Result<BinnedEdgeDurationStats, String> {
     match state.ocel.read().await.as_ref() {
         Some(locel) => Ok(get_edge_stats(locel, &arc)),
         None => Err("No OCEL loaded".to_string()),
@@ -363,7 +439,7 @@ async fn start_hpc_job_tauri(
     let c = Arc::new(x);
     let c2 = Arc::clone(&c);
     let port: u16 = options.port.parse::<u16>().map_err(|e| e.to_string())?;
-    let (folder_id, job_id) = submit_hpc_job(c, options)
+    let (_folder_id, job_id) = submit_hpc_job(c, options)
         .await
         .map_err(|er| er.to_string())?;
     let p = start_port_forwarding(
@@ -379,7 +455,6 @@ async fn start_hpc_job_tauri(
         port,
         tauri::async_runtime::JoinHandle::Tokio(p),
     ));
-    println!("Ceated job {job_id} in folder {folder_id}");
     Ok(job_id)
 }
 
@@ -403,6 +478,33 @@ fn get_initial_files(state: State<'_, AppState>) -> Result<Vec<String>, String> 
     } else {
         Ok(Vec::default())
     }
+}
+
+#[tauri::command(async)]
+async fn unload_ocel(state: State<'_, AppState>) -> Result<(), String> {
+    *state.ocel.write().await = None;
+    clear_eval_res(&state).await;
+    Ok(())
+}
+
+#[tauri::command(async)]
+async fn connect_data_source(req: ConnectDataSourceRequest) -> Result<DataSourceMetadata, String> {
+    connect_and_get_metadata(req)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+async fn execute_extraction(
+    req: ExecuteExtractionRequest,
+    state: State<'_, AppState>,
+) -> Result<ExecuteExtractionResponse, String> {
+    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
+        .await
+        .map_err(|e| e.to_string())?;
+    *state.ocel.write().await = Some(locel);
+    clear_eval_res(&state).await;
+    Ok(response)
 }
 
 fn main() {
@@ -465,8 +567,11 @@ fn main() {
             import_xes_path_as_ocel,
             import_xes_slice_as_ocel,
             get_current_ocel_info,
+            get_sample_ids,
+            export_ocel,
             export_filter_box,
             check_with_box_tree,
+            get_eval_result_page,
             auto_discover_constraints,
             export_bindings_table,
             ocel_graph,
@@ -481,7 +586,10 @@ fn main() {
             get_oc_declare_edge_statistics,
             get_oc_declare_activity_statistics,
             get_oc_declare_template_string,
-            create_db_query
+            create_db_query,
+            connect_data_source,
+            execute_extraction,
+            unload_ocel
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

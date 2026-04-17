@@ -7,7 +7,7 @@ use std::{cmp::max, collections::HashMap};
 use itertools::Itertools;
 
 use process_mining::core::event_data::object_centric::linked_ocel::{
-    slim_linked_ocel::EventOrObjectIndex, SlimLinkedOCEL, LinkedOCELAccess,
+    slim_linked_ocel::EventOrObjectIndex, LinkedOCELAccess, SlimLinkedOCEL,
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -85,11 +85,12 @@ pub fn label_bindings(
     bindings: &Vec<Binding>,
     subtree: &BindingBoxTree,
 ) -> Vec<bool> {
+    let step_cache = subtree.compute_step_cache(ocel);
     bindings
         .par_iter()
         .map(|b| {
             let ((_x, y), _skipped) = subtree.nodes[0]
-                .evaluate(0, (*b).clone(), subtree, ocel)
+                .evaluate(0, (*b).clone(), subtree, ocel, &step_cache)
                 .unwrap();
             let is_violated = y.iter().any(|(_, v)| v.is_some());
             !is_violated
@@ -107,12 +108,13 @@ pub fn get_labeled_instances(
         EventOrObjectType::Object(_) => Variable::Object(ObjectVariable(0)),
     };
     let bindings = generate_sample_bindings(ocel, &vec![ocel_type.clone()], variable.clone());
+    let step_cache = subtree.compute_step_cache(ocel);
 
     let violated_instances = bindings
         .iter()
         .flat_map(|b| {
             let ((_x, y), _skipped) = subtree.nodes[0]
-                .evaluate(0, (*b).clone(), &subtree, ocel)
+                .evaluate(0, (*b).clone(), &subtree, ocel, &step_cache)
                 .unwrap();
             let is_violated = y.iter().any(|(_, v)| v.is_some());
             b.get_any_index(&variable)
@@ -134,14 +136,20 @@ pub fn test_tree_combinations(
     let mut ret = Vec::new();
     // First index: Binding index, second index: subtree index;
     // Value: true if subtree is satisfied for binding, false otherwise
+    let step_caches: Vec<_> = subtrees
+        .iter()
+        .map(|t| t.compute_step_cache(ocel))
+        .collect();
     let sat_subtrees_per_binding: Vec<_> = input_bindings
         .par_iter()
         .map(|b| {
             subtrees
                 .iter()
-                .map(|t| {
-                    let ((_overall_res, root_res), _skipped) =
-                        t.nodes[0].evaluate(0, b.clone(), t, ocel).unwrap();
+                .enumerate()
+                .map(|(ti, t)| {
+                    let ((_overall_res, root_res), _skipped) = t.nodes[0]
+                        .evaluate(0, b.clone(), t, ocel, &step_caches[ti])
+                        .unwrap();
                     root_res.iter().any(|(_, v)| v.is_some())
                 })
                 .collect_vec()
@@ -254,10 +262,13 @@ pub fn discover_or_constraints_old(
     let bindings = generate_sample_bindings(ocel, &vec![ocel_type.clone()], input_variable.clone());
     let mut all_subtrees = subtrees.clone();
     for st in &subtrees {
+        let step_cache = st.compute_step_cache(ocel);
         let violated_instances = bindings
             .iter()
             .filter(|b| {
-                let ((_x, y), _skipped) = st.nodes[0].evaluate(0, (*b).clone(), st, ocel).unwrap();
+                let ((_x, y), _skipped) = st.nodes[0]
+                    .evaluate(0, (*b).clone(), st, ocel, &step_cache)
+                    .unwrap();
                 y.iter().any(|(_, v)| v.is_some())
             })
             .filter_map(|b| b.get_any_index(&input_variable))

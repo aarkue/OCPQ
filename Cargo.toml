@@ -7,3 +7,11 @@ members = [
   "backend/ocpq_cli",
   "tauri/src-tauri/"
 ]
+
+
+[patch.crates-io]
+sqlx = { git =  "https://github.com/aarkue/sqlx-fix.git", branch = "sqlite3-fix"}
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release.package.ocpq-web-server]
+opt-level = 3

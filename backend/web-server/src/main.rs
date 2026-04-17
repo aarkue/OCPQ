@@ -13,16 +13,24 @@ use itertools::Itertools;
 use tokio::{net::TcpListener, task::JoinHandle};
 
 use std::{
-    env,
     io::Cursor,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, RwLock,
+    },
 };
 
 use ocpq_shared::{
     binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
-        ExportFormat, FilterExportWithBoxTreeRequest,
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvalPageRequest,
+        EvalPageResponse, EvaluateBoxTreeResult, EvaluateBoxTreeSummary, ExportFormat,
+        FilterExportWithBoxTreeRequest,
     },
+    data_extraction::{
+        blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
+        ExecuteExtractionResponse,
+    },
+    data_source::{connect_and_get_metadata, ConnectDataSourceRequest, DataSourceMetadata},
     db_translation::{translate_to_sql_shared, DBTranslationInput},
     discovery::{
         auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
@@ -33,7 +41,9 @@ use ocpq_shared::{
         get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
         ConnectionConfig, JobStatus, OCPQJobOptions,
     },
-    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
+    oc_declare::statistics::{
+        get_activity_statistics, get_edge_stats, ActivityStatistics, BinnedEdgeDurationStats,
+    },
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     process_mining::{
         core::{
@@ -70,6 +80,7 @@ pub struct AppState {
     client: Arc<RwLock<Option<Client>>>,
     jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
+    eval_version_counter: Arc<AtomicU64>,
 }
 
 struct AppError(String);
@@ -88,8 +99,6 @@ impl From<String> for AppError {
 
 #[tokio::main]
 async fn main() {
-    let args = env::args().collect_vec();
-    dbg!(args);
     let state = AppState::default();
     let cors = CorsLayer::permissive();
     // .allow_methods([Method::GET, Method::POST])
@@ -100,7 +109,9 @@ async fn main() {
 
     let app = Router::new()
         .route("/ocel/load", post(load_ocel_file_req))
+        .route("/ocel/unload", post(unload_ocel))
         .route("/ocel/info", get(get_loaded_ocel_info))
+        .route("/ocel/sample-ids", post(get_sample_ids_handler))
         .route(
             "/ocel/upload-json",
             post(upload_ocel_json).layer(DefaultBodyLimit::disable()),
@@ -120,11 +131,13 @@ async fn main() {
         .route("/ocel/available", get(get_available_ocels))
         .route("/ocel/graph", post(ocel_graph_req))
         .route("/ocel/check-constraints-box", post(check_with_box_tree_req))
+        .route("/ocel/eval-results/page", post(eval_results_page))
         .route("/ocel/create-db-query", post(translate_to_db_req))
         .route(
             "/ocel/export-filter-box",
             post(filter_export_with_box_tree_req),
         )
+        .route("/ocel/export", post(export_ocel_req))
         .route(
             "/ocel/discover-constraints",
             post(auto_discover_constraints_handler),
@@ -145,7 +158,12 @@ async fn main() {
             "/ocel/get-oc-declare-edge-statistics",
             post(get_oc_declare_edge_statistics_handler),
         )
-        .route("/oc-declare/template-string", post(async |arcs: Json<Vec<OCDeclareArc>>| arcs.0.iter().map(|arc| arc.as_template_string()).join("\n")))
+        .route(
+            "/oc-declare/template-string",
+            post(async |arcs: Json<Vec<OCDeclareArc>>| {
+                arcs.0.iter().map(|arc| arc.as_template_string()).join("\n")
+            }),
+        )
         .route(
             "/ocel/export-bindings",
             post(export_bindings_table).layer(DefaultBodyLimit::disable()),
@@ -157,6 +175,8 @@ async fn main() {
         .route("/hpc/login", post(login_to_hpc_web))
         .route("/hpc/start", post(start_hpc_job_web))
         .route("/hpc/job-status/:job_id", get(get_hpc_job_status_web))
+        .route("/data-source/connect", post(connect_data_source_handler))
+        .route("/data-extraction/execute", post(execute_extraction_handler))
         .with_state(state)
         .route("/", get(|| async { "Hello, Aaron!" }))
         .layer(cors);
@@ -176,6 +196,24 @@ async fn get_loaded_ocel_info(
     }
 }
 
+async fn get_sample_ids_handler(
+    State(state): State<AppState>,
+    Json(req): Json<ocpq_shared::SampleIdsRequest>,
+) -> (StatusCode, Json<Option<ocpq_shared::SampleIds>>) {
+    match with_ocel_from_state(&State(state), |ocel| {
+        ocpq_shared::get_sample_ids(ocel, req.limit)
+    }) {
+        Some(x) => (StatusCode::OK, Json(Some(x))),
+        None => (StatusCode::NOT_FOUND, Json(None)),
+    }
+}
+
+async fn unload_ocel(State(state): State<AppState>) -> StatusCode {
+    *state.ocel.write().unwrap() = None;
+    clear_eval_res(&state);
+    StatusCode::OK
+}
+
 async fn upload_ocel_xml<'a>(
     State(state): State<AppState>,
     ocel_bytes: Bytes,
@@ -186,6 +224,8 @@ async fn upload_ocel_xml<'a>(
             let locel = SlimLinkedOCEL::from_ocel(ocel);
             let ocel_info: OCELInfo = (&locel).into();
             *x = Some(locel);
+            drop(x);
+            clear_eval_res(&state);
             Ok(Json(ocel_info))
         }
         Err(e) => Err(e.to_string().into()),
@@ -201,6 +241,8 @@ async fn upload_ocel_sqlite<'a>(
     let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     *x = Some(locel);
+    drop(x);
+    clear_eval_res(&state);
 
     (StatusCode::OK, Json(ocel_info))
 }
@@ -214,6 +256,8 @@ async fn upload_ocel_json<'a>(
     let ocel_info: OCELInfo = (&locel).into();
     let mut x = state.ocel.write().unwrap();
     *x = Some(locel);
+    drop(x);
+    clear_eval_res(&state);
     (StatusCode::OK, Json(ocel_info))
 }
 
@@ -230,8 +274,16 @@ async fn upload_ocel_xes_conversion<'a>(
     let ocel_info: OCELInfo = (&locel).into();
     let mut x = state.ocel.write().unwrap();
     *x = Some(locel);
+    drop(x);
+    clear_eval_res(&state);
     (StatusCode::OK, Json(ocel_info))
 }
+/// Drop any cached evaluation result. Must be called whenever `state.ocel` is replaced,
+/// because bindings reference indices that are only valid for the OCEL they were produced from.
+pub fn clear_eval_res(state: &AppState) {
+    *state.eval_res.write().unwrap() = None;
+}
+
 pub fn with_ocel_from_state<T, F>(State(state): &State<AppState>, f: F) -> Option<T>
 where
     F: FnOnce(&SlimLinkedOCEL) -> T,
@@ -255,18 +307,59 @@ pub async fn ocel_graph_req<'a>(
 pub async fn check_with_box_tree_req<'a>(
     state: State<AppState>,
     Json(req): Json<CheckWithBoxTreeRequest>,
-) -> axum::response::Result<Json<Option<EvaluateBoxTreeResult>>, (StatusCode, String)> {
-    let ocel_guard = state.ocel.read().unwrap();
-    let ocel = ocel_guard.as_ref();
-    if let Some(ocel) = ocel {
-        let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))
-            .map_err(|s| (StatusCode::BAD_REQUEST, s))?;
-        let res_to_ret = res.clone_first_few();
-        let mut new_eval_res_state = state.eval_res.write().unwrap();
-        *new_eval_res_state = Some(res);
-        return Ok(Json(Some(res_to_ret)));
+) -> axum::response::Result<Json<Option<EvaluateBoxTreeSummary>>, (StatusCode, String)> {
+    let mut res = {
+        let ocel_guard = state.ocel.read().unwrap();
+        let ocel = ocel_guard
+            .as_ref()
+            .ok_or((StatusCode::NOT_FOUND, "No OCEL Loaded".to_string()))?;
+        evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))
+            .map_err(|s| (StatusCode::BAD_REQUEST, s))?
+    };
+    // Hold the eval_res lock while assigning the version so the cached snapshot
+    // and the version we hand to the client are always consistent, even under
+    // concurrent evaluations.
+    let mut eval_guard = state.eval_res.write().unwrap();
+    res.eval_version = state.eval_version_counter.fetch_add(1, Ordering::SeqCst) + 1;
+    let summary = res.summary();
+    *eval_guard = Some(res);
+    Ok(Json(Some(summary)))
+}
+
+async fn eval_results_page(
+    State(state): State<AppState>,
+    Json(req): Json<EvalPageRequest>,
+) -> Result<Json<EvalPageResponse>, (StatusCode, String)> {
+    let guard = state.eval_res.read().unwrap();
+    let res = guard.as_ref().ok_or((
+        StatusCode::NOT_FOUND,
+        "No evaluation result cached".to_string(),
+    ))?;
+    match res.get_page(&req) {
+        Ok(page) => Ok(Json(page)),
+        Err(e) if e.starts_with("stale eval_version") => Err((StatusCode::GONE, e)),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
     }
-    Err((StatusCode::NOT_FOUND, "No OCEL Loaded".to_string()))
+}
+
+pub async fn export_ocel_req(
+    state: State<AppState>,
+    Json(format): Json<ExportFormat>,
+) -> (StatusCode, Bytes) {
+    with_ocel_from_state(&state, |ocel| {
+        let full_ocel = ocel.construct_ocel();
+        let bytes = match format {
+            ExportFormat::XML => {
+                let mut w = Cursor::new(Vec::new());
+                export_ocel_xml(&mut w, &full_ocel).unwrap();
+                Bytes::from(w.into_inner())
+            }
+            ExportFormat::JSON => Bytes::from(export_ocel_json_to_vec(&full_ocel).unwrap()),
+            ExportFormat::SQLITE => Bytes::from(export_ocel_sqlite_to_vec(&full_ocel).unwrap()),
+        };
+        (StatusCode::OK, bytes)
+    })
+    .unwrap_or((StatusCode::INTERNAL_SERVER_ERROR, Bytes::default()))
 }
 
 pub async fn filter_export_with_box_tree_req<'a>(
@@ -319,7 +412,7 @@ pub async fn evaluate_oc_declare_arcs_handler(
 ) -> Json<Option<Vec<f64>>> {
     Json(with_ocel_from_state(&state, |locel| {
         req.iter()
-            .map(|arc| arc.get_for_all_evs_perf(&locel))
+            .map(|arc| arc.get_for_all_evs_perf(locel))
             .collect()
     }))
 }
@@ -334,7 +427,7 @@ pub async fn get_activity_statistics_handler(
 pub async fn get_oc_declare_edge_statistics_handler(
     state: State<AppState>,
     Json(req): Json<OCDeclareArc>,
-) -> Json<Option<Vec<i64>>> {
+) -> Json<Option<BinnedEdgeDurationStats>> {
     Json(with_ocel_from_state(&state, |ocel| {
         get_edge_stats(ocel, &req)
     }))
@@ -429,7 +522,7 @@ async fn start_hpc_job_web(
         .port
         .parse::<u16>()
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let (folder_id, job_id) = submit_hpc_job(c, options)
+    let (_folder_id, job_id) = submit_hpc_job(c, options)
         .await
         .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
     let p = start_port_forwarding(
@@ -441,7 +534,6 @@ async fn start_hpc_job_web(
     .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
 
     state.jobs.write().unwrap().push((job_id.clone(), port, p));
-    println!("Ceated job {job_id} in folder {folder_id}");
     Ok(Json(job_id))
 }
 
@@ -454,4 +546,42 @@ async fn get_hpc_job_status_web(
     let status = get_job_status(c, job_id).await;
     let status = status.map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
     Ok(Json(status))
+}
+
+async fn connect_data_source_handler(
+    Json(req): Json<ConnectDataSourceRequest>,
+) -> Result<Json<DataSourceMetadata>, (StatusCode, String)> {
+    let metadata = connect_and_get_metadata(req)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok(Json(metadata))
+}
+
+async fn execute_extraction_handler(
+    State(state): State<AppState>,
+    Json(req): Json<ExecuteExtractionRequest>,
+) -> Result<Json<ExecuteExtractionResponse>, (StatusCode, String)> {
+    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    *state.ocel.write().unwrap() = Some(locel);
+    clear_eval_res(&state);
+    Ok(Json(response))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clear_eval_res_drops_cached_result() {
+        let state = AppState::default();
+        *state.eval_res.write().unwrap() = Some(EvaluateBoxTreeResult::default());
+        assert!(state.eval_res.read().unwrap().is_some());
+
+        clear_eval_res(&state);
+
+        assert!(state.eval_res.read().unwrap().is_none());
+    }
 }

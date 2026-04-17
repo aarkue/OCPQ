@@ -3,8 +3,13 @@ import type { OCDeclareArcLabel } from "./OCDeclareArcLabel";
 import type { OCDeclareArcType } from "./OCDeclareArcType";
 import type { OCDeclareNode } from "./OCDeclareNode";
 
-export type OCDeclareArc = { from: OCDeclareNode, to: OCDeclareNode, arc_type: OCDeclareArcType, label: OCDeclareArcLabel, 
-/**
- * First tuple element: min count (optional), Second: max count (optional)
- */
-counts: [number | null, number | null], };
+export type OCDeclareArc = {
+	from: OCDeclareNode;
+	to: OCDeclareNode;
+	arc_type: OCDeclareArcType;
+	label: OCDeclareArcLabel;
+	/**
+	 * First tuple element: min count (optional), Second: max count (optional)
+	 */
+	counts: [number | null, number | null];
+};

@@ -1,0 +1,59 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.0/schema.json",
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"correctness": {
+				"noUnusedVariables": "warn",
+				"noUnusedImports": "warn",
+				"useHookAtTopLevel": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "off",
+				"noArrayIndexKey": "off"
+			},
+			"style": {
+				"noNonNullAssertion": "off",
+				"useConst": "warn"
+			},
+			"a11y": {
+				"noStaticElementInteractions": "off",
+				"useKeyWithClickEvents": "off",
+				"useValidAnchor": "off",
+				"noLabelWithoutControl": "off",
+				"useFocusableInteractive": "off",
+				"useSemanticElements": "off",
+				"useAriaPropsForRole": "off",
+				"useButtonType": "off",
+				"noPositiveTabindex": "off",
+				"noSvgWithoutTitle": "off",
+				"useAltText": "off"
+			},
+			"complexity": {
+				"noUselessFragments": "warn"
+			}
+		}
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab",
+		"lineWidth": 100
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double",
+			"semicolons": "always"
+		}
+	},
+	"files": {
+		"includes": ["src/**", "!**/generated", "!**/*.css"]
+	}
+}

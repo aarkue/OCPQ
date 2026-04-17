@@ -21,7 +21,7 @@ pub async fn login_on_hpc(cfg: &ConnectionConfig) -> Result<Client, Error> {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OCPQJobOptions {
@@ -69,7 +69,7 @@ pub async fn get_job_status(client: Arc<Client>, job_id: String) -> Result<JobSt
 }
 
 // #[derive(TS)]
-// #[ts(export, export_to = "../../../frontend/src/types/generated/")]
+// #[ts(export)]
 // #[derive(Debug, Serialize, Deserialize, Clone)]
 // #[serde(rename_all = "camelCase")]
 // pub struct OCPQPortForwardingOptions {

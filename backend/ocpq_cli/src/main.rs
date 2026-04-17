@@ -7,8 +7,12 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use ocpq_shared::{binding_box::{BindingBoxTree, evaluate_box_tree}, process_mining::{Importable, OCEL, core::event_data::object_centric::linked_ocel::SlimLinkedOCEL}};
-
+use ocpq_shared::{
+    binding_box::{evaluate_box_tree, BindingBoxTree},
+    process_mining::{
+        core::event_data::object_centric::linked_ocel::SlimLinkedOCEL, Importable, OCEL,
+    },
+};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

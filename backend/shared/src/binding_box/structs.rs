@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fmt::Display,
     hash::Hash,
 };
@@ -20,7 +20,7 @@ use ts_rs::TS;
 
 use crate::cel::{add_cel_label, check_cel_predicate, get_vars_in_cel_program};
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Variable {
     Event(EventVariable),
@@ -37,7 +37,7 @@ impl Variable {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct EventVariable(pub usize);
 impl From<usize> for EventVariable {
@@ -46,7 +46,7 @@ impl From<usize> for EventVariable {
     }
 }
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct ObjectVariable(pub usize);
 impl From<usize> for ObjectVariable {
@@ -58,24 +58,24 @@ impl From<usize> for ObjectVariable {
 pub type Qualifier = Option<String>;
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub struct Binding {
     // #[ts(as = "BTreeMap<EventVariable, usize>")]
     // pub event_map: FxHashMap<EventVariable, EventIndex>,
-    #[ts(as = "BTreeMap<EventVariable, usize>")]
+    #[ts(as = "Vec<(EventVariable, usize)>")]
     pub event_map: Vec<(EventVariable, EventIndex)>,
     // #[ts(as = "BTreeMap<ObjectVariable, usize>")]
     // pub object_map: FxHashMap<ObjectVariable, ObjectIndex>,
-    #[ts(as = "BTreeMap<ObjectVariable, usize>")]
+    #[ts(as = "Vec<(ObjectVariable, usize)>")]
     pub object_map: Vec<(ObjectVariable, ObjectIndex)>,
     // pub label_map: FxHashMap<String, LabelValue>,
     pub label_map: Vec<(String, LabelValue)>,
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type", content = "value")]
@@ -160,7 +160,7 @@ impl Binding {
         Some(ocel.get_full_ob(ob_index))
     }
 
-    pub fn to_id_string<'a>(&self, ocel: &'a SlimLinkedOCEL) -> String {
+    pub fn to_id_string(&self, ocel: &SlimLinkedOCEL) -> String {
         let mut ret = String::new();
         for (_ev_var, ev_val) in &self.event_map {
             ret.push_str(ocel.get_ev_id(ev_val));
@@ -208,7 +208,7 @@ pub type NewObjectVariables = HashMap<ObjectVariable, HashSet<String>>;
 pub type NewEventVariables = HashMap<EventVariable, HashSet<String>>;
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BindingBox {
@@ -232,7 +232,7 @@ pub struct BindingBox {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum FilterLabel {
     #[default]
@@ -242,7 +242,7 @@ pub enum FilterLabel {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct LabelFunction {
@@ -251,7 +251,7 @@ pub struct LabelFunction {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -265,14 +265,66 @@ pub struct BindingBoxTree {
 }
 
 impl BindingBoxTree {
+    /// Compute the step order for each node once. Step order depends only on the
+    /// BindingBox structure, so it is stable across all parent bindings and can
+    /// be computed once per tree instead of once per (node, parent_binding) pair.
+    pub fn compute_step_cache(&self, ocel: &SlimLinkedOCEL) -> Vec<Vec<BindingStep>> {
+        self.nodes
+            .iter()
+            .map(|n| {
+                let (bbox, _children) = n.to_box();
+                BindingStep::get_binding_order(&bbox, None, ocel)
+            })
+            .collect()
+    }
+
     pub fn evaluate(&self, ocel: &SlimLinkedOCEL) -> Result<(EvaluationResults, bool), String> {
-        if let Some(root) = self.nodes.first() {
-            let ((ret, _violation), skipped) = root.evaluate(0, Binding::default(), self, ocel)?;
-            // ret.push((0, Binding::default(), violation));
-            Ok((ret, skipped))
-        } else {
-            Ok((vec![], false))
+        if self.nodes.is_empty() {
+            return Ok((vec![], false));
         }
+        // Collect every index that is referenced as a child by some other node.
+        // Whatever remains is a root of the forest; evaluate each with an empty
+        // binding so multi-root trees (submitted as one merged request from the
+        // frontend) produce a unified result.
+        let mut is_child = vec![false; self.nodes.len()];
+        for node in &self.nodes {
+            match node {
+                BindingBoxTreeNode::Box(_, children) => {
+                    for &c in children {
+                        if c < is_child.len() {
+                            is_child[c] = true;
+                        }
+                    }
+                }
+                BindingBoxTreeNode::OR(a, b) | BindingBoxTreeNode::AND(a, b) => {
+                    if *a < is_child.len() {
+                        is_child[*a] = true;
+                    }
+                    if *b < is_child.len() {
+                        is_child[*b] = true;
+                    }
+                }
+                BindingBoxTreeNode::NOT(a) => {
+                    if *a < is_child.len() {
+                        is_child[*a] = true;
+                    }
+                }
+            }
+        }
+
+        let step_cache = self.compute_step_cache(ocel);
+        let mut combined = Vec::new();
+        let mut any_skipped = false;
+        for (idx, node) in self.nodes.iter().enumerate() {
+            if is_child[idx] {
+                continue;
+            }
+            let ((ret, _violation), skipped) =
+                node.evaluate(idx, Binding::default(), self, ocel, &step_cache)?;
+            combined.extend(ret);
+            any_skipped = any_skipped || skipped;
+        }
+        Ok((combined, any_skipped))
     }
 
     pub fn get_ev_vars(&self) -> HashSet<EventVariable> {
@@ -300,7 +352,7 @@ impl BindingBoxTree {
     }
 }
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BindingBoxTreeNode {
     Box(BindingBox, Vec<usize>),
@@ -358,7 +410,7 @@ impl BindingBoxTreeNode {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ViolationReason {
     TooFewMatchingEvents(usize),
@@ -385,6 +437,7 @@ impl BindingBoxTreeNode {
         parent_binding: Binding,
         tree: &BindingBoxTree,
         ocel: &SlimLinkedOCEL,
+        step_cache: &[Vec<BindingStep>],
     ) -> Result<
         (
             (EvaluationResults, Vec<(Binding, Option<ViolationReason>)>),
@@ -394,7 +447,7 @@ impl BindingBoxTreeNode {
     > {
         let (bbox, children) = self.to_box();
         let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
-            bbox.expand(parent_binding, ocel)?;
+            bbox.expand_with_steps(parent_binding, ocel, &step_cache[own_index])?;
         enum BindingResult {
             FilteredOutBySizeFilter(Binding, EvaluationResults),
             Sat(Binding, EvaluationResults),
@@ -415,8 +468,7 @@ impl BindingBoxTreeNode {
                         .unwrap_or(format!("{UNNAMED}{c}"));
                     // c_name_map.insert(c_name.clone(), c);
                     let ((c_res, violations), _c_skipped) =
-                        // Evaluate Child
-                            tree.nodes[*c].evaluate(*c, b.clone(), tree, ocel)?;
+                        tree.nodes[*c].evaluate(*c, b.clone(), tree, ocel, step_cache)?;
                     child_res.insert(c_name, violations);
                     if children.len() * c_res.len() * expanded_len > 25_000_000 {
                         x.cancel();
@@ -577,105 +629,11 @@ impl BindingBoxTreeNode {
                 ),
             expanding_skipped_bindings || recursive_calls_cancelled,
         ))
-
-        // let (passed_size_filter, sat, ret) = expanded
-        //     .into_par_iter()
-        //     .flat_map_iter(|b| {
-        //         let mut passed_size_filter = true;
-        //         children.iter().map(move |c| {
-        //             let (mut c_res, violation) =
-        //                 tree.nodes[*c].evaluate(*c, own_index, b.clone(), tree, ocel);
-        //             c_res.push((*c, b.clone(), violation));
-        //             passed_size_filter = if let Some(_x) = violation {
-        //                 (true, c_res)
-        //             } else {
-        //                 (false, c_res)
-        //             }
-        //         })
-        //     })
-        //     .reduce(
-        //         || (false, vec![]),
-        //         |(violated1, res1), (violated2, res2)| {
-        //             (
-        //                 violated1 || violated2,
-        //                 res1.iter().chain(res2.iter()).cloned().collect(),
-        //             )
-        //         },
-        //     );
-
-        // if vio.is_none() && sat {
-        //     vio = Some(ViolationReason::ChildNotSatisfied)
-        // }
-        // (ret, vio)
     }
-    // BindingBoxTreeNode::OR(i1, i2) => {
-    //     let node1 = &tree.nodes[*i1];
-    //     let node2 = &tree.nodes[*i2];
-
-    //     let mut ret = vec![];
-
-    //     let (res_1, violation_1) =
-    //         node1.evaluate(*i1, own_index, parent_binding.clone(), tree, ocel);
-
-    //     ret.extend(res_1);
-    //     ret.push((*i1, parent_binding.clone(), violation_1));
-
-    //     let (res_2, violation_2) =
-    //         node2.evaluate(*i2, own_index, parent_binding.clone(), tree, ocel);
-
-    //     ret.extend(res_2);
-    //     ret.push((*i2, parent_binding.clone(), violation_2));
-
-    //     if violation_1.is_some() && violation_2.is_some() {
-    //         return (ret, Some(ViolationReason::NoChildrenOfORSatisfied));
-    //     }
-    //     (ret, None)
-    // }
-    // BindingBoxTreeNode::AND(i1, i2) => {
-    //     let node1 = &tree.nodes[*i1];
-    //     let node2 = &tree.nodes[*i2];
-
-    //     let mut ret = vec![];
-
-    //     let (res_1, violation_1) =
-    //         node1.evaluate(*i1, own_index, parent_binding.clone(), tree, ocel);
-
-    //     ret.push((*i1, parent_binding.clone(), violation_1));
-    //     ret.extend(res_1);
-    //     let (res_2, violation_2) =
-    //         node2.evaluate(*i2, own_index, parent_binding.clone(), tree, ocel);
-    //     ret.push((*i2, parent_binding.clone(), violation_2));
-    //     ret.extend(res_2);
-
-    //     if violation_1.is_some() {
-    //         return (ret, Some(ViolationReason::LeftChildOfANDUnsatisfied));
-    //     } else if violation_2.is_some() {
-    //         return (ret, Some(ViolationReason::RightChildOfANDUnsatisfied));
-    //     }
-    //     (ret, None)
-    // }
-    // BindingBoxTreeNode::NOT(i) => {
-    //     let mut ret = vec![];
-    //     let node = &tree.nodes[*i];
-
-    //     let (res_c, violation_c) =
-    //         node.evaluate(*i, own_index, parent_binding.clone(), tree, ocel);
-    //     ret.extend(res_c);
-    //     ret.push((*i, parent_binding.clone(), violation_c));
-    //     if violation_c.is_some() {
-    //         // NOT satisfied
-    //         (ret, None)
-    //     } else {
-    //         (ret, Some(ViolationReason::ChildrenOfNOTSatisfied))
-    //     }
-    // }
-    //     _ => todo!(),
-    // }
-    // }
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Filter {
@@ -871,7 +829,7 @@ impl Filter {
 }
 
 #[derive(TS, Debug, Clone, Serialize, Deserialize)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(tag = "type")]
 
 pub enum ValueFilter {
@@ -941,7 +899,7 @@ impl ValueFilter {
 }
 
 #[derive(TS, Debug, Clone, Serialize, Deserialize)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(tag = "type")]
 pub enum ObjectValueFilterTimepoint {
     Always,
@@ -950,7 +908,7 @@ pub enum ObjectValueFilterTimepoint {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SizeFilter {
@@ -1094,7 +1052,7 @@ impl SizeFilter {
 type NodeEdgeName = String;
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Constraint {
