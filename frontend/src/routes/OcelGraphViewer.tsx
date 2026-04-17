@@ -206,7 +206,6 @@ export default function OcelGraphViewer({
 						variant="outline"
 						className="absolute top-1 right-1 z-10 -translate-x-[200%] mr-4"
 						onClick={() => {
-							console.log(data.nodes[0]);
 							if (data.nodes[0] !== undefined) {
 								const { x, y } = data.nodes[0] as unknown as {
 									x: number | undefined;

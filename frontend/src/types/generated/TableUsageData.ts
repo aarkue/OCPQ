@@ -2,10 +2,24 @@
 import type { AttributeConfig } from "./AttributeConfig";
 import type { ChangeTableEventRule } from "./ChangeTableEventRule";
 import type { InlineObjectReference } from "./InlineObjectReference";
+import type { MultiValueConfig } from "./MultiValueConfig";
+import type { ObjectTypeSpec } from "./ObjectTypeSpec";
 import type { TimestampSource } from "./TimestampSource";
 import type { ValueExpression } from "./ValueExpression";
 
 /**
  * How a table should be used in the extraction
  */
-export type TableUsageData = { "mode": "none" } | { "mode": "single-object", object_type: string, id: ValueExpression, } | { "mode": "multi-object", object_type: ValueExpression, id: ValueExpression, } | { "mode": "single-event", event_type: string, id: ValueExpression, timestamp: TimestampSource, inline_object_references: Array<InlineObjectReference>, } | { "mode": "multi-event", event_type: ValueExpression, id: ValueExpression, timestamp: TimestampSource, inline_object_references: Array<InlineObjectReference>, } | { "mode": "e2o-relation", source_event: ValueExpression, target_object: ValueExpression, qualifier: ValueExpression | null, } | { "mode": "o2o-relation", source_object: ValueExpression, target_object: ValueExpression, qualifier: ValueExpression | null, } | { "mode": "change-table-events", timestamp: TimestampSource, id: ValueExpression | null, event_rules: Array<ChangeTableEventRule>, inline_object_references: Array<InlineObjectReference>, } | { "mode": "change-table-object-changes", object_id: ValueExpression, object_type: string, timestamp: TimestampSource, attribute_config: AttributeConfig, };
+export type TableUsageData = { "mode": "event", event_type: ValueExpression, id: ValueExpression | null, timestamp: TimestampSource, inline_object_references: Array<InlineObjectReference>, } | { "mode": "object", object_type: ValueExpression, id: ValueExpression, prefix_id_with_type: boolean, 
+/**
+ * When set, enables object change tracking (attribute values over time)
+ */
+timestamp: TimestampSource | null, 
+/**
+ * When set, enables object change tracking (attribute values over time)
+ */
+attribute_config: AttributeConfig | null, } | { "mode": "e2o-relation", source_event: ValueExpression, target_object: ValueExpression, qualifier: ValueExpression | null, target_object_type: ObjectTypeSpec | null, 
+/**
+ * Split the target_object cell into multiple IDs (delimiter or regex)
+ */
+target_object_multi: MultiValueConfig | null, } | { "mode": "o2o-relation", source_object: ValueExpression, target_object: ValueExpression, qualifier: ValueExpression | null, source_object_type: ObjectTypeSpec | null, target_object_type: ObjectTypeSpec | null, source_object_multi: MultiValueConfig | null, target_object_multi: MultiValueConfig | null, } | { "mode": "change-table-events", timestamp: TimestampSource, id: ValueExpression | null, event_rules: Array<ChangeTableEventRule>, inline_object_references: Array<InlineObjectReference>, };

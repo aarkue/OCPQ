@@ -1,8 +1,6 @@
 import { Fragment, useContext, useEffect, useRef, useState } from "react";
 import { BsArrowsCollapse, BsArrowsExpand } from "react-icons/bs";
-import { BackendProviderContext } from "@/BackendProviderContext";
 import { useBackend, useOcelInfo } from "@/hooks";
-import { OcelInfoContext } from "@/lib/ocel-info-context";
 import OcelGraphViewer from "@/routes/OcelGraphViewer";
 import { IconForDataType } from "@/routes/ocel-info/OcelTypeViewer";
 import { VisualEditorContext } from "@/routes/visual-editor/helper/VisualEditorContext";

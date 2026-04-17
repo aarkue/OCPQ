@@ -1,20 +1,16 @@
 import { useState } from "react";
 import { LuChevronDown, LuLink, LuPlus, LuSettings, LuTrash } from "react-icons/lu";
+import { TbAlertTriangle } from "react-icons/tb";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import type { DataSourceColumnInfo } from "@/types/generated/DataSourceColumnInfo";
 import {
 	DEFAULT_VALUE_EXPR,
 	type InlineObjectReference,
+	type ObjectTypeSpec,
 	type ValueExpression,
 } from "./blueprint-flow-types";
+import { MultiValueConfigEditor } from "./MultiValueConfigEditor";
 
 interface InlineObjectReferencesEditorProps {
 	references: InlineObjectReference[];
@@ -32,15 +28,6 @@ interface InlineObjectReferencesEditorProps {
 	}>;
 }
 
-const COMMON_DELIMITERS = [
-	{ value: ",", label: "Comma (,)" },
-	{ value: ";", label: "Semicolon (;)" },
-	{ value: "/", label: "Slash (/)" },
-	{ value: "|", label: "Pipe (|)" },
-	{ value: "\\t", label: "Tab" },
-	{ value: " ", label: "Space" },
-];
-
 export function InlineObjectReferencesEditor({
 	references,
 	onChange,
@@ -57,11 +44,7 @@ export function InlineObjectReferencesEditor({
 			object_id: { ...DEFAULT_VALUE_EXPR },
 			object_type: null,
 			qualifier: null,
-			multi_value_config: {
-				enabled: false,
-				delimiter: ",",
-				trim_values: true,
-			},
+			multi_value_config: null,
 		};
 		onChange([...references, newRef]);
 		setExpandedIds((prev) => new Set([...prev, newRef.id]));
@@ -106,6 +89,15 @@ export function InlineObjectReferencesEditor({
 		return idLabel;
 	};
 
+	const getSampleForExpr = (expr: ValueExpression): string | undefined => {
+		if (expr.type !== "column" || !expr.column || !previewData) return undefined;
+		for (const row of previewData) {
+			const v = row[expr.column];
+			if (v) return v;
+		}
+		return undefined;
+	};
+
 	return (
 		<div className="space-y-3">
 			<div className="flex items-center justify-between">
@@ -124,8 +116,6 @@ export function InlineObjectReferencesEditor({
 			{references.map((ref, i) => {
 				const isExpanded = expandedIds.has(ref.id);
 				const showAdvanced = showAdvancedIds.has(ref.id);
-				const hasObjectType = ref.object_type != null && ref.object_type !== "";
-				const isObjectTypeString = typeof ref.object_type === "string";
 
 				return (
 					<div key={ref.id} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
@@ -172,91 +162,21 @@ export function InlineObjectReferencesEditor({
 									typeHint="id"
 								/>
 
-								{/* Multi-value configuration */}
-								<div className="space-y-2">
-									<label className="flex items-center gap-2 cursor-pointer">
-										<input
-											type="checkbox"
-											checked={ref.multi_value_config?.enabled ?? false}
-											onChange={(e) =>
-												updateReference(i, {
-													multi_value_config: {
-														enabled: e.target.checked,
-														delimiter: ref.multi_value_config?.delimiter ?? ",",
-														trim_values: ref.multi_value_config?.trim_values ?? true,
-													},
-												})
-											}
-											className="rounded border-slate-300 text-sky-500 focus:ring-sky-500"
-										/>
-										<span className="text-xs font-medium text-slate-600">
-											Multiple objects per cell
-										</span>
-									</label>
+								<MultiValueConfigEditor
+									label="Multiple objects per cell"
+									value={ref.multi_value_config}
+									onChange={(mv) => updateReference(i, { multi_value_config: mv })}
+									previewValue={getSampleForExpr(ref.object_id)}
+								/>
 
-									{ref.multi_value_config?.enabled && (
-										<div className="pl-5 space-y-2">
-											<div className="flex items-center gap-2">
-												<Label className="text-xs text-slate-500 whitespace-nowrap">
-													Delimiter:
-												</Label>
-												<Select
-													value={ref.multi_value_config.delimiter}
-													onValueChange={(v) =>
-														updateReference(i, {
-															multi_value_config: {
-																enabled: ref.multi_value_config?.enabled ?? false,
-																trim_values: ref.multi_value_config?.trim_values ?? true,
-																delimiter: v === "\\t" ? "\t" : v,
-															},
-														})
-													}
-												>
-													<SelectTrigger className="h-7 text-xs flex-1">
-														<SelectValue />
-													</SelectTrigger>
-													<SelectContent>
-														{COMMON_DELIMITERS.map((d) => (
-															<SelectItem key={d.value} value={d.value} className="text-xs">
-																{d.label}
-															</SelectItem>
-														))}
-													</SelectContent>
-												</Select>
-											</div>
-
-											<label className="flex items-center gap-2 cursor-pointer">
-												<input
-													type="checkbox"
-													checked={ref.multi_value_config.trim_values}
-													onChange={(e) =>
-														updateReference(i, {
-															multi_value_config: {
-																...ref.multi_value_config!,
-																trim_values: e.target.checked,
-															},
-														})
-													}
-													className="rounded border-slate-300 text-sky-500 focus:ring-sky-500"
-												/>
-												<span className="text-xs text-slate-500">Trim whitespace from values</span>
-											</label>
-
-											{/* Preview */}
-											{previewData &&
-												previewData.length > 0 &&
-												ref.object_id.type === "column" &&
-												ref.object_id.column && (
-													<MultiValuePreview
-														column={ref.object_id.column}
-														delimiter={ref.multi_value_config.delimiter}
-														trim={ref.multi_value_config.trim_values}
-														previewData={previewData}
-													/>
-												)}
-										</div>
-									)}
-								</div>
+								{/* Object Type: needed for prefix resolution and auto-creation */}
+								<ObjectTypeEditor
+									value={ref.object_type}
+									onChange={(v) => updateReference(i, { object_type: v })}
+									columns={columns}
+									previewData={previewData}
+									ValueExpressionEditor={ValueExpressionEditor}
+								/>
 
 								{/* Advanced options toggle */}
 								<button
@@ -276,86 +196,13 @@ export function InlineObjectReferencesEditor({
 										{/* Qualifier (optional) */}
 										<ValueExpressionEditor
 											label="Qualifier (optional)"
-											value={ref.qualifier ?? { ...DEFAULT_VALUE_EXPR }}
+											value={ref.qualifier ?? { type: "constant" as const, value: "" }}
 											onChange={(v) => updateReference(i, { qualifier: v })}
 											columns={columns}
 											previewData={previewData}
 											typeHint="string"
 											allowEmpty
 										/>
-
-										{/* Object Type (optional) */}
-										<div className="space-y-1">
-											<div className="flex items-center justify-between">
-												<Label className="text-xs font-medium text-slate-600">
-													Object Type (optional)
-												</Label>
-												<div className="flex rounded-md border border-slate-200 text-[10px] overflow-hidden">
-													<button
-														type="button"
-														onClick={() => updateReference(i, { object_type: null })}
-														className={`px-1.5 py-0.5 transition-colors ${
-															!hasObjectType
-																? "bg-sky-500 text-white"
-																: "bg-white text-slate-500 hover:bg-slate-50"
-														}`}
-													>
-														None
-													</button>
-													<button
-														type="button"
-														onClick={() => updateReference(i, { object_type: "" })}
-														className={`px-1.5 py-0.5 transition-colors ${
-															hasObjectType && isObjectTypeString
-																? "bg-sky-500 text-white"
-																: "bg-white text-slate-500 hover:bg-slate-50"
-														}`}
-													>
-														Fixed
-													</button>
-													<button
-														type="button"
-														onClick={() =>
-															updateReference(i, {
-																object_type: { ...DEFAULT_VALUE_EXPR },
-															})
-														}
-														className={`px-1.5 py-0.5 transition-colors ${
-															hasObjectType && !isObjectTypeString
-																? "bg-sky-500 text-white"
-																: "bg-white text-slate-500 hover:bg-slate-50"
-														}`}
-													>
-														Column
-													</button>
-												</div>
-											</div>
-
-											{hasObjectType && isObjectTypeString && (
-												<input
-													className="w-full bg-white border border-slate-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-													placeholder='e.g. "Customer"'
-													value={ref.object_type as string}
-													onChange={(e) => updateReference(i, { object_type: e.target.value })}
-												/>
-											)}
-
-											{hasObjectType && !isObjectTypeString && (
-												<ValueExpressionEditor
-													label=""
-													value={ref.object_type as ValueExpression}
-													onChange={(v) => updateReference(i, { object_type: v })}
-													columns={columns}
-													previewData={previewData}
-													typeHint="type"
-												/>
-											)}
-
-											<p className="text-[10px] text-slate-400">
-												If set, objects will be created with this type. Otherwise, only E2O
-												relations are added.
-											</p>
-										</div>
 									</div>
 								)}
 							</div>
@@ -372,35 +219,67 @@ export function InlineObjectReferencesEditor({
 	);
 }
 
-function MultiValuePreview({
-	column,
-	delimiter,
-	trim,
+function ObjectTypeEditor({
+	value,
+	onChange,
+	columns,
 	previewData,
+	ValueExpressionEditor,
 }: {
-	column: string;
-	delimiter: string;
-	trim: boolean;
-	previewData: Array<Record<string, string>>;
+	value: ObjectTypeSpec | null;
+	onChange: (v: ObjectTypeSpec | null) => void;
+	columns: Record<string, DataSourceColumnInfo>;
+	previewData?: Array<Record<string, string>>;
+	ValueExpressionEditor: React.ComponentType<{
+		label: string;
+		value: ValueExpression;
+		onChange: (v: ValueExpression) => void;
+		columns: Record<string, DataSourceColumnInfo>;
+		previewData?: Array<Record<string, string>>;
+		typeHint?: "id" | "timestamp" | "type" | "string";
+		allowEmpty?: boolean;
+	}>;
 }) {
-	const sampleRow = previewData.find((row) => row[column]?.includes(delimiter));
-	if (!sampleRow) return null;
+	// Map ObjectTypeSpec (string | ValueExpression | null) -> ValueExpression for the editor
+	const exprValue: ValueExpression | null =
+		value == null ? null : typeof value === "string" ? { type: "constant", value } : value;
 
-	const rawValue = sampleRow[column];
-	const splitValues = rawValue.split(delimiter).map((v) => (trim ? v.trim() : v));
+	const handleChange = (v: ValueExpression | null | undefined) => {
+		if (v == null) {
+			onChange(null);
+		} else if (v.type === "constant") {
+			onChange(v.value); // Store as plain string (ObjectTypeSpec.Fixed)
+		} else {
+			onChange(v); // Store as ValueExpression (ObjectTypeSpec.Expression)
+		}
+	};
 
 	return (
-		<div className="text-[10px] bg-slate-50 rounded p-2 space-y-1">
-			<div className="text-slate-500">
-				Preview splitting "<span className="font-mono">{rawValue}</span>":
-			</div>
-			<div className="flex flex-wrap gap-1">
-				{splitValues.map((val, idx) => (
-					<span key={idx} className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-mono">
-						{val}
+		<div className="space-y-1">
+			<ValueExpressionEditor
+				label="Object Type"
+				value={exprValue ?? { ...DEFAULT_VALUE_EXPR }}
+				onChange={handleChange}
+				columns={columns}
+				previewData={previewData}
+				typeHint="type"
+				allowEmpty
+			/>
+			{exprValue == null ? (
+				<p className="text-[10px] text-amber-600 flex items-start gap-1">
+					<TbAlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+					<span>
+						No type specified. If the referenced objects use "Prefix ID with type", the lookup will
+						fail. Set the type to enable automatic prefix resolution. Objects will only be
+						auto-created if a type is set.
 					</span>
-				))}
-			</div>
+				</p>
+			) : (
+				<p className="text-[10px] text-slate-400">
+					If the referenced objects use "Prefix ID with type", the ID will be prefixed
+					automatically. Objects will be created with this type if they don't exist yet.
+				</p>
+			)}
 		</div>
 	);
 }

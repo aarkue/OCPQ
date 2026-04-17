@@ -33,6 +33,7 @@ export function DataTablePagination<TData, TValue>({
 		getCoreRowModel: getCoreRowModel(),
 		getPaginationRowModel: getPaginationRowModel(),
 		getFilteredRowModel: getFilteredRowModel(),
+		autoResetPageIndex: false,
 		initialState: {
 			pagination: {
 				pageIndex: 0,

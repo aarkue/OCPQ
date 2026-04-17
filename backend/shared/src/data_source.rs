@@ -2,7 +2,7 @@
 //! This module defines the data structures and functions for connecting to various data sources using the DBCon library,
 //! retrieving metadata about the tables, columns, primary keys, and foreign keys, and providing a preview of the data.
 //!
-//! The types of ConDB are wrapped for better integration with the frontend (e.g., generating TypeScript types using ts-rs).
+//! The types of DBCon are wrapped for better integration with the frontend (e.g., generating TypeScript types using ts-rs).
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ use ts_rs::TS;
 
 /// Request to connect to a data source
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectDataSourceRequest {
     /// A name to identify the data source
@@ -23,7 +23,7 @@ pub struct ConnectDataSourceRequest {
 
 /// Information about a single column
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSourceColumnInfo {
     pub name: String,
@@ -43,7 +43,7 @@ impl From<&DataColumnInfo> for DataSourceColumnInfo {
 
 /// Information about a primary key
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSourcePrimaryKey {
     pub name: String,
@@ -61,7 +61,7 @@ impl From<&PrimaryKey> for DataSourcePrimaryKey {
 
 /// Information about a foreign key
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSourceForeignKey {
     pub name: String,
@@ -83,7 +83,7 @@ impl From<&ForeignKey> for DataSourceForeignKey {
 
 /// Information about a single table
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSourceTableInfo {
     pub name: String,
@@ -117,7 +117,7 @@ impl From<&DataTableInfo> for DataSourceTableInfo {
 
 /// Response containing all metadata about a connected data source
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSourceMetadata {
     /// The name of the data source

@@ -12,8 +12,7 @@ import ViolationIndicator from "./ViolationIndicator";
 export default function EventTypeNode({ data, id, selected }: NodeProps<Node<GateNodeData>>) {
 	const { violationsPerNode, onNodeDataChange } = useContext(VisualEditorContext);
 
-	const hideViolations: boolean | undefined = false;
-	const violations = hideViolations ? undefined : violationsPerNode?.evalRes[id];
+	const violations = violationsPerNode?.evalRes[id];
 
 	return (
 		<div

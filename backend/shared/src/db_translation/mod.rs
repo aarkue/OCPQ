@@ -46,7 +46,7 @@ pub struct TranslationToSQL {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DatabaseType {
     SQLite,

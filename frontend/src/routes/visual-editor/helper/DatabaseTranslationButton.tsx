@@ -1,9 +1,8 @@
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { LuClipboard } from "react-icons/lu";
 import { TbArrowRight, TbDatabaseEdit } from "react-icons/tb";
-import { BackendProviderContext } from "@/BackendProviderContext";
 import AlertHelper from "@/components/AlertHelper";
 import {
 	Accordion,
@@ -21,7 +20,6 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useBackend, useOcelInfo } from "@/hooks";
-import { OcelInfoContext } from "@/lib/ocel-info-context";
 import { evaluateConstraints } from "./evaluation/evaluate-constraints";
 import type { EventTypeLinkData, EventTypeNodeData, GateNodeData } from "./types";
 

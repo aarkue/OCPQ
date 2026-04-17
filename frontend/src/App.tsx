@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { BsFileEarmarkBreak, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml } from "react-icons/bs";
@@ -16,10 +16,9 @@ import { OcelFilePicker } from "./components/ocel/OcelFilePicker";
 import { OcelSelector } from "./components/ocel/OcelSelector";
 import { useBackend } from "./hooks/useBackend";
 import { useOcelAvailable } from "./hooks/useOcelAvailable";
-import { useInvalidateOcel, useOcelInfo, useOcelInfoQuery } from "./hooks/useOcelInfo";
+import { useOcelInfoQuery } from "./hooks/useOcelInfo";
 import { InfoSheetContext, type InfoSheetState } from "./InfoSheet";
 import InfoSheetViewer from "./InfoSheetViewer";
-import { OcelInfoContext } from "./lib/ocel-info-context";
 import type { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 import type { OCELInfo } from "./types/ocel";
 
@@ -32,9 +31,8 @@ function App() {
 		cpus: 4,
 		hours: 0.5,
 		port: "3300",
-		binaryPath:
-			"/home/aarkue/doc/projects/OCPQ/backend/target/x86_64-unknown-linux-gnu/release/ocpq-web-server",
-		relayAddr: "login23-1.hpc.itc.rwth-aachen.de",
+		binaryPath: "",
+		relayAddr: "",
 	});
 
 	const innerBackend = useMemo<BackendProvider>(() => {
@@ -68,39 +66,31 @@ function App() {
 
 function InnerApp({ children }: { children?: React.ReactNode }) {
 	const [loading, setLoading] = useState(false);
-	const [ocelInfo, setOcelInfo] = useState<OCELInfo>();
 	const location = useLocation();
 	const navigate = useNavigate();
 	const isAtRoot = location.pathname === "/";
 	const backend = useBackend();
-	const invalidateOcel = useInvalidateOcel();
+	const queryClient = useQueryClient();
+
+	const ocelInfoQuery = useOcelInfoQuery();
+	const availableOcelsQuery = useOcelAvailable();
+
+	const ocelInfo = ocelInfoQuery.data;
+	const backendAvailable = ocelInfoQuery.isSuccess;
+	const availableOcels = availableOcelsQuery.data ?? [];
 
 	const setOcelInfoAndNavigate = useCallback(
 		(info: OCELInfo | undefined) => {
-			setOcelInfo(info);
-			invalidateOcel();
+			queryClient.setQueryData<OCELInfo | undefined>(["ocel", "info"], info);
+			queryClient.invalidateQueries({ queryKey: ["ocel"] });
 			if (info !== undefined) {
 				navigate("/ocel-info");
 			}
 		},
-		[invalidateOcel, navigate],
+		[queryClient, navigate],
 	);
 
 	const [infoSheet, setInfoSheet] = useState<InfoSheetState>();
-
-	// Fetch OCEL info and available OCELs using React Query
-	const ocelInfoQuery = useOcelInfoQuery();
-	const availableOcelsQuery = useOcelAvailable();
-
-	const backendAvailable = ocelInfoQuery.isSuccess;
-	const availableOcels = availableOcelsQuery.data ?? [];
-
-	// Sync query data to local state (for context)
-	useEffect(() => {
-		if (ocelInfoQuery.data !== undefined) {
-			setOcelInfo(ocelInfoQuery.data);
-		}
-	}, [ocelInfoQuery]);
 
 	// Handle initial files (Tauri)
 	useEffect(() => {
@@ -123,18 +113,39 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 	}, [backend, setOcelInfoAndNavigate]);
 
 	// Drag-drop listener for Tauri
-	const initRef = useRef(false);
+	const locationRef = useRef(location);
+	locationRef.current = location;
+	const loadingRef = useRef(loading);
+	loadingRef.current = loading;
 	useEffect(() => {
-		let dragDropUnregister: (() => unknown) | undefined | true;
+		if (!backend["drag-drop-listener"] || !backend["ocel/picker"]) return;
 
-		if (!initRef.current && backend["drag-drop-listener"] && backend["ocel/picker"]) {
-			initRef.current = true;
-			backend["drag-drop-listener"]((e) => {
-				if (loading) return;
+		let cancelled = false;
+		let unregister: (() => unknown) | undefined;
 
-				if (e.type === "enter") {
-					const isOcel =
-						e.path.endsWith(".json") || e.path.endsWith(".xml") || e.path.endsWith(".sqlite");
+		backend["drag-drop-listener"]((e) => {
+			if (cancelled || loadingRef.current) return;
+			const isOnBlueprintEditor = locationRef.current.pathname.startsWith("/data-extraction/");
+
+			if (e.type === "enter") {
+				const isCsv = e.path.endsWith(".csv");
+				const isSqlite = e.path.endsWith(".sqlite") || e.path.endsWith(".db");
+				const routeAsDataSource = (isCsv || isSqlite) && isOnBlueprintEditor;
+
+				if (routeAsDataSource) {
+					toast(
+						<p className="text-md font-medium flex items-center gap-x-1">
+							<BsFiletypeSql size={24} className="text-blue-600" />
+							Drop to add as data source
+						</p>,
+						{
+							position: "bottom-center",
+							style: { marginBottom: "1rem" },
+							id: "ocel-drop-hint",
+						},
+					);
+				} else {
+					const isOcel = e.path.endsWith(".json") || e.path.endsWith(".xml") || isSqlite;
 					const isXes = e.path.endsWith(".xes") || e.path.endsWith(".xes.gz");
 
 					if (isOcel || isXes) {
@@ -142,7 +153,7 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 							? BsFiletypeJson
 							: e.path.endsWith(".xml")
 								? BsFiletypeXml
-								: e.path.endsWith(".sqlite")
+								: isSqlite
 									? BsFiletypeSql
 									: BsFileEarmarkBreak;
 
@@ -159,8 +170,20 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 						);
 					}
 				}
+			}
 
-				if (e.type === "drop") {
+			if (e.type === "drop") {
+				const isCsv = e.path.endsWith(".csv");
+				const isSqlite = e.path.endsWith(".sqlite") || e.path.endsWith(".db");
+				const routeAsDataSource = (isCsv || isSqlite) && isOnBlueprintEditor;
+
+				if (routeAsDataSource) {
+					window.dispatchEvent(
+						new CustomEvent("data-source-file-drop", {
+							detail: { path: e.path, type: isCsv ? "csv" : "sqlite" },
+						}),
+					);
+				} else {
 					setLoading(true);
 					toast
 						.promise(backend["ocel/picker"]!(e.path), {
@@ -171,22 +194,20 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 						.then(setOcelInfoAndNavigate)
 						.finally(() => setLoading(false));
 				}
-			}).then((unregister) => {
-				if (dragDropUnregister === true) {
-					unregister();
-				} else {
-					dragDropUnregister = unregister;
-				}
-			});
-		}
+			}
+		}).then((unreg) => {
+			if (cancelled) {
+				unreg();
+			} else {
+				unregister = unreg;
+			}
+		});
 
 		return () => {
-			if (typeof dragDropUnregister === "function") {
-				dragDropUnregister();
-			}
-			dragDropUnregister = true;
+			cancelled = true;
+			unregister?.();
 		};
-	}, [backend, loading, setOcelInfoAndNavigate]);
+	}, [backend, setOcelInfoAndNavigate]);
 
 	function handleFileUpload(file: File) {
 		if (!backend["ocel/upload"]) {
@@ -221,59 +242,57 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 	const showAvailableOcels = availableOcels.length > 0 && backend["ocel/available"] !== undefined;
 
 	return (
-		<OcelInfoContext.Provider value={ocelInfo}>
-			<InfoSheetContext.Provider
-				value={{ infoSheetState: infoSheet, setInfoSheetState: setInfoSheet }}
-			>
-				<div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[13rem_auto]">
-					<Sidebar ocelInfo={ocelInfo} backendAvailable={backendAvailable}>
-						{children}
-					</Sidebar>
-					<div className="px-4 overflow-auto my-4">
-						{isAtRoot && (
-							<>
-								<h2 className="text-4xl font-black mb-2">Load a Dataset</h2>
-								<p className="text-xl text-muted-foreground mb-1">
-									OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite)
-								</p>
-								<p className="text-sm text-muted-foreground mb-2">
-									XES/XES.GZ files are also supported and are interpreted with the single object
-									type <span className="font-mono italic">Case</span>.
-								</p>
-							</>
-						)}
-						{isAtRoot && (
-							<OcelFilePicker
+		<InfoSheetContext.Provider
+			value={{ infoSheetState: infoSheet, setInfoSheetState: setInfoSheet }}
+		>
+			<div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[13rem_auto]">
+				<Sidebar ocelInfo={ocelInfo} backendAvailable={backendAvailable}>
+					{children}
+				</Sidebar>
+				<div className="px-4 overflow-auto my-4">
+					{isAtRoot && (
+						<>
+							<h2 className="text-4xl font-black mb-2">Load a Dataset</h2>
+							<p className="text-xl text-muted-foreground mb-1">
+								OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite)
+							</p>
+							<p className="text-sm text-muted-foreground mb-2">
+								XES/XES.GZ files are also supported and are interpreted with the single object type{" "}
+								<span className="font-mono italic">Case</span>.
+							</p>
+						</>
+					)}
+					{isAtRoot && (
+						<OcelFilePicker
+							loading={loading}
+							setLoading={setLoading}
+							onOcelLoaded={setOcelInfoAndNavigate}
+						/>
+					)}
+					{isAtRoot && showAvailableOcels && (
+						<OcelSelector
+							availableOcels={availableOcels}
+							loading={loading}
+							setLoading={setLoading}
+							onOcelLoaded={setOcelInfoAndNavigate}
+						/>
+					)}
+					{isAtRoot && (
+						<>
+							{showAvailableOcels && <div className="w-full">OR</div>}
+							<OcelDropzone
 								loading={loading}
 								setLoading={setLoading}
+								onFileSelect={handleFileUpload}
 								onOcelLoaded={setOcelInfoAndNavigate}
 							/>
-						)}
-						{isAtRoot && showAvailableOcels && (
-							<OcelSelector
-								availableOcels={availableOcels}
-								loading={loading}
-								setLoading={setLoading}
-								onOcelLoaded={setOcelInfoAndNavigate}
-							/>
-						)}
-						{isAtRoot && (
-							<>
-								{showAvailableOcels && <div className="w-full">OR</div>}
-								<OcelDropzone
-									loading={loading}
-									setLoading={setLoading}
-									onFileSelect={handleFileUpload}
-									onOcelLoaded={setOcelInfoAndNavigate}
-								/>
-							</>
-						)}
-						<Outlet />
-					</div>
+						</>
+					)}
+					<Outlet />
 				</div>
-				<InfoSheetViewer />
-			</InfoSheetContext.Provider>
-		</OcelInfoContext.Provider>
+			</div>
+			<InfoSheetViewer />
+		</InfoSheetContext.Provider>
 	);
 }
 

@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { LuPlus, LuTrash } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import type { DataSourceColumnInfo } from "@/types/generated/DataSourceColumnInfo";
 import type { BaseChangeTableCondition, ChangeTableCondition } from "./blueprint-flow-types";
+import { ColumnSelector } from "./TableUsageConfig";
 
 // ---- Operator metadata ----
 
@@ -17,6 +19,7 @@ type ConditionOperator = BaseChangeTableCondition["type"];
 
 const OPERATOR_LABELS: Record<ConditionOperator, string> = {
 	"column-equals": "equals",
+	"column-not-equals": "does not equal",
 	"column-not-empty": "is not empty",
 	"column-matches": "matches regex",
 };
@@ -25,6 +28,8 @@ function makeDefaultCondition(op: ConditionOperator): BaseChangeTableCondition {
 	switch (op) {
 		case "column-equals":
 			return { type: "column-equals", column: "", value: "" };
+		case "column-not-equals":
+			return { type: "column-not-equals", column: "", value: "" };
 		case "column-not-empty":
 			return { type: "column-not-empty", column: "" };
 		case "column-matches":
@@ -232,7 +237,14 @@ function BaseConditionRow({
 	columns: Record<string, DataSourceColumnInfo>;
 	previewData?: Array<Record<string, string>>;
 }) {
-	const columnEntries = Object.entries(columns);
+	const changeOperator = (op: ConditionOperator) => {
+		if (op === condition.type) return;
+		const base = makeDefaultCondition(op);
+		if ("column" in condition && condition.column) {
+			base.column = condition.column;
+		}
+		onChange(base);
+	};
 
 	const getSampleValues = (colName: string): string[] => {
 		if (!previewData || previewData.length === 0 || !colName) return [];
@@ -243,84 +255,81 @@ function BaseConditionRow({
 		return [...new Set(values)];
 	};
 
-	const changeOperator = (op: ConditionOperator) => {
-		if (op === condition.type) return;
-		const base = makeDefaultCondition(op);
-		// Preserve column selection across operator changes
-		if ("column" in condition && condition.column) {
-			base.column = condition.column;
-		}
-		onChange(base);
-	};
-
 	const samples = condition.column ? getSampleValues(condition.column) : [];
 
 	return (
-		<div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-md px-2 py-1.5">
-			{/* Column selector */}
-			<Select
-				value={condition.column || undefined}
-				onValueChange={(col) => {
-					const updated = { ...condition, column: col };
-					onChange(updated as BaseChangeTableCondition);
-				}}
-			>
-				<SelectTrigger className="h-7 text-xs min-w-[120px] max-w-[160px] bg-white">
-					<SelectValue placeholder="Column..." />
-				</SelectTrigger>
-				<SelectContent>
-					{columnEntries.map(([name, info]) => (
-						<SelectItem key={name} value={name} className="text-xs">
-							<span className="font-mono">{name}</span>
-							<span className="ml-1 text-slate-400">{info.colType}</span>
-						</SelectItem>
-					))}
-				</SelectContent>
-			</Select>
+		<div className="bg-white border border-slate-200 rounded-md p-2.5 space-y-2.5">
+			<div className="flex items-start gap-2">
+				{/* Column + operator */}
+				<div className="flex-1 grid grid-cols-2 gap-2">
+					<ColumnSelector
+						label="Column"
+						value={condition.column}
+						onChange={(col) => {
+							const updated = { ...condition, column: col };
+							onChange(updated as BaseChangeTableCondition);
+						}}
+						columns={columns}
+						previewData={previewData}
+					/>
+					<div className="space-y-1">
+						<Label className="font-medium text-slate-700">Operator</Label>
+						<Select
+							value={condition.type}
+							onValueChange={(v) => changeOperator(v as ConditionOperator)}
+						>
+							<SelectTrigger className="w-full bg-white h-12">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{(Object.entries(OPERATOR_LABELS) as [ConditionOperator, string][]).map(
+									([op, label]) => (
+										<SelectItem key={op} value={op}>
+											{label}
+										</SelectItem>
+									),
+								)}
+							</SelectContent>
+						</Select>
+					</div>
+				</div>
 
-			{/* Operator selector */}
-			<Select value={condition.type} onValueChange={(v) => changeOperator(v as ConditionOperator)}>
-				<SelectTrigger className="h-7 text-xs min-w-[100px] max-w-[140px] bg-white">
-					<SelectValue />
-				</SelectTrigger>
-				<SelectContent>
-					{(Object.entries(OPERATOR_LABELS) as [ConditionOperator, string][]).map(([op, label]) => (
-						<SelectItem key={op} value={op} className="text-xs">
-							{label}
-						</SelectItem>
-					))}
-				</SelectContent>
-			</Select>
+				{/* Delete */}
+				{onDelete && (
+					<Button
+						size="icon"
+						variant="ghost"
+						className="h-8 w-8 shrink-0 text-red-400 hover:text-red-600 mt-6"
+						onClick={onDelete}
+						title="Remove condition"
+					>
+						<LuTrash className="w-4 h-4" />
+					</Button>
+				)}
+			</div>
 
 			{/* Value input (only for equals / regex) */}
-			{condition.type === "column-equals" && (
-				<input
-					className="h-7 flex-1 min-w-[80px] bg-white border border-slate-200 rounded px-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-					placeholder={samples.length > 0 ? `e.g. ${samples[0]}` : "Value..."}
-					value={condition.value}
-					onChange={(e) => onChange({ ...condition, value: e.target.value })}
-				/>
+			{(condition.type === "column-equals" || condition.type === "column-not-equals") && (
+				<div className="space-y-1">
+					<Label className="font-medium text-slate-700">Value</Label>
+					<input
+						className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						placeholder={samples.length > 0 ? `e.g. ${samples[0]}` : "Value..."}
+						value={condition.value}
+						onChange={(e) => onChange({ ...condition, value: e.target.value })}
+					/>
+				</div>
 			)}
 			{condition.type === "column-matches" && (
-				<input
-					className="h-7 flex-1 min-w-[80px] bg-white border border-slate-200 rounded px-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-					placeholder="Regex pattern..."
-					value={condition.regex}
-					onChange={(e) => onChange({ ...condition, regex: e.target.value })}
-				/>
-			)}
-
-			{/* Delete */}
-			{onDelete && (
-				<Button
-					size="icon"
-					variant="ghost"
-					className="h-6 w-6 shrink-0 text-red-400 hover:text-red-600"
-					onClick={onDelete}
-					title="Remove condition"
-				>
-					<LuTrash className="w-3 h-3" />
-				</Button>
+				<div className="space-y-1">
+					<Label className="font-medium text-slate-700">Regex Pattern</Label>
+					<input
+						className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						placeholder="e.g. ^ORD-\d+$"
+						value={condition.regex}
+						onChange={(e) => onChange({ ...condition, regex: e.target.value })}
+					/>
+				</div>
 			)}
 		</div>
 	);

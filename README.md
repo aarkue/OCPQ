@@ -15,30 +15,32 @@ The following installer formats are available:
 - `[...].msi` for Windows
 - `[...].app.tar.gz` for macOS
 
-Note, that sometimes Windows Defender might erroneously detect a (false-positive) thread in the installers.
+Note that Windows Defender sometimes produces a (false-positive) threat warning for Tauri-packaged installers.
 See also https://github.com/tauri-apps/tauri/issues/2486.
-In this case, please either try a different installer variant (e.g., `.exe` instead of `.msi`) or use the alternative use Docker as described below. 
+If this happens, try a different installer variant (e.g., `.exe` instead of `.msi`) or use Docker as described below.
 
 ### Docker
 
-Alternatively, you can also easily build and run the project locally using Docker.
-This will start a local web server for the backend and the frontend.
-Once the container is running, you can open [http://localhost:4567/](http://localhost:4567/) in your browser for the tool frontend.
+Alternatively, you can build and run the project locally using Docker.
+This starts a local web server for the backend and serves the frontend.
+Once the containers are running, open [http://localhost:4567/](http://localhost:4567/) in your browser.
 
 #### Docker Compose
 Run `docker compose up --build` in the project root.
 
-Alternatively, the docker files can of the frontend and backend can also be used separately:
+Alternatively, the two Dockerfiles can be built and run separately:
 
-#### Docker Files
+#### Dockerfiles
 
-- __backend__:
-  1. First build using `sudo docker build ./backend -t ocpq-backend`
-  2. Then run with `docker run --init -p 3000:3000 ocpq-backend`
+- __backend__ (build context must be the repo root so Cargo workspace paths resolve):
+  1. Build: `docker build -f backend/Dockerfile -t ocpq-backend .`
+  2. Run: `docker run --init -p 3000:3000 ocpq-backend`
 - __frontend__:
-  1. First build using `sudo docker build ./frontend -t ocpq-frontend`
-  2. Then run with `sudo docker run --init -p 4567:4567 ocpq-backend`
+  1. Build: `docker build ./frontend -t ocpq-frontend`
+  2. Run: `docker run --init -p 4567:4567 ocpq-frontend`
 
+
+Note that all paths are resolved inside Docker, so you can only load files that are exposed to the container (e.g., via a mounted folder).
 
 ## Usage
 
@@ -133,7 +135,7 @@ Evaluating this updated constraint again yields a violation percentage of 29.3%.
 
 
 An alternative way to model this constraint in this specific setting would be adding this time between event predicate as a constraint to the child node.
-Note, that this constraint might be slightly different in general, as it simply requires that _all `pay order`_ events fulfill this constraint. 
+Note, that this constraint might be slightly different in general, as it requires that _all `pay order`_ events fulfill this constraint. 
 In this case the constraint can also be modeled using just one node, as shown below.
 
 ![image](https://github.com/user-attachments/assets/d3753c87-a95f-4538-a001-b91fe791705b)
@@ -142,7 +144,7 @@ In this case the constraint can also be modeled using just one node, as shown be
 Each constraint can have a name and description, which can be modified using the inputs (1) and (2) when the constraint is selected.
 Multiple constraints can be added an accessed using the list on the top right.
 Note, that __by default constraint are not saved__ and will not be there after reloading or reopening the tool.
-The constraints however can easily be saved locally by clicking on the save button on the top right of the tool.
+The constraints however can be saved locally by clicking on the save button on the top right of the tool.
 Thus, __make sure to press the save button__ whenever you created or updated a constraint and want to save it.
 
 ![image](https://github.com/user-attachments/assets/62b0f291-2236-41f4-bddb-8089a342c5ab)
@@ -157,14 +159,20 @@ The discovered Constraints are automatically added to the list of constraints an
 ## Development
 
 We use `cargo` and `pnpm`, so please ensure they are available by installing them (i.e., Rust and Node).
-Then, install all dependencies (e.g., using `pnpm i` inside the `frontend` folder)
+Then, install all dependencies (e.g., using `pnpm i` inside the `frontend` folder).
 
-For the full-stack web application navigate to the `backend/web-server` folder and run `cargo run --release` to start the backend and navigate to the `frontend` folder and execute `pnpm run dev` to start the frontend. 
+The repository is a Cargo workspace with three members:
+- `backend/shared`: library crate with the query engine, OC-Declare, and data extraction pipeline.
+- `backend/web-server`: standalone HTTP server used by the frontend and Docker setup.
+- `backend/ocpq_cli`: standalone CLI for evaluating a `BindingBoxTree` against an OCEL file (useful for benchmarking).
+
+For the full-stack web application navigate to the `backend/web-server` folder and run `cargo run --release` to start the backend, and navigate to the `frontend` folder and run `pnpm run dev` to start the frontend.
 By default, the backend server is available at `http://localhost:3000` while the frontend is available at `http://localhost:5173/`.
 
+For the desktop application, [tauri](https://tauri.app/) is used.
+To run the desktop application, run `pnpm run tauri dev -- --release` inside the `tauri` folder.
 
-For the desktop application, tauri (https://tauri.app/) is used.
-To run the desktop application, simply run `pnpm run tauri dev -- --release` inside the `tauri` folder.
+The CLI can be run via `cargo run --release -p ocpq_cli -- --ocel <path> --bbox-tree <path>`.
 
 
 Currently, there are few unnecessary warning messages in the output when running or building the frontend with vite.

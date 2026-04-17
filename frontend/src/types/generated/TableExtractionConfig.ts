@@ -2,4 +2,8 @@
 import type { DataSourceTableInfo } from "./DataSourceTableInfo";
 import type { TableUsageData } from "./TableUsageData";
 
-export type TableExtractionConfig = { source_id: string, table_name: string, table_info: DataSourceTableInfo, usage: TableUsageData, };
+export type TableExtractionConfig = { source_id: string, table_name: string, table_info: DataSourceTableInfo, usage: TableUsageData, 
+/**
+ * If set, rows come from this virtual table instead of source_id/table_name
+ */
+virtual_table_id: string | null, };

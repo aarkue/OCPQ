@@ -11,7 +11,7 @@ serde_json = "1.0.108"
 serde_with = "3.11.0"
 ts-rs = { version = "12.0", features = ["serde-compat","chrono-impl"] }
 # process_mining = {path = "../../../rust4pm/process_mining", features = ['ocel-sqlite']}
-process_mining = { git = "https://github.com/aarkue/rust4pm", branch = "fix/slim-linked-ocel-modifications", features = ["ocel-sqlite"] }
+process_mining = { git = "https://github.com/aarkue/rust4pm", features = ["ocel-sqlite"] }
 rayon = "1.8.0"
 itertools = "0.11.0"
 chrono = "0.4.33"
@@ -29,3 +29,4 @@ tokio = { version = "1.43", features = ["full"] }
 rayon-cancel = "1.0.0"
 dbcon = { git = "https://github.com/aarkue/dbcon.git" }
 regex = "1.10"
+futures = "0.3"

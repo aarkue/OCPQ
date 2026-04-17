@@ -3,9 +3,6 @@ import { useBackend } from "./useBackend";
 
 type ElementSpecifier = { id: string } | { index: number };
 
-/**
- * Hook to fetch a single OCEL event by ID or index.
- */
 export function useOcelEvent(specifier: ElementSpecifier | undefined) {
 	const backend = useBackend();
 
@@ -16,9 +13,6 @@ export function useOcelEvent(specifier: ElementSpecifier | undefined) {
 	});
 }
 
-/**
- * Hook to fetch a single OCEL object by ID or index.
- */
 export function useOcelObject(specifier: ElementSpecifier | undefined) {
 	const backend = useBackend();
 

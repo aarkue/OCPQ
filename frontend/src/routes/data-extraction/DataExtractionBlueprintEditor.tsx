@@ -1,11 +1,10 @@
-import { useContext, useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { IoArrowBack } from "react-icons/io5";
 import { LuDatabase, LuPencil, LuRefreshCw, LuTable2, LuWorkflow } from "react-icons/lu";
 import { TbPlug, TbPlugOff, TbTrash } from "react-icons/tb";
 import { Link, useParams } from "react-router-dom";
 import { v4 } from "uuid";
-import { BackendProviderContext } from "@/BackendProviderContext";
 import AlertHelper from "@/components/AlertHelper";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useBackend } from "@/hooks";
 import {
 	DATA_EXTRACTION_LOCALSTORAGE_SAVE_KEY_DATA,
@@ -33,11 +33,13 @@ import {
 } from "@/lib/local-storage";
 import type { DataSourceMetadata } from "@/types/generated/DataSourceMetadata";
 import type { DataSourceTableInfo } from "@/types/generated/DataSourceTableInfo";
-import type {
-	DataExtractionBlueprintData,
-	DataExtractionBlueprintMeta,
-	DataSource,
-	DataSourceType,
+import {
+	BLUEPRINT_DATA_VERSION,
+	type DataExtractionBlueprintData,
+	type DataExtractionBlueprintMeta,
+	type DataSource,
+	type DataSourceType,
+	migrateBlueprintData,
 } from "./data-extraction-types";
 import type { BlueprintFlowState } from "./flow/blueprint-flow-types";
 import DataBlueprintFlowEditor from "./flow/DataBlueprintFlowEditor";
@@ -49,6 +51,44 @@ const DATA_SOURCE_TYPES: { value: DataSourceType; label: string }[] = [
 	// { value: "mysql", label: "MySQL" },
 	{ value: "postgresql", label: "PostgreSQL" },
 ];
+
+/** Strip large cached data from table nodes before saving to localStorage.
+ *  tableInfo and previewData are already stored in source.cachedMetadata,
+ *  so duplicating them in flowState can exceed the localStorage quota. */
+function stripFlowStateForStorage(
+	flowState: DataExtractionBlueprintData["flowState"],
+): DataExtractionBlueprintData["flowState"] {
+	if (!flowState) return undefined;
+	return {
+		...flowState,
+		nodes: flowState.nodes.map((node: any) => {
+			if (node.type !== "table") return node;
+			const { tableInfo, previewData, ...restData } = node.data;
+			return { ...node, data: restData };
+		}),
+	};
+}
+
+/** Re-hydrate table node data from sources after loading from localStorage */
+function hydrateFlowState(
+	flowState: DataExtractionBlueprintData["flowState"],
+	sources: DataSource[],
+): DataExtractionBlueprintData["flowState"] {
+	if (!flowState) return undefined;
+	return {
+		...flowState,
+		nodes: flowState.nodes.map((node: any) => {
+			if (node.type !== "table") return node;
+			const source = sources.find((s: DataSource) => s.id === node.data.sourceId);
+			const tableInfo = source?.cachedMetadata?.tables[node.data.tableName];
+			const previewData = source?.cachedMetadata?.previewData[node.data.tableName];
+			if (tableInfo) {
+				return { ...node, data: { ...node.data, tableInfo, previewData } };
+			}
+			return node;
+		}),
+	};
+}
 
 export default function DataExtractionBlueprintEditor() {
 	const { id } = useParams();
@@ -64,9 +104,9 @@ export default function DataExtractionBlueprintEditor() {
 	const [blueprintData, setBlueprintData] = useState<DataExtractionBlueprintData>(() => {
 		const stored = localStorage.getItem(DATA_EXTRACTION_LOCALSTORAGE_SAVE_KEY_DATA + id);
 		if (stored) {
-			return parseLocalStorageValue<DataExtractionBlueprintData>(stored);
+			return migrateBlueprintData(parseLocalStorageValue<DataExtractionBlueprintData>(stored));
 		}
-		return { sources: [] };
+		return { version: BLUEPRINT_DATA_VERSION, sources: [] };
 	});
 
 	if (id == null || metaInfo === undefined) {
@@ -95,7 +135,20 @@ export default function DataExtractionBlueprintEditor() {
 
 	function saveBlueprintData(data: DataExtractionBlueprintData) {
 		setBlueprintData(data);
-		localStorage.setItem(DATA_EXTRACTION_LOCALSTORAGE_SAVE_KEY_DATA + id, JSON.stringify(data));
+		const dataForStorage = {
+			...data,
+			version: BLUEPRINT_DATA_VERSION,
+			flowState: stripFlowStateForStorage(data.flowState),
+		};
+		try {
+			localStorage.setItem(
+				DATA_EXTRACTION_LOCALSTORAGE_SAVE_KEY_DATA + id,
+				JSON.stringify(dataForStorage),
+			);
+		} catch (e) {
+			console.warn("Failed to save blueprint data to localStorage:", e);
+			toast.error("Failed to save blueprint changes locally. Your work may not persist after leaving or refreshing the page.");
+		}
 	}
 
 	async function connectDataSource(source: DataSource): Promise<DataSource> {
@@ -130,9 +183,8 @@ export default function DataExtractionBlueprintEditor() {
 		}
 	}
 
-	async function addSource(source: DataSource) {
-		// Connect immediately when adding
-		const connectedSource = await toast.promise(
+	async function connectSourceWithToast(source: DataSource): Promise<DataSource> {
+		return await toast.promise(
 			new Promise<DataSource>((resolve, reject) =>
 				connectDataSource(source).then((result) => {
 					if (result.connectionStatus?.status !== "connected") {
@@ -150,6 +202,10 @@ export default function DataExtractionBlueprintEditor() {
 				success: "Connected!",
 			},
 		);
+	}
+
+	async function addSource(source: DataSource) {
+		const connectedSource = await connectSourceWithToast(source);
 		saveBlueprintData({
 			...blueprintData,
 			sources: [...blueprintData.sources, connectedSource],
@@ -211,12 +267,42 @@ export default function DataExtractionBlueprintEditor() {
 		});
 	}
 
-	const connectedSourcesCount = blueprintData.sources.filter(
-		(s) => s.cachedMetadata && Object.keys(s.cachedMetadata.tables).length > 0,
-	).length;
+	async function addSourceWithNodes(source: DataSource) {
+		const connectedSource = await connectSourceWithToast(source);
+		saveBlueprintData({
+			...blueprintData,
+			sources: [...blueprintData.sources, connectedSource],
+		});
+		setActiveTab("blueprint");
+		window.dispatchEvent(
+			new CustomEvent("data-source-auto-add-tables", { detail: { source: connectedSource } }),
+		);
+	}
+
+	// Handle file drops from Tauri drag-drop (routed via App.tsx)
+	useEffect(() => {
+		async function handleFileDrop(e: Event) {
+			const { path, type } = (e as CustomEvent<{ path: string; type: "csv" | "sqlite" }>).detail;
+			const fileName = path.split(/[/\\]/).pop() ?? path;
+			const source: DataSource = {
+				id: v4(),
+				type,
+				name: fileName,
+				configMode: "structured",
+				config: { path },
+			};
+			try {
+				await addSourceWithNodes(source);
+			} catch {
+				// addSource already shows error toast
+			}
+		}
+		window.addEventListener("data-source-file-drop", handleFileDrop);
+		return () => window.removeEventListener("data-source-file-drop", handleFileDrop);
+	});
 
 	return (
-		<div className="text-left w-full h-full flex flex-col">
+		<div className="text-left w-full h-full flex flex-col relative">
 			<div className="flex items-center gap-x-4">
 				<Link to="/data-extraction">
 					<Button title="Back to overview" size="icon" variant="outline">
@@ -338,31 +424,20 @@ export default function DataExtractionBlueprintEditor() {
 				</TabsContent>
 
 				<TabsContent value="blueprint" className="flex-1 overflow-hidden mt-0 flex h-full">
-					{connectedSourcesCount === 0 && (
-						<div className="flex flex-col items-center justify-center h-full text-center p-8">
-							<LuDatabase className="w-12 h-12 text-slate-300 mb-4" />
-							<h3 className="font-semibold text-lg text-slate-600">No connected data sources</h3>
-							<p className="text-sm text-muted-foreground mt-1 max-w-md">
-								Add at least one data source in the "Data Sources" tab to start building your
-								blueprint.
-							</p>
-							<Button className="mt-4" onClick={() => setActiveTab("sources")}>
-								Go to Data Sources
-							</Button>
-						</div>
-					)}
-					{connectedSourcesCount > 0 && (
-						<DataBlueprintFlowEditor
-							sources={blueprintData.sources}
-							initialState={blueprintData.flowState as BlueprintFlowState | undefined}
-							onChange={(flowState) => {
-								saveBlueprintData({
-									...blueprintData,
-									flowState,
-								});
-							}}
-						/>
-					)}
+					<DataBlueprintFlowEditor
+						sources={blueprintData.sources}
+						initialState={
+							hydrateFlowState(blueprintData.flowState, blueprintData.sources) as
+								| BlueprintFlowState
+								| undefined
+						}
+						onChange={(flowState) => {
+							saveBlueprintData({
+								...blueprintData,
+								flowState,
+							});
+						}}
+					/>
 				</TabsContent>
 			</Tabs>
 		</div>
@@ -684,10 +759,15 @@ function getSourceSummary(source: DataSource): string {
 
 function structuredToConnectionString(data: DataSource): string {
 	const { type, config } = data;
-	if (type === "csv" || type === "sqlite") {
+	if (type === "csv") {
+		const rawPath = config.path ?? "";
+		const path = rawPath.startsWith("csv://") ? rawPath : `csv://${rawPath}`;
+		const delim = config.delimiter ?? "";
+		return delim !== "" ? `${path}?delimiter=${encodeURIComponent(delim)}` : path;
+	}
+	if (type === "sqlite") {
 		const path = config.path ?? "";
-		const prefix = type === "csv" ? "csv://" : "sqlite://";
-		return path.startsWith(prefix) ? path : `${prefix}${path}`;
+		return path.startsWith("sqlite://") ? path : `sqlite://${path}`;
 	}
 	const scheme = type === "postgresql" ? "postgres" : "mysql";
 	const { user = "", password = "", host = "localhost", port = "", database = "" } = config;
@@ -698,8 +778,15 @@ function structuredToConnectionString(data: DataSource): string {
 
 function connectionStringToStructured(data: DataSource): Record<string, string> {
 	const cs = data.connectionString ?? "";
-	if (data.type === "csv" || data.type === "sqlite") {
-		const path = cs.replace(/^(csv|sqlite):\/\/\/?/, "");
+	if (data.type === "csv") {
+		const withoutScheme = cs.replace(/^csv:\/\/\/?/, "");
+		const [path, query] = withoutScheme.split("?", 2);
+		const params = new URLSearchParams(query ?? "");
+		const delimiter = params.get("delimiter") ?? "";
+		return { ...data.config, path, delimiter };
+	}
+	if (data.type === "sqlite") {
+		const path = cs.replace(/^sqlite:\/\/\/?/, "");
 		return { ...data.config, path };
 	}
 	try {
@@ -719,13 +806,43 @@ function connectionStringToStructured(data: DataSource): Record<string, string> 
 
 function DataSourceEditForm({
 	data,
-	setData,
+	setData: setDataRaw,
 }: {
 	data: DataSource;
 	setData: (d: DataSource) => void;
 }) {
+	const backend = useBackend();
+	const pickFile = backend["pick-file"];
 	const isFile = data.type === "csv" || data.type === "sqlite";
 	const isDb = data.type === "mysql" || data.type === "postgresql";
+
+	// Keep `connectionString` in sync with structured fields so the Connection String
+	// tab reflects edits immediately.
+	const setData = (next: DataSource) => {
+		if (next.configMode === "structured") {
+			setDataRaw({ ...next, connectionString: structuredToConnectionString(next) });
+		} else {
+			setDataRaw(next);
+		}
+	};
+
+	const fileFilters =
+		data.type === "csv"
+			? [{ name: "CSV", extensions: ["csv"] }]
+			: [{ name: "SQLite", extensions: ["sqlite", "sqlite3", "db"] }];
+
+	async function browseFile() {
+		if (!pickFile) return;
+		const path = await pickFile(fileFilters);
+		if (!path) return;
+		const fileName = path.split(/[/\\]/).pop() ?? path;
+		if (data.configMode === "structured") {
+			setData({ ...data, config: { ...data.config, path }, name: data.name || fileName });
+		} else {
+			const prefix = data.type === "csv" ? "csv://" : "sqlite://";
+			setData({ ...data, connectionString: `${prefix}${path}`, name: data.name || fileName });
+		}
+	}
 
 	const switchMode = (mode: DataSource["configMode"]) => {
 		if (mode === data.configMode) return;
@@ -780,19 +897,33 @@ function DataSourceEditForm({
 					<Label className="text-xs text-muted-foreground mb-1 block">
 						{isFile ? "File path or URI" : "Connection string"}
 					</Label>
-					<Input
-						placeholder={
-							data.type === "csv"
-								? "/path/to/data.csv"
-								: data.type === "sqlite"
-									? "/path/to/database.sqlite"
-									: data.type === "postgresql"
-										? "postgres://user:pw@localhost:5432/db"
-										: "mysql://user:pw@localhost:3306/db"
-						}
-						value={data.connectionString ?? ""}
-						onChange={(e) => setData({ ...data, connectionString: e.target.value })}
-					/>
+					<div className="flex gap-1.5">
+						<Input
+							className="flex-1"
+							placeholder={
+								data.type === "csv"
+									? "/path/to/data.csv"
+									: data.type === "sqlite"
+										? "/path/to/database.sqlite"
+										: data.type === "postgresql"
+											? "postgres://user:pw@localhost:5432/db"
+											: "mysql://user:pw@localhost:3306/db"
+							}
+							value={data.connectionString ?? ""}
+							onChange={(e) => setData({ ...data, connectionString: e.target.value })}
+						/>
+						{isFile && pickFile && (
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="shrink-0"
+								onClick={browseFile}
+							>
+								Browse
+							</Button>
+						)}
+					</div>
 				</div>
 			)}
 
@@ -801,29 +932,43 @@ function DataSourceEditForm({
 					{isFile && (
 						<>
 							<Label>File Path</Label>
-							<Input
-								placeholder={data.type === "csv" ? "/path/to/data.csv" : "/path/to/database.sqlite"}
-								value={data.config.path ?? ""}
-								onChange={(e) =>
-									setData({
-										...data,
-										config: { ...data.config, path: e.target.value },
-									})
-								}
-							/>
+							<div className="flex gap-1.5">
+								<Input
+									className="flex-1"
+									placeholder={
+										data.type === "csv" ? "/path/to/data.csv" : "/path/to/database.sqlite"
+									}
+									value={data.config.path ?? ""}
+									onChange={(e) =>
+										setData({
+											...data,
+											config: { ...data.config, path: e.target.value },
+										})
+									}
+								/>
+								{pickFile && (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="shrink-0"
+										onClick={browseFile}
+									>
+										Browse
+									</Button>
+								)}
+							</div>
 						</>
 					)}
 					{data.type === "csv" && (
 						<>
 							<Label>Delimiter</Label>
-							<Input
-								placeholder=","
-								className="max-w-16"
+							<DelimiterPicker
 								value={data.config.delimiter ?? ""}
-								onChange={(e) =>
+								onChange={(delimiter) =>
 									setData({
 										...data,
-										config: { ...data.config, delimiter: e.target.value },
+										config: { ...data.config, delimiter },
 									})
 								}
 							/>
@@ -891,6 +1036,78 @@ function DataSourceEditForm({
 						</>
 					)}
 				</div>
+			)}
+		</div>
+	);
+}
+
+const DELIMITER_PRESETS = [
+	{ key: "auto", label: "Auto", value: "" },
+	{ key: "comma", label: ",", value: "," },
+	{ key: "semicolon", label: ";", value: ";" },
+	{ key: "pipe", label: "|", value: "|" },
+	{ key: "tab", label: "Tab", value: "\t" },
+] as const;
+
+function DelimiterPicker({
+	value,
+	onChange,
+}: {
+	value: string;
+	onChange: (value: string) => void;
+}) {
+	const matchedPreset = DELIMITER_PRESETS.find((p) => p.value === value);
+	// Sticky local flag so the Custom tab stays active while the input is still empty.
+	const [customMode, setCustomMode] = useState(value !== "" && !matchedPreset);
+	useEffect(() => {
+		// Exit custom mode only when the value matches a concrete preset (not Auto).
+		// Auto (empty value) shouldn't snap us out of custom, since clicking Custom
+		// clears the value and we'd bounce right back.
+		if (matchedPreset && matchedPreset.key !== "auto") {
+			setCustomMode(false);
+		}
+	}, [matchedPreset]);
+
+	const selected = customMode ? "custom" : (matchedPreset?.key ?? "auto");
+
+	return (
+		<div className="flex items-center gap-2 flex-wrap">
+			<ToggleGroup
+				type="single"
+				value={selected}
+				onValueChange={(next) => {
+					// Radix returns "" when the user clicks the already-selected toggle.
+					// Deselection is not allowed; the picker always has one mode.
+					if (!next) return;
+					if (next === "custom") {
+						setCustomMode(true);
+						onChange("");
+					} else {
+						setCustomMode(false);
+						const preset = DELIMITER_PRESETS.find((p) => p.key === next);
+						onChange(preset?.value ?? "");
+					}
+				}}
+				className="w-fit border rounded-md bg-background p-0.5"
+			>
+				{DELIMITER_PRESETS.map((p) => (
+					<ToggleGroupItem key={p.key} value={p.key} className="h-7 px-3 text-xs">
+						{p.label}
+					</ToggleGroupItem>
+				))}
+				<ToggleGroupItem value="custom" className="h-7 px-3 text-xs">
+					Custom
+				</ToggleGroupItem>
+			</ToggleGroup>
+			{customMode && (
+				<Input
+					autoFocus
+					maxLength={1}
+					placeholder="?"
+					className="h-8 w-10 px-2 text-center font-mono"
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+				/>
 			)}
 		</div>
 	);

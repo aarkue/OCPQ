@@ -1,7 +1,6 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { LuDownload } from "react-icons/lu";
-import { BackendProviderContext } from "@/BackendProviderContext";
 import { useBackend } from "@/hooks";
 import { Button } from "./ui/button";
 

@@ -4,4 +4,4 @@ import type { TimestampFormat } from "./TimestampFormat";
 /**
  * Source specification for extracting timestamps
  */
-export type TimestampSource = { "type": "column", column: string, format: TimestampFormat, } | { "type": "components", date_column: string | null, time_column: string | null, };
+export type TimestampSource = { "type": "column", column: string, format: TimestampFormat, } | { "type": "components", date_column: string | null, time_column: string | null, } | { "type": "constant", value: string, format: TimestampFormat, };

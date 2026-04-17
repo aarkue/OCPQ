@@ -11,6 +11,7 @@ import {
 import clsx from "clsx";
 import type React from "react";
 import { Fragment, useContext, useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import {
 	LuArrowLeft,
 	LuArrowLeftRight,
@@ -21,6 +22,8 @@ import {
 	LuShapes,
 	LuTrendingUp,
 } from "react-icons/lu";
+import { MdBarChart } from "react-icons/md";
+import { Button } from "@/components/ui/button";
 import {
 	ContextMenu,
 	ContextMenuCheckboxItem,
@@ -33,8 +36,36 @@ import {
 	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useBackend, useOcelInfo } from "@/hooks";
+import { InfoSheetContext } from "@/InfoSheet";
 import { getRandomStringColor } from "@/lib/random-colors";
+import { getTypesRelationshipSupport } from "@/lib/variable-hints";
+import { SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
+import type { ObjectTypeAssociation } from "../types/ObjectTypeAssociation";
+import type { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
 import { getEdgeParams } from "./edge-helpers";
+import { MinMaxDisplayWithSugar } from "./MinMaxSugar";
+import { getMarkersForEdge } from "./OCDeclareFlowEditor";
+import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
+import {
+	type ActivityNodeData,
+	type ActivityNodeType,
+	ALL_EDGE_TYPES,
+	type CustomEdgeType,
+	type EdgeType,
+} from "./oc-declare-flow-types";
 
 const asSvg = "/as.svg";
 const dfSvg = "/df.svg";
@@ -80,6 +111,24 @@ export default function OCDeclareFlowEdge(
 				(e.source === source && e.target === target) ||
 				(e.source === target && e.target === source),
 		);
+	const allInvolvedObjectTypesWithColor = useMemo(
+		() =>
+			[
+				...new Set(
+					[...data.objectTypes.each, ...data.objectTypes.all, ...data.objectTypes.any].flatMap(
+						(ot) => {
+							if (ot.type === "Simple") {
+								return [ot.object_type];
+							} else {
+								return [ot.first, ot.second];
+							}
+						},
+					) ?? [],
+				),
+			].map((t) => ({ type: t, color: getRandomStringColor(t) })),
+		[data?.objectTypes],
+	);
+	const [showDialog, setShowDialog] = useState<"ot-label">();
 	if (!sourceNode || !targetNode) {
 		return null;
 	}
@@ -123,26 +172,6 @@ export default function OCDeclareFlowEdge(
 	if (Math.abs(slopeDegree) > 90) {
 		slopeDegree = slopeDegree - 180;
 	}
-	const allInvolvedObjectTypesWithColor = useMemo(
-		() =>
-			[
-				...new Set(
-					[...data.objectTypes.each, ...data.objectTypes.all, ...data.objectTypes.any].flatMap(
-						(ot) => {
-							if (ot.type === "Simple") {
-								return [ot.object_type];
-							} else {
-								return [ot.first, ot.second];
-							}
-						},
-					) ?? [],
-				),
-			].map((t) => ({ type: t, color: getRandomStringColor(t) })),
-		[data?.objectTypes],
-	);
-	// const objectTypeColors = useMemo(() => {
-	//     return allInvolvedObjectTypes.map((ot) => getRandomStringColor(ot))
-	// },[allInvolvedObjectTypes]);
 	const gradientID = `edge-${id}-gradient`;
 
 	let tDir: Position = Position.Left;
@@ -158,8 +187,6 @@ export default function OCDeclareFlowEdge(
 	if (invertGradient) {
 		correctedGradient.reverse();
 	}
-
-	const [showDialog, setShowDialog] = useState<"ot-label">();
 
 	const eachText = data.objectTypes.each
 		.map((e) =>
@@ -551,38 +578,6 @@ function EdgeLabel({ transform, label }: { transform: string; label: string | Re
 		</div>
 	);
 }
-
-import toast from "react-hot-toast";
-import { MdBarChart } from "react-icons/md";
-import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { useBackend, useOcelInfo } from "@/hooks";
-import { InfoSheetContext } from "@/InfoSheet";
-import { getTypesRelationshipSupport } from "@/lib/variable-hints";
-import { SupportDisplay } from "@/routes/visual-editor/helper/box/FilterOrConstraintEditor";
-import type { ObjectTypeAssociation } from "../types/ObjectTypeAssociation";
-import type { OCDeclareArcLabel } from "../types/OCDeclareArcLabel";
-import { MinMaxDisplayWithSugar } from "./MinMaxSugar";
-import { getMarkersForEdge } from "./OCDeclareFlowEditor";
-import { flowEdgeToOCDECLARE, getArcTypeDisplayName } from "./oc-declare-flow-type-conversions";
-import {
-	type ActivityNodeData,
-	type ActivityNodeType,
-	ALL_EDGE_TYPES,
-	type CustomEdgeType,
-	type EdgeType,
-} from "./oc-declare-flow-types";
 
 function EditEdgeLabelsDialog({
 	open,

@@ -1,13 +1,15 @@
+import { useState } from "react";
+import toast from "react-hot-toast";
+import { LuDownload, LuTrash2 } from "react-icons/lu";
 import { RxArrowRight } from "react-icons/rx";
-import { Link } from "react-router-dom";
-import MenuLink from "@/components/MenuLink";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useOcelInfo } from "@/hooks/useOcelInfo";
+import { useBackend } from "@/hooks";
+import { useInvalidateOcel, useOcelInfo } from "@/hooks/useOcelInfo";
 import OcelTypeViewer from "./OcelTypeViewer";
 
 export default function OcelInfoViewer() {
 	const ocelInfo = useOcelInfo();
-	console.log(ocelInfo);
 	if (ocelInfo == null || ocelInfo === undefined) {
 		return <div>No Info!</div>;
 	}
@@ -28,7 +30,7 @@ export default function OcelInfoViewer() {
 						</span>
 					</p>
 					<Link to="/constraints">
-						<Button className=" h-12 text-xl  bg-purple-700 text-white font-bold cursor-pointer">
+						<Button className=" h-12 text-xl  bg-purple-700 text-white font-bold cursor-pointer hover:bg-purple-600">
 							{" "}
 							<RxArrowRight className="mr-2" />
 							OCPQ Query Editor
@@ -44,7 +46,7 @@ export default function OcelInfoViewer() {
 						</span>
 					</p>
 					<Link to="/oc-declare">
-						<Button className="h-12 text-xl bg-emerald-600 text-white font-bold cursor-pointer">
+						<Button className="h-12 text-xl bg-emerald-600 text-white font-bold cursor-pointer hover:bg-emerald-500">
 							{" "}
 							<RxArrowRight className="mr-2" /> OC-DECLARE
 						</Button>
@@ -75,12 +77,85 @@ export default function OcelInfoViewer() {
 					</div>
 				</div>
 			</div>
-			<MenuLink
-				to={"/"}
-				classNames="text-xs text-center w-fit border-transparent bg-sky-50 hover:bg-sky-100"
+			<ExportOcelSection />
+			<UnloadOcelSection />
+		</div>
+	);
+}
+
+const EXPORT_FORMATS = [
+	{ format: "JSON" as const, ext: "json", label: "JSON" },
+	{ format: "XML" as const, ext: "xml", label: "XML" },
+	{ format: "SQLITE" as const, ext: "sqlite", label: "SQLite" },
+];
+
+function ExportOcelSection() {
+	const backend = useBackend();
+	const [exporting, setExporting] = useState<string | null>(null);
+
+	const handleExport = async (format: "JSON" | "XML" | "SQLITE", ext: string) => {
+		setExporting(format);
+		try {
+			const blob = await backend["ocel/export"](format);
+			if (blob) {
+				backend["download-blob"](blob, `ocel-export.${ext}`);
+				toast.success(`Downloaded ocel-export.${ext}`);
+			}
+		} catch (e) {
+			toast.error(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+		} finally {
+			setExporting(null);
+		}
+	};
+
+	return (
+		<div className="mt-4 flex items-center gap-2">
+			<span className="text-sm font-medium text-muted-foreground">Export OCEL:</span>
+			{EXPORT_FORMATS.map(({ format, ext, label }) => (
+				<Button
+					key={format}
+					size="sm"
+					variant="outline"
+					disabled={exporting !== null}
+					onClick={() => handleExport(format, ext)}
+				>
+					<LuDownload className="w-3.5 h-3.5 mr-1.5" />
+					{exporting === format ? "Exporting..." : label}
+				</Button>
+			))}
+		</div>
+	);
+}
+
+function UnloadOcelSection() {
+	const backend = useBackend();
+	const invalidateOcel = useInvalidateOcel();
+	const navigate = useNavigate();
+
+	const handleUnload = async () => {
+		if (!backend["ocel/unload"]) return;
+		try {
+			await backend["ocel/unload"]();
+			await invalidateOcel();
+			toast.success("Dataset unloaded");
+			navigate("/");
+		} catch (e) {
+			toast.error(`Unload failed: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	};
+
+	return (
+		<div className="mt-3">
+			<Button
+				size="sm"
+				variant="outline"
+				className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+				onClick={handleUnload}
+				disabled={!backend["ocel/unload"]}
 			>
-				Load another dataset
-			</MenuLink>
+				<LuTrash2 className="w-3.5 h-3.5 mr-1.5" />
+				Unload Dataset
+			</Button>
 		</div>
 	);
 }

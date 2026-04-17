@@ -24,7 +24,7 @@ pub use structs::{Binding, BindingBox, BindingBoxTree, BindingStep, ViolationRea
 use ts_rs::TS;
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EvaluateBoxTreeResult {
@@ -91,7 +91,7 @@ impl ExportFormat {
 }
 
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EvaluationResultWithCount {

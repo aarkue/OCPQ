@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 
-/**
- * Hook that syncs state with localStorage.
- * Similar to useState but persists across browser sessions.
- *
- * @param key - The localStorage key to use
- * @param initialValue - Default value if nothing is stored
- */
 export function useLocalStorageState<T>(
 	key: string,
 	initialValue: T,
@@ -17,9 +10,7 @@ export function useLocalStorageState<T>(
 			if (stored !== null) {
 				return JSON.parse(stored) as T;
 			}
-		} catch {
-			// Ignore parse errors, use initial value
-		}
+		} catch {}
 		return initialValue;
 	});
 
@@ -29,24 +20,19 @@ export function useLocalStorageState<T>(
 				const nextValue = typeof value === "function" ? (value as (prev: T) => T)(prev) : value;
 				try {
 					localStorage.setItem(key, JSON.stringify(nextValue));
-				} catch {
-					// Ignore storage errors (quota exceeded, etc.)
-				}
+				} catch {}
 				return nextValue;
 			});
 		},
 		[key],
 	);
 
-	// Sync with other tabs/windows
 	useEffect(() => {
 		const handleStorage = (e: StorageEvent) => {
 			if (e.key === key && e.newValue !== null) {
 				try {
 					setState(JSON.parse(e.newValue) as T);
-				} catch {
-					// Ignore parse errors
-				}
+				} catch {}
 			}
 		};
 

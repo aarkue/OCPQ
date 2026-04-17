@@ -37,7 +37,9 @@ use ocpq_shared::{
         get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
         ConnectionConfig, JobStatus, OCPQJobOptions,
     },
-    oc_declare::statistics::{get_activity_statistics, get_edge_stats, ActivityStatistics},
+    oc_declare::statistics::{
+        get_activity_statistics, get_edge_stats, ActivityStatistics, BinnedEdgeDurationStats,
+    },
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     process_mining::{
         core::{
@@ -102,6 +104,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/ocel/load", post(load_ocel_file_req))
+        .route("/ocel/unload", post(unload_ocel))
         .route("/ocel/info", get(get_loaded_ocel_info))
         .route(
             "/ocel/upload-json",
@@ -127,6 +130,7 @@ async fn main() {
             "/ocel/export-filter-box",
             post(filter_export_with_box_tree_req),
         )
+        .route("/ocel/export", post(export_ocel_req))
         .route(
             "/ocel/discover-constraints",
             post(auto_discover_constraints_handler),
@@ -183,6 +187,12 @@ async fn get_loaded_ocel_info(
         Some(ocel_info) => (StatusCode::OK, Json(Some(ocel_info))),
         None => (StatusCode::NOT_FOUND, Json(None)),
     }
+}
+
+async fn unload_ocel(State(state): State<AppState>) -> StatusCode {
+    *state.ocel.write().unwrap() = None;
+    *state.eval_res.write().unwrap() = None;
+    StatusCode::OK
 }
 
 async fn upload_ocel_xml<'a>(
@@ -278,6 +288,26 @@ pub async fn check_with_box_tree_req<'a>(
     Err((StatusCode::NOT_FOUND, "No OCEL Loaded".to_string()))
 }
 
+pub async fn export_ocel_req(
+    state: State<AppState>,
+    Json(format): Json<ExportFormat>,
+) -> (StatusCode, Bytes) {
+    with_ocel_from_state(&state, |ocel| {
+        let full_ocel = ocel.construct_ocel();
+        let bytes = match format {
+            ExportFormat::XML => {
+                let mut w = Cursor::new(Vec::new());
+                export_ocel_xml(&mut w, &full_ocel).unwrap();
+                Bytes::from(w.into_inner())
+            }
+            ExportFormat::JSON => Bytes::from(export_ocel_json_to_vec(&full_ocel).unwrap()),
+            ExportFormat::SQLITE => Bytes::from(export_ocel_sqlite_to_vec(&full_ocel).unwrap()),
+        };
+        (StatusCode::OK, bytes)
+    })
+    .unwrap_or((StatusCode::INTERNAL_SERVER_ERROR, Bytes::default()))
+}
+
 pub async fn filter_export_with_box_tree_req<'a>(
     state: State<AppState>,
     Json(req): Json<FilterExportWithBoxTreeRequest>,
@@ -328,7 +358,7 @@ pub async fn evaluate_oc_declare_arcs_handler(
 ) -> Json<Option<Vec<f64>>> {
     Json(with_ocel_from_state(&state, |locel| {
         req.iter()
-            .map(|arc| arc.get_for_all_evs_perf(&locel))
+            .map(|arc| arc.get_for_all_evs_perf(locel))
             .collect()
     }))
 }
@@ -343,7 +373,7 @@ pub async fn get_activity_statistics_handler(
 pub async fn get_oc_declare_edge_statistics_handler(
     state: State<AppState>,
     Json(req): Json<OCDeclareArc>,
-) -> Json<Option<Vec<i64>>> {
+) -> Json<Option<BinnedEdgeDurationStats>> {
     Json(with_ocel_from_state(&state, |ocel| {
         get_edge_stats(ocel, &req)
     }))

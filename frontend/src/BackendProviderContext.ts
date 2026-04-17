@@ -8,6 +8,7 @@ import type {
 import type { DBTranslationInput } from "./types/DBTranslationInput";
 import type { ActivityStatistics } from "./types/generated/ActivityStatistics";
 import type { BindingBoxTree } from "./types/generated/BindingBoxTree";
+import type { BinnedEdgeDurationStats } from "./types/generated/BinnedEdgeDurationStats";
 import type { ConnectDataSourceRequest } from "./types/generated/ConnectDataSourceRequest";
 import type { DataExtractionBlueprint } from "./types/generated/DataExtractionBlueprint";
 import type { DataSourceMetadata } from "./types/generated/DataSourceMetadata";
@@ -24,11 +25,13 @@ export type BackendProvider = {
 	"ocel/upload-from-xes"?: (file: File) => Promise<OCELInfo>;
 	"ocel/available"?: () => Promise<string[]>;
 	"ocel/load"?: (name: string) => Promise<OCELInfo>;
+	"ocel/unload"?: () => Promise<void>;
 	"ocel/picker"?: (path?: string) => Promise<OCELInfo>;
 	"ocel/check-constraints-box": (
 		tree: BindingBoxTree,
 		measurePerformance?: boolean,
 	) => Promise<EvaluateBoxTreeResult>;
+	"ocel/export": (format: "XML" | "JSON" | "SQLITE") => Promise<Blob | undefined>;
 	"ocel/export-filter-box": (
 		tree: BindingBoxTree,
 		format: "XML" | "JSON" | "SQLITE",
@@ -62,6 +65,8 @@ export type BackendProvider = {
 		) => unknown,
 	) => Promise<() => unknown>;
 	"ocel/get-initial-files"?: () => Promise<string[]>;
+	/** Open a native file picker dialog, returns selected path or null */
+	"pick-file"?: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
 	"oc-declare/template-string": (arcs: OCDeclareArc[]) => Promise<string>;
 	"check-for-updates"?: () => Promise<UpdateInfo | null>;
 	restart?: () => Promise<void>;
@@ -69,7 +74,7 @@ export type BackendProvider = {
 	"ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>;
 	"ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>;
 	"ocel/get-activity-statistics": (activity: string) => Promise<ActivityStatistics>;
-	"ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<number[]>;
+	"ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<BinnedEdgeDurationStats>;
 	"data-source/connect": (request: ConnectDataSourceRequest) => Promise<DataSourceMetadata>;
 	"data-extraction/execute": (
 		blueprint: DataExtractionBlueprint,
@@ -116,6 +121,7 @@ export const ErrorBackendContext: BackendProvider = {
 	"ocel/info": warnForNoBackendProvider,
 	"ocel/check-constraints-box": warnForNoBackendProvider,
 	"ocel/create-db-query": warnForNoBackendProvider,
+	"ocel/export": warnForNoBackendProvider,
 	"ocel/export-filter-box": warnForNoBackendProvider,
 	"oc-declare/template-string": warnForNoBackendProvider,
 	"ocel/discover-constraints": warnForNoBackendProvider,
@@ -189,6 +195,9 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 				})
 			).json();
 		},
+		"ocel/unload": async () => {
+			await fetch(`${localBackendURL}/ocel/unload`, { method: "post" });
+		},
 		"ocel/check-constraints-box": async (tree, measurePerformance) => {
 			const result = await fetch(`${localBackendURL}/ocel/check-constraints-box`, {
 				method: "post",
@@ -199,6 +208,15 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 				return await result.json();
 			}
 			throw new Error(await result.text());
+		},
+		"ocel/export": async (format) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/export`, {
+					method: "post",
+					body: JSON.stringify(format),
+					headers: { "Content-Type": "application/json" },
+				})
+			).blob();
 		},
 		"ocel/export-filter-box": async (tree, exportFormat) => {
 			return await (

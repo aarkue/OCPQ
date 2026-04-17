@@ -128,12 +128,6 @@ export default function TimeDurationInput({
 				options={TIME_DURATION_UNITS.map((u) => ({ value: u, label: u }))}
 				onChange={(newUnitIn) => {
 					const newUnit = newUnitIn as (typeof TIME_DURATION_UNITS)[number];
-					console.log({ newUnit, value, unit });
-					// const convertedValue =
-					//   value *
-					//   (unitFactorFromSeconds(unit) / unitFactorFromSeconds(newUnit));
-					// setValue(convertedValue);
-					// setValueString(convertedValue.toString());
 					setUnit(newUnit);
 					handleValueChange(value.toString(), newUnit);
 				}}

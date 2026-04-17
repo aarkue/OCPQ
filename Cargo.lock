@@ -1168,12 +1168,13 @@ checksum = "d7a1e2f27636f116493b8b860f5546edb47c8d8f8ea73e1d2a20be88e28d1fea"
 
 [[package]]
 name = "dbcon"
-version = "0.1.0"
-source = "git+https://github.com/aarkue/dbcon.git#561a5d2d7ee13e2e0c6809c95654153f3de53c9d"
+version = "0.2.0"
+source = "git+https://github.com/aarkue/dbcon.git#3dcea0e27f356048221f7e32e0001e245c4d20a9"
 dependencies = [
  "anyhow",
  "chrono",
  "csv",
+ "futures",
  "sea-schema",
  "serde",
  "serde_json",
@@ -2918,8 +2919,8 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
 name = "macros_process_mining"
-version = "0.4.4"
-source = "git+https://github.com/aarkue/rust4pm?branch=fix/slim-linked-ocel-modifications#087227c9c71a2aaa4376d871cc538c1be1d8c8d8"
+version = "0.5.4"
+source = "git+https://github.com/aarkue/rust4pm#53578f10040f23063b17e7e0abda8c09e1d79b32"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3470,6 +3471,7 @@ dependencies = [
  "csv",
  "dbcon",
  "dirs-next",
+ "futures",
  "itertools 0.11.0",
  "once_cell",
  "ordered-float 4.6.0",
@@ -4174,8 +4176,8 @@ dependencies = [
 
 [[package]]
 name = "process_mining"
-version = "0.4.4"
-source = "git+https://github.com/aarkue/rust4pm?branch=fix/slim-linked-ocel-modifications#087227c9c71a2aaa4376d871cc538c1be1d8c8d8"
+version = "0.5.4"
+source = "git+https://github.com/aarkue/rust4pm#53578f10040f23063b17e7e0abda8c09e1d79b32"
 dependencies = [
  "chrono",
  "csv",

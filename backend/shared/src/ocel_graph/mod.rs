@@ -32,7 +32,7 @@ pub struct OCELGraph {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(TS)]
-#[ts(export, export_to = "../../../frontend/src/types/generated/")]
+#[ts(export)]
 pub struct OCELGraphOptions {
     max_distance: usize,
     root: String,

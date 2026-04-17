@@ -55,6 +55,10 @@ div.fullHandle {
 	opacity: 0;
 }
 
+.react-flow__edge-default.selected  path {
+	stroke-dasharray: 4px 1px; 
+}
+
 /* Below: Fixes Monaco transparent bug in linux webview (gecko?) */
 /* .monaco-editor .view-lines {
   @apply bg-white

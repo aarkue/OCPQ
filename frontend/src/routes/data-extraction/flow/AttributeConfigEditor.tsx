@@ -9,7 +9,7 @@ interface AttributeConfigEditorProps {
 	onChange: (config: AttributeConfig) => void;
 	columns: Record<string, DataSourceColumnInfo>;
 	previewData?: Array<Record<string, string>>;
-	/** ColumnSelector from TableUsageConfig — passed to avoid circular imports */
+	/** ColumnSelector from TableUsageConfig (passed to avoid circular imports) */
 	ColumnSelector: React.ComponentType<{
 		label?: string;
 		value: string;

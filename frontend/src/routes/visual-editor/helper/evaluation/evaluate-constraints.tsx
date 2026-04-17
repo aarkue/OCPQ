@@ -337,7 +337,6 @@ function predicateToLaTeX<T extends Filter | SizeFilter | Constraint>(value: T) 
 		case "AdvancedCEL":
 			return String.raw`\mathrm{AdvCEL}(\mintinline{js}|${value.cel}|)`;
 		default:
-			console.log({ value });
 			return "TODO";
 	}
 }

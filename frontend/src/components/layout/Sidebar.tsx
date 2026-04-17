@@ -48,10 +48,10 @@ function OcelInfoSummary({ ocelInfo }: { ocelInfo: OCELInfo }) {
 	return (
 		<span className="flex flex-col items-center mx-auto text-sm leading-tight">
 			<span className="font-semibold text-green-700">OCEL loaded</span>
-			<span className="text-xs grid grid-cols-[auto_1fr] text-right gap-x-2 leading-tight items-baseline">
-				<span className="font-mono">{ocelInfo.num_events}</span>
+			<span className="text-xs grid grid-cols-[auto_1fr] text-right gap-x-1 leading-tight items-baseline">
+				<span className="font-mono w-fit">{ocelInfo.num_events}</span>
 				<span className="text-left">Events</span>
-				<span className="font-mono">{ocelInfo.num_objects}</span>
+				<span className="font-mono  w-fit">{ocelInfo.num_objects}</span>
 				<span className="text-left">Objects</span>
 			</span>
 		</span>

@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
 import debounce from "lodash.debounce";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import { LuAlignStartVertical, LuClipboardCopy, LuClipboardPaste, LuShare } from "react-icons/lu";
 import { RxReset } from "react-icons/rx";
@@ -234,14 +234,20 @@ export default function OCDeclareFlowEditor({
 		y: number;
 	}>({ x: 0, y: 0 });
 
-	const onModelChange = debounce(
-		() => {
-			if (onChange) {
-				onChange(flowRef.current!.toObject());
-			}
-		},
-		250,
-		{ maxWait: 1000 },
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+	const onModelChange = useMemo(
+		() =>
+			debounce(
+				() => {
+					if (onChangeRef.current) {
+						onChangeRef.current(flowRef.current!.toObject());
+					}
+				},
+				250,
+				{ maxWait: 1000 },
+			),
+		[],
 	);
 
 	const autoLayout = useCallback(async () => {
@@ -378,7 +384,6 @@ export default function OCDeclareFlowEditor({
 					try {
 						const rustResult = JSON.parse(pastedNodesAndEdges);
 						if (typeof rustResult === "object" && "length" in rustResult) {
-							console.log({ rustResult });
 							addArcsToFlow(rustResult, flowRef.current!);
 						} else {
 							throw new Error("Pasted is not an JSON array");

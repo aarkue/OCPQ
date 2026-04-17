@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useState } from "react";
 import { BsPlusCircle } from "react-icons/bs";
-import { TbTrash } from "react-icons/tb";
+import { TbInfoCircle, TbTrash } from "react-icons/tb";
 import { Link, useNavigate } from "react-router-dom";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { FixedSizeList, type ListChildComponentProps } from "react-window";
@@ -48,18 +48,21 @@ export default function DataExtractionRoot() {
 				Extraction blueprints define how to extract object-centric event data from a variety of data
 				sources.
 				<br />
-				For example, blueprints allow connecting SQLite, PostgresSQL, or CSV data sources.
+				For example, blueprints allow connecting SQLite, PostgreSQL, or CSV data sources.
 			</p>
-			<div className="w-fit my-1 text-xs font-semibold text-pink-950 bg-pink-300 p-1 px-2 rounded-md border border-pink-400">
-				<span className="text-base font-black">
-					Data Extraction Blueprints are currently in Beta.
-				</span>
-				<br />
-				Expect some rough edges and missing features.
-				<br />
-				If you have any feedback or encounter any issues, please reach out via GitHub or email.
+			<div className="w-fit my-1 flex items-center text-xs font-semibold text-pink-950 bg-pink-300/30 p-1 px-2 rounded-md border border-pink-400/30">
+				<TbInfoCircle className="mr-2 size-6" />
+				<div>
+					<span className="text-base font-black">
+						Data Extraction Blueprints are currently in Beta.
+					</span>
+					<br />
+					Expect some rough edges, bugs, or missing functionality.
+					<br />
+					If you have any feedback or encounter any issues, please reach out via GitHub or email.
+				</div>
 			</div>
-			<div className="flex justify-between items-center my-1">
+			<div className="flex justify-between items-center mt-2 mb-3">
 				<Button
 					className="cursor-pointer"
 					onClick={() => {
@@ -117,7 +120,8 @@ export default function DataExtractionRoot() {
 								<br />
 							</>
 						)}
-						This blueprint and all contained datasources and extraction settings will be deleted.
+						This blueprint and all contained data sources and extraction settings will be deleted.
+						<br />
 						This action cannot be undone.
 					</div>
 					<AlertDialogFooter>

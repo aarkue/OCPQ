@@ -1,4 +1,3 @@
-// import { connectionFormSchema } from "@/AppContext";
 import { zodResolver } from "@hookform/resolvers/zod";
 import React, { useEffect, useImperativeHandle, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -53,7 +52,6 @@ const ConnectionConfigForm = React.forwardRef<
 		if (s != null) {
 			try {
 				const l: z.infer<typeof connectionFormSchema> = JSON.parse(s);
-				console.log("Got login info", l);
 				form.reset(l);
 			} catch (_e) {
 				console.error("Failed to parse saved login data");

@@ -1,23 +1,32 @@
 import clsx from "clsx";
 import { useState } from "react";
-import { LuBox, LuCalendar, LuChevronDown, LuDatabase, LuHash, LuLink } from "react-icons/lu";
-import { MdEvent, MdTableChart } from "react-icons/md";
-import { TbRelationManyToMany } from "react-icons/tb";
+import { LuCalendar, LuChevronDown, LuHash, LuLink } from "react-icons/lu";
+import { RxCheck } from "react-icons/rx";
+import { TbAlertTriangle } from "react-icons/tb";
 import {
 	CardTypeSelector,
 	CardTypeSelectorContent,
 	type CardTypeSelectorOption,
 } from "@/components/ui/card-type-selector";
+import {
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+} from "@/components/ui/command";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import type { DataSourceColumnInfo } from "@/types/generated/DataSourceColumnInfo";
 import type { DataSourceTableInfo } from "@/types/generated/DataSourceTableInfo";
 import { AttributeConfigEditor } from "./AttributeConfigEditor";
 import {
-	type AttributeConfig,
-	type AttributeMapping,
+	ALL_TABLE_USAGE_MODES,
 	DEFAULT_VALUE_EXPR,
 	getDefaultUsageDataForMode,
+	MODE_REGISTRY,
+	type ObjectTypeSpec,
 	type TableUsageData,
 	type TableUsageType,
 	type TimestampFormat,
@@ -26,73 +35,21 @@ import {
 } from "./blueprint-flow-types";
 import { EventRulesEditor } from "./EventRulesEditor";
 import { InlineObjectReferencesEditor } from "./InlineObjectReferencesEditor";
+import { MultiValueConfigEditor } from "./MultiValueConfigEditor";
 
-/** Handle legacy data that may have `attributes` instead of `attribute_config` */
-function migrateAttributeConfig(data: Record<string, unknown>): AttributeConfig {
-	if (data.attribute_config != null) return data.attribute_config as AttributeConfig;
-	if (data.attributeConfig != null) return data.attributeConfig as AttributeConfig;
-	if (Array.isArray(data.attributes))
-		return { mode: "static", mappings: data.attributes as AttributeMapping[] };
-	return { mode: "static", mappings: [] };
-}
-
-// ---- Card options for the mode selector ----
-const TABLE_USAGE_OPTIONS: CardTypeSelectorOption<TableUsageType>[] = [
-	{
-		value: "none",
-		title: "Unused",
-		description: "This table will not be used in extraction",
-		icon: <LuDatabase className="w-4 h-4 text-slate-400" />,
+// ---- Card options for the mode selector (derived from MODE_REGISTRY) ----
+const TABLE_USAGE_OPTIONS: CardTypeSelectorOption<TableUsageType>[] = ALL_TABLE_USAGE_MODES.map(
+	(mode) => {
+		const entry = MODE_REGISTRY[mode];
+		const Icon = entry.icon;
+		return {
+			value: mode,
+			title: entry.label,
+			description: entry.description,
+			icon: <Icon className={clsx("w-4 h-4", entry.iconColor)} />,
+		};
 	},
-	{
-		value: "single-object",
-		title: "Object (Single Type)",
-		description: "Each row represents an object of one type",
-		icon: <LuBox className="w-4 h-4 text-blue-500" />,
-	},
-	{
-		value: "multi-object",
-		title: "Object (Multi Type)",
-		description: "Rows represent objects with type column",
-		icon: <LuBox className="w-4 h-4 text-blue-500" />,
-	},
-	{
-		value: "single-event",
-		title: "Event (Single Type)",
-		description: "Each row is an event of one type",
-		icon: <MdEvent className="w-4 h-4 text-pink-500" />,
-	},
-	{
-		value: "multi-event",
-		title: "Event (Multi Type)",
-		description: "Rows are events with type column",
-		icon: <MdEvent className="w-4 h-4 text-pink-500" />,
-	},
-	{
-		value: "e2o-relation",
-		title: "E2O Relation",
-		description: "Event-to-Object relationship table",
-		icon: <TbRelationManyToMany className="w-4 h-4 text-purple-500" />,
-	},
-	{
-		value: "o2o-relation",
-		title: "O2O Relation",
-		description: "Object-to-Object relationship table",
-		icon: <TbRelationManyToMany className="w-4 h-4 text-indigo-500" />,
-	},
-	{
-		value: "change-table-events",
-		title: "Events (Change Table)",
-		description: "Derive events from change rows via rules",
-		icon: <MdTableChart className="w-4 h-4 text-orange-500" />,
-	},
-	{
-		value: "change-table-object-changes",
-		title: "Object Changes",
-		description: "Track object attribute changes over time",
-		icon: <MdTableChart className="w-4 h-4 text-teal-500" />,
-	},
-];
+);
 
 function ColumnSelectorItem({
 	colName,
@@ -154,7 +111,7 @@ type ColumnSelectorProps = {
 
 const SPECIAL_NONE_VALUE = "|@NONE-no-selection!";
 
-function ColumnSelector({
+export function ColumnSelector({
 	label,
 	value,
 	onChange,
@@ -164,6 +121,7 @@ function ColumnSelector({
 	placeholder = `Select column${allowEmpty ? " (optional)" : ""}`,
 	typeHint,
 }: ColumnSelectorProps) {
+	const [open, setOpen] = useState(false);
 	const columnEntries = Object.entries(columns);
 
 	const sortedColumns = [...columnEntries].sort(([nameA, infoA], [nameB, infoB]) => {
@@ -201,42 +159,69 @@ function ColumnSelector({
 	};
 
 	return (
-		<div className="space-y-1">
-			{label && <Label className="font-medium text-slate-700">{label}</Label>}
-			<Select
-				value={value || undefined}
-				onValueChange={(s) => {
-					if (allowEmpty && s === SPECIAL_NONE_VALUE) {
-						onChange(undefined);
-					} else {
-						onChange(s);
-					}
-				}}
-			>
-				<SelectTrigger className="w-full bg-white truncate h-12">
-					<ColumnSelectorItem
-						isOptionalPlaceHolder={allowEmpty && !value}
-						colName={value || placeholder}
-						colInfo={columns[value] || { colType: "" }}
-						samples={getSampleValues(value)}
-					/>
-				</SelectTrigger>
-				<SelectContent>
-					{allowEmpty && (
-						<SelectItem value={SPECIAL_NONE_VALUE} className="py-2">
-							<span className="text-slate-500 italic">None</span>
-						</SelectItem>
-					)}
-					{sortedColumns.map(([colName, colInfo]) => {
-						const samples = getSampleValues(colName);
-						return (
-							<SelectItem key={colName} value={colName} className="py-2">
-								<ColumnSelectorItem colName={colName} colInfo={colInfo} samples={samples} />
-							</SelectItem>
-						);
-					})}
-				</SelectContent>
-			</Select>
+		<div className="space-y-1 w-full">
+			{label && <Label className="font-medium text-slate-700 w-full">{label}</Label>}
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger asChild>
+					<button
+						type="button"
+						className="flex items-center w-full bg-white border border-slate-200 rounded-md px-3 h-12 text-left hover:bg-slate-50 transition-colors max-w-sm"
+					>
+						<div className="flex-1 min-w-0">
+							<ColumnSelectorItem
+								isOptionalPlaceHolder={allowEmpty && !value}
+								colName={value || placeholder}
+								colInfo={columns[value] || { colType: "" }}
+								samples={getSampleValues(value)}
+							/>
+						</div>
+						<LuChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+					</button>
+				</PopoverTrigger>
+				<PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+					<Command>
+						<CommandInput placeholder="Search columns..." />
+						<CommandEmpty>No column found.</CommandEmpty>
+						<CommandGroup className="max-h-64 overflow-auto">
+							{allowEmpty && (
+								<CommandItem
+									value={SPECIAL_NONE_VALUE}
+									onSelect={() => {
+										onChange(undefined);
+										setOpen(false);
+									}}
+								>
+									<RxCheck
+										className={clsx("mr-2 h-4 w-4 shrink-0", !value ? "opacity-100" : "opacity-0")}
+									/>
+									<span className="text-slate-500 italic">None</span>
+								</CommandItem>
+							)}
+							{sortedColumns.map(([colName, colInfo]) => {
+								const samples = getSampleValues(colName);
+								return (
+									<CommandItem
+										key={colName}
+										value={colName}
+										onSelect={() => {
+											onChange(colName);
+											setOpen(false);
+										}}
+									>
+										<RxCheck
+											className={clsx(
+												"mr-2 h-4 w-4 shrink-0",
+												value === colName ? "opacity-100" : "opacity-0",
+											)}
+										/>
+										<ColumnSelectorItem colName={colName} colInfo={colInfo} samples={samples} />
+									</CommandItem>
+								);
+							})}
+						</CommandGroup>
+					</Command>
+				</PopoverContent>
+			</Popover>
 		</div>
 	);
 }
@@ -263,6 +248,239 @@ function TextInputConfig({
 			/>
 		</div>
 	);
+}
+
+// ---- Prefix ID with type checkbox ----
+
+function PrefixIdCheckbox({
+	checked,
+	onChange,
+	objectType,
+	idExpr,
+	previewData,
+}: {
+	checked: boolean;
+	onChange: (v: boolean) => void;
+	objectType: string;
+	idExpr?: ValueExpression;
+	previewData?: Array<Record<string, string>>;
+}) {
+	// Build a preview of what the prefixed ID looks like
+	let preview: string | undefined;
+	if (checked && objectType && idExpr) {
+		const sampleId =
+			idExpr.type === "column" && idExpr.column && previewData?.[0]
+				? previewData[0][idExpr.column]
+				: "123";
+		if (sampleId) preview = `${objectType}-${sampleId}`;
+	}
+
+	return (
+		<div className="space-y-1">
+			<label className="flex items-center gap-2 cursor-pointer">
+				<input
+					type="checkbox"
+					checked={checked}
+					onChange={(e) => onChange(e.target.checked)}
+					className="rounded border-slate-300 text-indigo-500 focus:ring-indigo-500"
+				/>
+				<span className="text-xs font-medium text-slate-600">Prefix ID with object type</span>
+				{preview && <span className="text-[10px] text-slate-400 font-mono ml-1">→ {preview}</span>}
+			</label>
+			{checked && (
+				<p className="text-[10px] text-indigo-500 pl-5">
+					All references to this type (inline object references, E2O/O2O relations) must specify the
+					object type to enable automatic prefix resolution. Without the type, lookups will fail.
+				</p>
+			)}
+		</div>
+	);
+}
+
+// ---- Object Type Spec editor (for E2O/O2O target/source type) ----
+
+function ObjectTypeSpecEditor({
+	label,
+	value,
+	onChange,
+	columns,
+	previewData,
+}: {
+	label: string;
+	value: ObjectTypeSpec | null;
+	onChange: (v: ObjectTypeSpec | null) => void;
+	columns: Record<string, DataSourceColumnInfo>;
+	previewData?: Array<Record<string, string>>;
+}) {
+	// Normalize: ObjectTypeSpec is string | ValueExpression, or null for "not set"
+	// We map it to a ValueExpression for the editor:
+	// - null → not set (None)
+	// - string → Constant ValueExpression
+	// - ValueExpression → as-is
+	const exprValue: ValueExpression | null =
+		value == null ? null : typeof value === "string" ? { type: "constant", value } : value;
+
+	const handleChange = (v: ValueExpression | null) => {
+		if (v == null) {
+			onChange(null);
+		} else if (v.type === "constant") {
+			// Store as plain string (ObjectTypeSpec.Fixed)
+			onChange(v.value);
+		} else {
+			// Store as ValueExpression (ObjectTypeSpec.Expression)
+			onChange(v);
+		}
+	};
+
+	return (
+		<div className="space-y-1">
+			<ValueExpressionEditor
+				label={label}
+				value={exprValue ?? { ...DEFAULT_VALUE_EXPR }}
+				onChange={handleChange}
+				columns={columns}
+				previewData={previewData}
+				typeHint="type"
+				allowEmpty
+			/>
+			{exprValue == null ? (
+				<p className="text-[10px] text-amber-600 flex items-start gap-1">
+					<TbAlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+					<span>
+						No type specified. If the referenced objects use "Prefix ID with type", the lookup will
+						fail. Set the type to enable automatic prefix resolution.
+					</span>
+				</p>
+			) : (
+				<p className="text-[10px] text-slate-400">
+					If the referenced objects use "Prefix ID with type", the ID will be prefixed automatically
+					during extraction.
+				</p>
+			)}
+		</div>
+	);
+}
+
+// ---- Event ID editor with Auto option ----
+
+function EventIdEditor({
+	value,
+	onChange,
+	columns,
+	previewData,
+}: {
+	value: ValueExpression | null;
+	onChange: (v: ValueExpression | null) => void;
+	columns: Record<string, DataSourceColumnInfo>;
+	previewData?: Array<Record<string, string>>;
+}) {
+	const isAuto = value == null;
+	type IdMode = "auto" | "column" | "template" | "constant";
+	const currentMode: IdMode = isAuto ? "auto" : value.type;
+
+	const switchMode = (mode: IdMode) => {
+		if (mode === currentMode) return;
+		if (mode === "auto") {
+			onChange(null);
+		} else if (mode === "column") {
+			onChange({ type: "column", column: "" });
+		} else if (mode === "template") {
+			onChange({ type: "template", template: "" });
+		} else {
+			onChange({ type: "constant", value: "" });
+		}
+	};
+
+	return (
+		<div className="space-y-1">
+			<div className="flex items-center justify-between">
+				<Label className="font-medium text-slate-700">Event ID</Label>
+				<div className="flex rounded-md border border-slate-200 text-[10px] overflow-hidden">
+					{(["auto", "column", "template", "constant"] as const).map((m) => (
+						<button
+							key={m}
+							type="button"
+							onClick={() => switchMode(m)}
+							className={`px-1.5 py-0.5 transition-colors ${
+								currentMode === m
+									? "bg-sky-500 text-white"
+									: "bg-white text-slate-500 hover:bg-slate-50"
+							}`}
+						>
+							{m === "auto" ? "Auto" : m.charAt(0).toUpperCase() + m.slice(1)}
+						</button>
+					))}
+				</div>
+			</div>
+
+			{isAuto && (
+				<div className="text-xs text-slate-400 italic py-1">
+					UUID will be auto-generated for each event
+				</div>
+			)}
+
+			{!isAuto && value.type === "column" && (
+				<ColumnSelector
+					value={value.column}
+					onChange={(v: string | undefined) => onChange({ type: "column", column: v ?? "" })}
+					columns={columns}
+					previewData={previewData}
+					typeHint="id"
+					allowEmpty
+				/>
+			)}
+
+			{!isAuto && value.type === "constant" && (
+				<input
+					className="w-full bg-white border border-slate-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+					placeholder="Constant value"
+					value={value.value}
+					onChange={(e) => onChange({ type: "constant", value: e.target.value })}
+				/>
+			)}
+
+			{!isAuto && value.type === "template" && (
+				<div className="space-y-1.5">
+					<input
+						className="w-full bg-white border border-slate-300 rounded px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						placeholder="e.g. EVT-{order_id}"
+						value={value.template}
+						onChange={(e) => onChange({ type: "template", template: e.target.value })}
+					/>
+					<div className="flex flex-wrap gap-1 max-h-20 overflow-auto">
+						{Object.keys(columns).map((col) => (
+							<button
+								key={col}
+								type="button"
+								className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 font-mono"
+								onClick={() =>
+									onChange({
+										type: "template",
+										template: `${value.template}{${col}}`,
+									})
+								}
+							>
+								{`{${col}}`}
+							</button>
+						))}
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+/** Pick a non-empty sample cell value for a column-based ValueExpression. */
+function getSampleForExpr(
+	expr: ValueExpression,
+	previewData?: Array<Record<string, string>>,
+): string | undefined {
+	if (expr.type !== "column" || !expr.column || !previewData) return undefined;
+	for (const row of previewData) {
+		const v = row[expr.column];
+		if (v) return v;
+	}
+	return undefined;
 }
 
 const EXPR_TYPE_LABELS: Record<ValueExpression["type"], string> = {
@@ -407,41 +625,45 @@ function TimestampSourceEditor({
 	const [showFormat, setShowFormat] = useState(
 		value.type === "column" && value.format.type !== "auto",
 	);
-	const isComponents = value.type === "components";
+
+	const modeBtn = (mode: string, lbl: string) => (
+		<button
+			type="button"
+			onClick={() => {
+				if (mode === "column") onChange({ type: "column", column: "", format: { type: "auto" } });
+				else if (mode === "components")
+					onChange({
+						type: "components",
+						date_column: null,
+						time_column: null,
+					});
+				else
+					onChange({
+						type: "constant",
+						value: "1970-01-01T00:00:00+00:00",
+						format: { type: "auto" },
+					});
+			}}
+			className={`px-1.5 py-0.5 transition-colors ${
+				value.type === mode ? "bg-sky-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+			}`}
+		>
+			{lbl}
+		</button>
+	);
 
 	return (
 		<div className="space-y-1.5">
 			<div className="flex items-center justify-between">
 				<Label className="font-medium text-slate-700">{label}</Label>
 				<div className="flex rounded-md border border-slate-200 text-[10px] overflow-hidden">
-					<button
-						type="button"
-						onClick={() =>
-							onChange({
-								type: "column",
-								column: "",
-								format: { type: "auto" },
-							})
-						}
-						className={`px-1.5 py-0.5 transition-colors ${
-							!isComponents ? "bg-sky-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
-						}`}
-					>
-						Datetime
-					</button>
-					<button
-						type="button"
-						onClick={() => onChange({ type: "components", date_column: null, time_column: null })}
-						className={`px-1.5 py-0.5 transition-colors ${
-							isComponents ? "bg-sky-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
-						}`}
-					>
-						Date + Time
-					</button>
+					{modeBtn("column", "Column")}
+					{modeBtn("components", "Date + Time")}
+					{modeBtn("constant", "Constant")}
 				</div>
 			</div>
 
-			{!isComponents && value.type === "column" && (
+			{value.type === "column" && (
 				<>
 					<ColumnSelector
 						value={value.column}
@@ -494,10 +716,7 @@ function TimestampSourceEditor({
 									onChange={(e) =>
 										onChange({
 											...value,
-											format: {
-												type: "format-string",
-												format: e.target.value,
-											},
+											format: { type: "format-string", format: e.target.value },
 										})
 									}
 								/>
@@ -507,7 +726,7 @@ function TimestampSourceEditor({
 				</>
 			)}
 
-			{isComponents && value.type === "components" && (
+			{value.type === "components" && (
 				<div className="grid grid-cols-2 gap-2">
 					{(
 						[
@@ -526,6 +745,18 @@ function TimestampSourceEditor({
 					))}
 				</div>
 			)}
+
+			{value.type === "constant" && (
+				<div className="space-y-1">
+					<input
+						className="w-full bg-white border border-slate-300 rounded px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						placeholder="1970-01-01T00:00:00+00:00"
+						value={value.value}
+						onChange={(e) => onChange({ ...value, value: e.target.value })}
+					/>
+					<p className="text-[10px] text-slate-400">Fixed timestamp used for all rows.</p>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -535,10 +766,18 @@ interface TableUsageConfigProps {
 	setData: (data: TableUsageData) => void;
 	tableInfo: DataSourceTableInfo;
 	previewData?: Array<Record<string, string>>;
+	/** When true, only show the config panel for the current mode (no card selector) */
+	hideSelector?: boolean;
 }
 
-export function TableUsageConfig({ data, setData, tableInfo, previewData }: TableUsageConfigProps) {
-	const currentMode = data?.mode ?? "none";
+export function TableUsageConfig({
+	data,
+	setData,
+	tableInfo,
+	previewData,
+	hideSelector,
+}: TableUsageConfigProps) {
+	const currentMode = data?.mode ?? ("event" as TableUsageType);
 	const columns = tableInfo.columns;
 
 	const handleModeChange = (mode: TableUsageType) => {
@@ -557,11 +796,274 @@ export function TableUsageConfig({ data, setData, tableInfo, previewData }: Tabl
 		setData({ ...data, [field]: ts } as TableUsageData);
 	};
 
-	// Typed updater for plain string fields
-	const updateString = (field: string, value: string) => {
-		if (!data) return;
-		setData({ ...data, [field]: value } as TableUsageData);
-	};
+	/** Render the config panel for the current mode (shared between hideSelector and full form) */
+	const configPanel = data ? (
+		<>
+			{data.mode === "event" && (
+				<div className="space-y-4">
+					<div className="grid grid-cols-2 gap-3">
+						<ValueExpressionEditor
+							label="Event Type"
+							value={data.event_type}
+							onChange={(v) => updateExpr("event_type", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="type"
+						/>
+						<TimestampSourceEditor
+							label="Timestamp"
+							value={data.timestamp}
+							onChange={(v) => updateTimestamp("timestamp", v)}
+							columns={columns}
+							previewData={previewData}
+						/>
+						<EventIdEditor
+							value={data.id}
+							onChange={(v) => setData({ ...data, id: v })}
+							columns={columns}
+							previewData={previewData}
+						/>
+					</div>
+					<InlineObjectReferencesEditor
+						references={data.inline_object_references}
+						onChange={(refs) => setData({ ...data, inline_object_references: refs })}
+						columns={columns}
+						previewData={previewData}
+						ValueExpressionEditor={ValueExpressionEditor}
+					/>
+				</div>
+			)}
+			{data.mode === "object" && (
+				<div className="space-y-4">
+					<div className="grid grid-cols-2 gap-3">
+						<ValueExpressionEditor
+							label="Object Type"
+							value={data.object_type}
+							onChange={(v) => updateExpr("object_type", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="type"
+						/>
+						<ValueExpressionEditor
+							label="Object ID"
+							value={data.id}
+							onChange={(v) => updateExpr("id", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="id"
+						/>
+					</div>
+					<PrefixIdCheckbox
+						checked={data.prefix_id_with_type}
+						onChange={(v) => setData({ ...data, prefix_id_with_type: v })}
+						objectType={
+							data.object_type.type === "constant"
+								? data.object_type.value
+								: data.object_type.type === "column"
+									? `{${data.object_type.column}}`
+									: "type"
+						}
+						idExpr={data.id}
+						previewData={previewData}
+					/>
+					<div className="border rounded-md">
+						<button
+							type="button"
+							className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+							onClick={() => {
+								if (data.attribute_config != null) {
+									setData({ ...data, timestamp: null, attribute_config: null });
+								} else {
+									setData({
+										...data,
+										timestamp: {
+											type: "column",
+											column: "",
+											format: { type: "auto" },
+										},
+										attribute_config: { mode: "static", mappings: [] },
+									});
+								}
+							}}
+						>
+							<span>
+								<LuChevronDown
+									className={clsx(
+										"w-4 h-4 inline mr-1.5 transition-transform",
+										data.attribute_config == null && "-rotate-90",
+									)}
+								/>{" "}
+								Object Changes (Attribute Tracking)
+							</span>
+							<span className="text-xs text-slate-400">
+								{data.attribute_config != null ? "enabled" : "disabled"}
+							</span>
+						</button>
+						{data.attribute_config != null && data.timestamp != null && (
+							<div className="px-3 pb-3 space-y-3 border-t">
+								<TimestampSourceEditor
+									label="Timestamp"
+									value={data.timestamp}
+									onChange={(v) => updateTimestamp("timestamp", v)}
+									columns={columns}
+									previewData={previewData}
+								/>
+								<AttributeConfigEditor
+									config={data.attribute_config}
+									onChange={(config) => setData({ ...data, attribute_config: config })}
+									columns={columns}
+									previewData={previewData}
+									ColumnSelector={ColumnSelector}
+									TextInputConfig={TextInputConfig}
+								/>
+							</div>
+						)}
+					</div>
+				</div>
+			)}
+			{data.mode === "e2o-relation" && (
+				<div className="space-y-4">
+					<div className="grid grid-cols-2 gap-3">
+						<ValueExpressionEditor
+							label="Source Event"
+							value={data.source_event}
+							onChange={(v) => updateExpr("source_event", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="id"
+						/>
+						<ValueExpressionEditor
+							label="Target Object"
+							value={data.target_object}
+							onChange={(v) => updateExpr("target_object", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="id"
+						/>
+						<ValueExpressionEditor
+							label="Qualifier (optional)"
+							value={data.qualifier ?? { type: "constant" as const, value: "" }}
+							onChange={(v) => updateExpr("qualifier", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="string"
+							allowEmpty
+						/>
+					</div>
+					<ObjectTypeSpecEditor
+						label="Target Object Type"
+						value={data.target_object_type}
+						onChange={(v) => setData({ ...data, target_object_type: v })}
+						columns={columns}
+						previewData={previewData}
+					/>
+					<MultiValueConfigEditor
+						label="Multiple target objects per cell"
+						value={data.target_object_multi}
+						onChange={(mv) => setData({ ...data, target_object_multi: mv })}
+						previewValue={getSampleForExpr(data.target_object, previewData)}
+					/>
+				</div>
+			)}
+			{data.mode === "o2o-relation" && (
+				<div className="space-y-4">
+					<div className="grid grid-cols-2 gap-3">
+						<ValueExpressionEditor
+							label="Source Object"
+							value={data.source_object}
+							onChange={(v) => updateExpr("source_object", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="id"
+						/>
+						<ValueExpressionEditor
+							label="Target Object"
+							value={data.target_object}
+							onChange={(v) => updateExpr("target_object", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="id"
+						/>
+						<ValueExpressionEditor
+							label="Qualifier (optional)"
+							value={data.qualifier ?? { type: "constant" as const, value: "" }}
+							onChange={(v) => updateExpr("qualifier", v)}
+							columns={columns}
+							previewData={previewData}
+							typeHint="string"
+							allowEmpty
+						/>
+					</div>
+					<div className="grid grid-cols-2 gap-3">
+						<ObjectTypeSpecEditor
+							label="Source Object Type"
+							value={data.source_object_type ?? null}
+							onChange={(v) => setData({ ...data, source_object_type: v })}
+							columns={columns}
+							previewData={previewData}
+						/>
+						<ObjectTypeSpecEditor
+							label="Target Object Type"
+							value={data.target_object_type ?? null}
+							onChange={(v) => setData({ ...data, target_object_type: v })}
+							columns={columns}
+							previewData={previewData}
+						/>
+					</div>
+					<div className="grid grid-cols-2 gap-3">
+						<MultiValueConfigEditor
+							label="Multiple source objects per cell"
+							value={data.source_object_multi}
+							onChange={(mv) => setData({ ...data, source_object_multi: mv })}
+							previewValue={getSampleForExpr(data.source_object, previewData)}
+						/>
+						<MultiValueConfigEditor
+							label="Multiple target objects per cell"
+							value={data.target_object_multi}
+							onChange={(mv) => setData({ ...data, target_object_multi: mv })}
+							previewValue={getSampleForExpr(data.target_object, previewData)}
+						/>
+					</div>
+				</div>
+			)}
+			{data.mode === "change-table-events" && (
+				<div className="space-y-4">
+					<div className="grid grid-cols-2 gap-3">
+						<TimestampSourceEditor
+							label="Timestamp"
+							value={data.timestamp}
+							onChange={(v) => updateTimestamp("timestamp", v)}
+							columns={columns}
+							previewData={previewData}
+						/>
+						<EventIdEditor
+							value={data.id}
+							onChange={(v) => setData({ ...data, id: v })}
+							columns={columns}
+							previewData={previewData}
+						/>
+					</div>
+					<EventRulesEditor
+						rules={data.event_rules}
+						onChange={(rules) => setData({ ...data, event_rules: rules })}
+						columns={columns}
+						previewData={previewData}
+					/>
+					<InlineObjectReferencesEditor
+						references={data.inline_object_references}
+						onChange={(refs) => setData({ ...data, inline_object_references: refs })}
+						columns={columns}
+						previewData={previewData}
+						ValueExpressionEditor={ValueExpressionEditor}
+					/>
+				</div>
+			)}
+		</>
+	) : null;
+
+	if (hideSelector) {
+		return <div className="w-full">{configPanel}</div>;
+	}
 
 	return (
 		<div className="w-full min-w-[400px]">
@@ -571,316 +1073,7 @@ export function TableUsageConfig({ data, setData, tableInfo, previewData }: Tabl
 				onValueChange={handleModeChange}
 				columns={3}
 			>
-				{/* ---- Unused ---- */}
-				<CardTypeSelectorContent value="none">
-					<p className="text-sm text-slate-500 text-center py-2">
-						This table will not be included in the extraction blueprint.
-					</p>
-				</CardTypeSelectorContent>
-
-				{/* ---- Single Object ---- */}
-				<CardTypeSelectorContent value="single-object">
-					{data?.mode === "single-object" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								Each row in this table represents a single object. Configure which column contains
-								the unique object identifier.
-							</p>
-							<div className="grid grid-cols-2 gap-3">
-								<ValueExpressionEditor
-									label="Object ID"
-									value={data.id}
-									onChange={(v) => updateExpr("id", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<TextInputConfig
-									label="Object Type"
-									value={data.object_type}
-									onChange={(v) => updateString("object_type", v)}
-								/>
-							</div>
-						</div>
-					)}
-				</CardTypeSelectorContent>
-
-				{/* ---- Multi Object ---- */}
-				<CardTypeSelectorContent value="multi-object">
-					{data?.mode === "multi-object" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								Rows represent objects of different types. Specify the ID and the column/expression
-								that determines the object type.
-							</p>
-							<div className="grid grid-cols-2 gap-3">
-								<ValueExpressionEditor
-									label="Object ID"
-									value={data.id}
-									onChange={(v) => updateExpr("id", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<ValueExpressionEditor
-									label="Object Type"
-									value={data.object_type}
-									onChange={(v) => updateExpr("object_type", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="type"
-								/>
-							</div>
-						</div>
-					)}
-				</CardTypeSelectorContent>
-
-				{/* ---- Single Event ---- */}
-				<CardTypeSelectorContent value="single-event">
-					{data?.mode === "single-event" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								Each row is an event of a single type. Configure the ID, timestamp, and type.
-							</p>
-							<div className="grid grid-cols-2 gap-3">
-								<ValueExpressionEditor
-									label="Event ID"
-									value={data.id}
-									onChange={(v) => updateExpr("id", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<TimestampSourceEditor
-									label="Timestamp"
-									value={data.timestamp}
-									onChange={(v) => updateTimestamp("timestamp", v)}
-									columns={columns}
-									previewData={previewData}
-								/>
-								<TextInputConfig
-									label="Event Type"
-									value={data.event_type}
-									onChange={(v) => updateString("event_type", v)}
-								/>
-							</div>
-							<InlineObjectReferencesEditor
-								references={data.inline_object_references}
-								onChange={(refs) => setData({ ...data, inline_object_references: refs })}
-								columns={columns}
-								previewData={previewData}
-								ValueExpressionEditor={ValueExpressionEditor}
-							/>
-						</div>
-					)}
-				</CardTypeSelectorContent>
-
-				{/* ---- Multi Event ---- */}
-				<CardTypeSelectorContent value="multi-event">
-					{data?.mode === "multi-event" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								Rows are events with different types. Specify ID, timestamp, and type column or
-								expression.
-							</p>
-							<div className="grid grid-cols-2 gap-3">
-								<ValueExpressionEditor
-									label="Event ID"
-									value={data.id}
-									onChange={(v) => updateExpr("id", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<TimestampSourceEditor
-									label="Timestamp"
-									value={data.timestamp}
-									onChange={(v) => updateTimestamp("timestamp", v)}
-									columns={columns}
-									previewData={previewData}
-								/>
-								<ValueExpressionEditor
-									label="Event Type"
-									value={data.event_type}
-									onChange={(v) => updateExpr("event_type", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="type"
-								/>
-							</div>
-							<InlineObjectReferencesEditor
-								references={data.inline_object_references}
-								onChange={(refs) => setData({ ...data, inline_object_references: refs })}
-								columns={columns}
-								previewData={previewData}
-								ValueExpressionEditor={ValueExpressionEditor}
-							/>
-						</div>
-					)}
-				</CardTypeSelectorContent>
-
-				{/* ---- E2O Relation ---- */}
-				<CardTypeSelectorContent value="e2o-relation">
-					{data?.mode === "e2o-relation" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								This table links events to objects. Specify which columns reference the event and
-								object.
-							</p>
-							<div className="grid grid-cols-2 gap-3">
-								<ValueExpressionEditor
-									label="Source Event"
-									value={data.source_event}
-									onChange={(v) => updateExpr("source_event", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<ValueExpressionEditor
-									label="Target Object"
-									value={data.target_object}
-									onChange={(v) => updateExpr("target_object", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<ValueExpressionEditor
-									label="Qualifier (optional)"
-									value={data.qualifier ?? { ...DEFAULT_VALUE_EXPR }}
-									onChange={(v) => updateExpr("qualifier", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="string"
-									allowEmpty
-								/>
-							</div>
-						</div>
-					)}
-				</CardTypeSelectorContent>
-
-				{/* ---- O2O Relation ---- */}
-				<CardTypeSelectorContent value="o2o-relation">
-					{data?.mode === "o2o-relation" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								This table links objects to other objects. Specify the source and target object
-								columns.
-							</p>
-							<div className="grid grid-cols-2 gap-3">
-								<ValueExpressionEditor
-									label="Source Object"
-									value={data.source_object}
-									onChange={(v) => updateExpr("source_object", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<ValueExpressionEditor
-									label="Target Object"
-									value={data.target_object}
-									onChange={(v) => updateExpr("target_object", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<ValueExpressionEditor
-									label="Qualifier (optional)"
-									value={data.qualifier ?? { ...DEFAULT_VALUE_EXPR }}
-									onChange={(v) => updateExpr("qualifier", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="string"
-									allowEmpty
-								/>
-							</div>
-						</div>
-					)}
-				</CardTypeSelectorContent>
-
-				{/* ---- Change Table Events ---- */}
-				<CardTypeSelectorContent value="change-table-events">
-					{data?.mode === "change-table-events" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								Derive events from change/log table rows. Define rules that map rows to event types
-								based on column conditions.
-							</p>
-							<div className="grid grid-cols-2 gap-3">
-								<TimestampSourceEditor
-									label="Timestamp"
-									value={data.timestamp}
-									onChange={(v) => updateTimestamp("timestamp", v)}
-									columns={columns}
-									previewData={previewData}
-								/>
-								<ValueExpressionEditor
-									label="Event ID (or generate)"
-									value={data.id ?? { ...DEFAULT_VALUE_EXPR }}
-									onChange={(v) => updateExpr("id", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-									allowEmpty
-								/>
-							</div>
-							<EventRulesEditor
-								rules={data.event_rules}
-								onChange={(rules) => setData({ ...data, event_rules: rules })}
-								columns={columns}
-								previewData={previewData}
-							/>
-							<InlineObjectReferencesEditor
-								references={data.inline_object_references}
-								onChange={(refs) => setData({ ...data, inline_object_references: refs })}
-								columns={columns}
-								previewData={previewData}
-								ValueExpressionEditor={ValueExpressionEditor}
-							/>
-						</div>
-					)}
-				</CardTypeSelectorContent>
-
-				{/* ---- Change Table Object Changes ---- */}
-				<CardTypeSelectorContent value="change-table-object-changes">
-					{data?.mode === "change-table-object-changes" && (
-						<div className="space-y-4">
-							<p className="text-sm text-slate-600">
-								Track object attribute changes over time. Each row records attribute values at a
-								point in time for an object.
-							</p>
-							<div className="grid grid-cols-1 gap-3">
-								<ValueExpressionEditor
-									label="Object ID"
-									value={data.object_id}
-									onChange={(v) => updateExpr("object_id", v)}
-									columns={columns}
-									previewData={previewData}
-									typeHint="id"
-								/>
-								<TextInputConfig
-									label="Object Type"
-									value={data.object_type}
-									onChange={(v) => updateString("object_type", v)}
-								/>
-								<TimestampSourceEditor
-									label="Timestamp"
-									value={data.timestamp}
-									onChange={(v) => updateTimestamp("timestamp", v)}
-									columns={columns}
-									previewData={previewData}
-								/>
-							</div>
-							<AttributeConfigEditor
-								config={migrateAttributeConfig(data as unknown as Record<string, unknown>)}
-								onChange={(config) => setData({ ...data, attribute_config: config })}
-								columns={columns}
-								previewData={previewData}
-								ColumnSelector={ColumnSelector}
-								TextInputConfig={TextInputConfig}
-							/>
-						</div>
-					)}
-				</CardTypeSelectorContent>
+				<CardTypeSelectorContent value={currentMode}>{configPanel}</CardTypeSelectorContent>
 			</CardTypeSelector>
 		</div>
 	);

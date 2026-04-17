@@ -512,7 +512,6 @@ export default function AutoDiscoveryButton({
 				await toast
 					.promise(
 						backend["ocel/discover-constraints"](reqData).then(async (json) => {
-							console.log({ json });
 							const updatedConstraints = [...constraints];
 
 							let index = constraints.length;

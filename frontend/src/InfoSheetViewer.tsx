@@ -166,102 +166,30 @@ function ActivityFrequenciesSheet({ activity }: { activity: string }) {
 	);
 }
 
-function binData(data: number[], targetBinCount = 25) {
-	if (data.length === 0) {
-		return { x: [], y: [], binEdges: [] };
-	}
-
-	const dataMin = Math.min(...data);
-	const dataMax = Math.max(...data);
-
-	if (dataMin === dataMax) {
-		const range = Math.abs(dataMin * 0.1) || 0.5;
-		return {
-			x: [dataMin],
-			y: [100],
-			binEdges: [`[${(dataMin - range).toFixed(2)}, ${(dataMin + range).toFixed(2)})`],
-		};
-	}
-
-	const dataRange = dataMax - dataMin;
-	const roughBinSize = dataRange / targetBinCount;
-
-	const exponent = Math.floor(Math.log10(roughBinSize));
-	const powerOf10 = 10 ** exponent;
-	const mantissa = roughBinSize / powerOf10;
-
-	let niceMantissa: number;
-	if (mantissa < 1.5) {
-		niceMantissa = 1;
-	} else if (mantissa < 3) {
-		niceMantissa = 2;
-	} else if (mantissa < 7) {
-		niceMantissa = 5;
-	} else {
-		niceMantissa = 10;
-	}
-
-	const binSize = niceMantissa * powerOf10;
-
-	const chartMin = Math.floor(dataMin / binSize) * binSize;
-	const chartMax = Math.ceil(dataMax / binSize) * binSize;
-
-	const epsilon = binSize * 0.001;
-	const binCount = Math.max(1, Math.round((chartMax - chartMin) / binSize));
-	const bins = new Array(binCount).fill(0);
-	const totalPoints = data.length;
-
-	for (const val of data) {
-		if (val >= chartMax - epsilon) {
-			bins[binCount - 1]++;
-		} else {
-			const binIndex = Math.floor((val - chartMin) / binSize);
-			if (binIndex >= 0 && binIndex < binCount) {
-				bins[binIndex]++;
-			}
-		}
-	}
-
-	const x: number[] = [];
-	const y: number[] = [];
-	const binEdges: string[] = [];
-	const precision = Math.max(0, -exponent);
-
-	for (let i = 0; i < binCount; i++) {
-		const binStart = chartMin + i * binSize;
-		const binEnd = binStart + binSize;
-
-		if (bins[i] > 0) {
-			x.push(binStart + binSize / 2);
-			y.push((bins[i] / totalPoints) * 100);
-			binEdges.push(`[${binStart.toFixed(precision)}, ${binEnd.toFixed(precision)})`);
-		}
-	}
-
-	return { x, y, binEdges };
-}
-
 function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
 	const backend = useBackend();
 	const durationStats = useQuery({
 		queryKey: ["ocel", "edge-durations", JSON.stringify(edge)],
 		queryFn: () => backend["ocel/get-oc-declare-edge-statistics"](edge),
 	});
-
-	const { plotData, unit, hovertemplate } = useMemo(() => {
-		if (!durationStats.data || durationStats.data.length === 0) {
-			return { plotData: { x: [], y: [], binEdges: [] }, unit: "Hours", hovertemplate: "" };
+	const { plotX, plotY, plotLabels, unit, hovertemplate } = useMemo(() => {
+		if (!durationStats.data || durationStats.data.bin_centers_ms.length === 0) {
+			return { plotX: [], plotY: [], plotLabels: [], unit: "Hours", hovertemplate: "" };
 		}
 
-		const maxDurationMs = Math.max(...durationStats.data.map((v) => Math.abs(v)));
-		let unit = "Hours";
-		let divisor = 1000 * 60 * 60;
+		const maxDurationMs = Math.max(
+			Math.abs(durationStats.data.min_ms),
+			Math.abs(durationStats.data.max_ms),
+		);
 
 		const MINUTE_MS = 1000 * 60;
 		const HOUR_MS = MINUTE_MS * 60;
 		const DAY_MS = HOUR_MS * 24;
 		const MONTH_MS = DAY_MS * 30;
 		const YEAR_MS = MONTH_MS * 12;
+
+		let unit = "Hours";
+		let divisor = HOUR_MS;
 
 		if (maxDurationMs < MINUTE_MS * 5) {
 			unit = "Seconds";
@@ -283,11 +211,18 @@ function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
 			divisor = YEAR_MS;
 		}
 
-		const scaledData = durationStats.data.map((v) => v / divisor);
-		const plotData = binData(scaledData, 25);
+		const plotX = durationStats.data.bin_centers_ms.map((v) => v / divisor);
+		const plotY = durationStats.data.percentages;
+		const plotLabels = durationStats.data.bin_labels.map((label) => {
+			const nums = label.match(/-?[\d.]+/g);
+			if (nums && nums.length === 2) {
+				return `[${(parseFloat(nums[0]) / divisor).toFixed(2)}, ${(parseFloat(nums[1]) / divisor).toFixed(2)})`;
+			}
+			return label;
+		});
 		const hovertemplate = `<b>Range:</b> %{customdata} ${unit}<br><b>Frequency:</b> %{y:.2f}%<extra></extra>`;
 
-		return { plotData, unit, hovertemplate };
+		return { plotX, plotY, plotLabels, unit, hovertemplate };
 	}, [durationStats.data]);
 
 	const commonLayout: Partial<Plotly.Layout> = {
@@ -326,7 +261,7 @@ function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
 		displayModeBar: false,
 	};
 
-	const isReversed = plotData.x.length > 0 && plotData.x[plotData.x.length - 1] >= 0;
+	const isReversed = plotX.length > 0 && plotX[plotX.length - 1] >= 0;
 
 	return (
 		<div className="w-full h-full">
@@ -345,15 +280,14 @@ function EdgeDurationSheet({ edge }: { edge: OCDeclareArc }) {
 						data={[
 							{
 								type: "bar",
-								x: plotData.x,
-								y: plotData.y,
-								customdata: plotData.binEdges,
+								x: plotX,
+								y: plotY,
+								customdata: plotLabels,
 								hovertemplate: hovertemplate,
 								name: "Duration",
 								marker: {
-									color: plotData.x,
+									color: plotX,
 									colorscale: "YlOrRd",
-									// showscale: true,
 									reversescale: isReversed,
 									colorbar: {
 										orientation: "v",

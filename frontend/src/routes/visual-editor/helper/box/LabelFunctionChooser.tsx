@@ -22,7 +22,7 @@ import { VisualEditorContext } from "../VisualEditorContext";
 
 const CELEditor = lazy(async () => await import("@/components/CELEditor"));
 
-export default function FilterChooser({
+export default function LabelFunctionChooser({
 	id,
 	box,
 	updateBox,
@@ -181,7 +181,6 @@ export default function FilterChooser({
 	);
 }
 
-const compact = true;
 function LabelFunctionItem({
 	onEdit,
 	labelFun,
@@ -200,11 +199,7 @@ function LabelFunctionItem({
 			>
 				<LabelLabel label={labelFun.label} className="text-[0.5rem]" />
 				<pre
-					className={clsx(
-						" text-[0.5rem] text-ellipsis overflow-hidden leading-tight font-medium text-muted-foreground",
-						!(compact ?? false) && " break-all whitespace-normal",
-						compact && "whitespace-nowrap max-w-20",
-					)}
+					className="text-[0.5rem] text-ellipsis overflow-hidden leading-tight font-medium text-muted-foreground whitespace-nowrap max-w-20"
 					title={labelFun.cel}
 				>
 					{labelFun.cel}

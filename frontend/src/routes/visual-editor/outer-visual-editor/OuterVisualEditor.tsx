@@ -94,7 +94,6 @@ export default function VisualEditorOuter() {
 		}
 
 		if (prevDataRef.current !== undefined) {
-			console.log(JSON.stringify(prevDataRef.current));
 			localStorage.setItem(
 				QUERY_LOCALSTORAGE_SAVE_KEY_DATA,
 				JSON.stringify(prevDataRef.current.map((x) => ({ ...x, violations: undefined }))),

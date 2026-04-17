@@ -1,0 +1,11 @@
+target
+**/target
+**/node_modules
+frontend/dist
+tauri/src-tauri/gen
+tauri/src-tauri/target
+*.log
+backend/data
+backend/filtered-ocel*.json
+.git
+.github
