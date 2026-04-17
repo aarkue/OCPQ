@@ -279,14 +279,52 @@ impl BindingBoxTree {
     }
 
     pub fn evaluate(&self, ocel: &SlimLinkedOCEL) -> Result<(EvaluationResults, bool), String> {
-        if let Some(root) = self.nodes.first() {
-            let step_cache = self.compute_step_cache(ocel);
-            let ((ret, _violation), skipped) =
-                root.evaluate(0, Binding::default(), self, ocel, &step_cache)?;
-            Ok((ret, skipped))
-        } else {
-            Ok((vec![], false))
+        if self.nodes.is_empty() {
+            return Ok((vec![], false));
         }
+        // Collect every index that is referenced as a child by some other node.
+        // Whatever remains is a root of the forest; evaluate each with an empty
+        // binding so multi-root trees (submitted as one merged request from the
+        // frontend) produce a unified result.
+        let mut is_child = vec![false; self.nodes.len()];
+        for node in &self.nodes {
+            match node {
+                BindingBoxTreeNode::Box(_, children) => {
+                    for &c in children {
+                        if c < is_child.len() {
+                            is_child[c] = true;
+                        }
+                    }
+                }
+                BindingBoxTreeNode::OR(a, b) | BindingBoxTreeNode::AND(a, b) => {
+                    if *a < is_child.len() {
+                        is_child[*a] = true;
+                    }
+                    if *b < is_child.len() {
+                        is_child[*b] = true;
+                    }
+                }
+                BindingBoxTreeNode::NOT(a) => {
+                    if *a < is_child.len() {
+                        is_child[*a] = true;
+                    }
+                }
+            }
+        }
+
+        let step_cache = self.compute_step_cache(ocel);
+        let mut combined = Vec::new();
+        let mut any_skipped = false;
+        for (idx, node) in self.nodes.iter().enumerate() {
+            if is_child[idx] {
+                continue;
+            }
+            let ((ret, _violation), skipped) =
+                node.evaluate(idx, Binding::default(), self, ocel, &step_cache)?;
+            combined.extend(ret);
+            any_skipped = any_skipped || skipped;
+        }
+        Ok((combined, any_skipped))
     }
 
     pub fn get_ev_vars(&self) -> HashSet<EventVariable> {

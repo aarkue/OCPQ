@@ -7,8 +7,9 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use itertools::Itertools;
 use ocpq_shared::{
     binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
-        ExportFormat, FilterExportWithBoxTreeRequest,
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvalPageRequest,
+        EvalPageResponse, EvaluateBoxTreeResult, EvaluateBoxTreeSummary, ExportFormat,
+        FilterExportWithBoxTreeRequest,
     },
     data_extraction::{
         blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
@@ -51,7 +52,10 @@ use std::{
     fs::File,
     io::{Cursor, Write},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 use tauri::{
     async_runtime::{JoinHandle, RwLock},
@@ -65,12 +69,17 @@ pub struct AppState {
     client: Arc<RwLock<Option<Client>>>,
     jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
+    eval_version_counter: Arc<AtomicU64>,
     initial_files: Arc<Mutex<Option<Vec<String>>>>,
 }
 
 fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
     let ocel = OCEL::import_from_path(path).map_err(|e| e.to_string())?;
     Ok(ocel)
+}
+
+async fn clear_eval_res(state: &AppState) {
+    *state.eval_res.write().await = None;
 }
 #[tauri::command(async)]
 async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
@@ -79,6 +88,8 @@ async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OC
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 
@@ -93,6 +104,8 @@ async fn import_ocel_slice(
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 
@@ -108,6 +121,8 @@ async fn import_xes_path_as_ocel(
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 #[tauri::command(async)]
@@ -122,6 +137,8 @@ async fn import_xes_slice_as_ocel(
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
+    drop(state_guard);
+    clear_eval_res(&state).await;
     Ok(ocel_info)
 }
 
@@ -137,19 +154,46 @@ async fn get_current_ocel_info(
 }
 
 #[tauri::command(async)]
+async fn get_sample_ids(
+    limit: usize,
+    state: tauri::State<'_, AppState>,
+) -> Result<ocpq_shared::SampleIds, String> {
+    let guard = state.ocel.read().await;
+    let ocel = guard.as_ref().ok_or_else(|| "No OCEL loaded".to_string())?;
+    Ok(ocpq_shared::get_sample_ids(ocel, limit))
+}
+
+#[tauri::command(async)]
 async fn check_with_box_tree(
     req: CheckWithBoxTreeRequest,
     state: State<'_, AppState>,
-) -> Result<EvaluateBoxTreeResult, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => {
-            let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))?;
-            let res_to_ret: EvaluateBoxTreeResult = res.clone_first_few();
-            *state.eval_res.write().await = Some(res);
-            Ok(res_to_ret)
-        }
-        None => Err("No OCEL loaded".to_string()),
-    }
+) -> Result<EvaluateBoxTreeSummary, String> {
+    let ocel_guard = state.ocel.read().await;
+    let Some(ocel) = ocel_guard.as_ref() else {
+        return Err("No OCEL loaded".to_string());
+    };
+    let mut res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))?;
+    drop(ocel_guard);
+    // Hold the eval_res lock while assigning the version so the cached snapshot
+    // and the version we hand to the client are always consistent, even under
+    // concurrent evaluations.
+    let mut eval_guard = state.eval_res.write().await;
+    res.eval_version = state.eval_version_counter.fetch_add(1, Ordering::SeqCst) + 1;
+    let summary = res.summary();
+    *eval_guard = Some(res);
+    Ok(summary)
+}
+
+#[tauri::command(async)]
+async fn get_eval_result_page(
+    req: EvalPageRequest,
+    state: State<'_, AppState>,
+) -> Result<EvalPageResponse, String> {
+    let guard = state.eval_res.read().await;
+    let res = guard
+        .as_ref()
+        .ok_or_else(|| "No evaluation result cached".to_string())?;
+    res.get_page(&req)
 }
 
 #[tauri::command(async)]
@@ -438,10 +482,8 @@ fn get_initial_files(state: State<'_, AppState>) -> Result<Vec<String>, String> 
 
 #[tauri::command(async)]
 async fn unload_ocel(state: State<'_, AppState>) -> Result<(), String> {
-    let mut ocel_guard = state.ocel.write().await;
-    *ocel_guard = None;
-    let mut eval_guard = state.eval_res.write().await;
-    *eval_guard = None;
+    *state.ocel.write().await = None;
+    clear_eval_res(&state).await;
     Ok(())
 }
 
@@ -457,19 +499,11 @@ async fn execute_extraction(
     req: ExecuteExtractionRequest,
     state: State<'_, AppState>,
 ) -> Result<ExecuteExtractionResponse, String> {
-    // Use optimized extraction that builds SlimLinkedOCEL directly
     let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
         .await
         .map_err(|e| e.to_string())?;
-
-    // Replace the currently loaded OCEL with the extracted one
-    let mut ocel_guard = state.ocel.write().await;
-    *ocel_guard = Some(locel);
-
-    // Clear the cached evaluation result since we have a new OCEL
-    let mut eval_guard = state.eval_res.write().await;
-    *eval_guard = None;
-
+    *state.ocel.write().await = Some(locel);
+    clear_eval_res(&state).await;
     Ok(response)
 }
 
@@ -533,9 +567,11 @@ fn main() {
             import_xes_path_as_ocel,
             import_xes_slice_as_ocel,
             get_current_ocel_info,
+            get_sample_ids,
             export_ocel,
             export_filter_box,
             check_with_box_tree,
+            get_eval_result_page,
             auto_discover_constraints,
             export_bindings_table,
             ocel_graph,

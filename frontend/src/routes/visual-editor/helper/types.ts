@@ -1,16 +1,16 @@
 import type { BindingBox } from "@/types/generated/BindingBox";
 import type { BindingBoxTree } from "@/types/generated/BindingBoxTree";
 import type { BindingBoxTreeNode } from "@/types/generated/BindingBoxTreeNode";
-import type { EvaluationResultWithCount } from "@/types/generated/EvaluationResultWithCount";
+import type { NodeSummary } from "@/types/generated/NodeSummary";
 
 export type EvaluationResPerNodes = {
 	evalRes: Record<string, EvaluationRes>;
-	objectIds: string[];
-	eventIds: string[];
+	evalVersion: number;
 	evalNodes: Record<string, BindingBoxTreeNode>;
 	nodeIdtoIndex: Record<string, number>;
 };
-export type EvaluationRes = EvaluationResultWithCount;
+
+export type EvaluationRes = NodeSummary;
 
 export type CountConstraint = { min: number; max: number };
 

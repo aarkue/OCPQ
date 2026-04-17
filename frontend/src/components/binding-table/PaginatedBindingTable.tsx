@@ -1,57 +1,104 @@
 import { ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons";
-import {
-	type ColumnDef,
-	flexRender,
-	getCoreRowModel,
-	getFilteredRowModel,
-	getPaginationRowModel,
-	useReactTable,
-} from "@tanstack/react-table";
-import { useEffect, useState } from "react";
+import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import { useMemo, useState } from "react";
+import { useEvalResultPage } from "@/hooks/useEvalResultPage";
+import type { BindingBoxTreeNode } from "@/types/generated/BindingBoxTreeNode";
+import type { BindingRow } from "@/types/generated/BindingRow";
+import type { EvalPageRequest } from "@/types/generated/EvalPageRequest";
+import Spinner from "../Spinner";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { IndeterminateCheckbox } from "../ui/intermediate-checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { columnsForBindingRow } from "./columns";
 
-interface DataTableProps<TData, TValue> {
-	columns: ColumnDef<TData, TValue>[];
-	data: TData[];
+type Mode = "violations" | "situations" | "satisfied-situations" | undefined;
+
+interface ServerPaginatedBindingTableProps {
+	evalVersion: number;
+	nodeIndex: number;
+	totalCount: number;
+	totalViolatedCount: number;
+	node: BindingBoxTreeNode;
+	addViolationStatus: boolean;
+	showElementInfo: (
+		elInfo: { req: { id: string } | { index: number }; type: "object" | "event" } | undefined,
+	) => unknown;
+	initialMode: Mode;
 }
 
-export function DataTablePagination<TData, TValue>({
-	columns,
-	data,
+function modeToFilter(mode: Mode): boolean | null {
+	if (mode === "violations") return true;
+	if (mode === "satisfied-situations") return false;
+	return null;
+}
+
+export function DataTablePagination({
+	evalVersion,
+	nodeIndex,
+	totalCount,
+	totalViolatedCount,
+	node,
+	addViolationStatus,
+	showElementInfo,
 	initialMode,
-}: DataTableProps<TData, TValue> & {
-	initialMode: "violations" | "situations" | "satisfied-situations" | undefined;
-}) {
+}: ServerPaginatedBindingTableProps) {
+	const [pageSize, setPageSize] = useState(10);
+	// Filter changes reset pagination; keep both in the same state object so
+	// there's no stale-page round-trip while a useEffect catches up.
+	const [{ pageIndex, violated }, setPage] = useState<{
+		pageIndex: number;
+		violated: boolean | null;
+	}>(() => ({ pageIndex: 0, violated: modeToFilter(initialMode) }));
+
+	const req: EvalPageRequest = useMemo(
+		() => ({
+			evalVersion,
+			nodeIndex,
+			offset: pageIndex * pageSize,
+			limit: pageSize,
+			violated,
+		}),
+		[evalVersion, nodeIndex, pageIndex, pageSize, violated],
+	);
+
+	const { data, isLoading, error } = useEvalResultPage(req);
+
+	const rows = data?.rows ?? [];
+	const filteredCount =
+		data?.filteredCount ??
+		(violated === null
+			? totalCount
+			: violated
+				? totalViolatedCount
+				: totalCount - totalViolatedCount);
+	const pageCount = Math.max(1, Math.ceil(filteredCount / pageSize));
+
+	const columns: ColumnDef<BindingRow>[] = useMemo(() => {
+		if (rows.length === 0) return [];
+		return columnsForBindingRow(rows[0], showElementInfo, node, addViolationStatus);
+	}, [rows, showElementInfo, node, addViolationStatus]);
+
 	const table = useReactTable({
-		data,
+		data: rows,
 		columns,
-		filterFns: {},
 		getCoreRowModel: getCoreRowModel(),
-		getPaginationRowModel: getPaginationRowModel(),
-		getFilteredRowModel: getFilteredRowModel(),
-		autoResetPageIndex: false,
-		initialState: {
-			pagination: {
-				pageIndex: 0,
-				pageSize: 10,
-			},
+		manualPagination: true,
+		pageCount,
+		state: {
+			pagination: { pageIndex, pageSize },
 		},
 	});
-	useEffect(() => {
-		if (table.getAllColumns().find((c) => c.id === "Violation") !== undefined) {
-			if (initialMode === "satisfied-situations") {
-				table.getColumn("Violation")?.setFilterValue("SATISFIED");
-			} else if (initialMode === "violations") {
-				table.getColumn("Violation")?.setFilterValue("VIOLATED");
-			} else {
-				table.getColumn("Violation")?.setFilterValue(undefined);
-			}
-		}
-	}, [initialMode, table.getAllColumns, table.getColumn]);
+
+	if (error && error.message === "STALE_EVAL_VERSION") {
+		return (
+			<div className="p-4 text-sm text-destructive">
+				These results are from a previous evaluation and have expired. Re-run the evaluation to view
+				bindings.
+			</div>
+		);
+	}
+
 	return (
 		<div className="w-full">
 			<div className="rounded-md border w-full max-h-[73vh] overflow-auto">
@@ -59,77 +106,60 @@ export function DataTablePagination<TData, TValue>({
 					<TableHeader>
 						{table.getHeaderGroups().map((headerGroup) => (
 							<TableRow key={headerGroup.id} className="divide-x">
-								{headerGroup.headers.map((header) => {
-									return (
-										<TableHead key={header.id} className="py-1 px-2 mx-4 ">
-											{header.isPlaceholder
-												? null
-												: flexRender(header.column.columnDef.header, header.getContext())}
+								{headerGroup.headers.map((header) => (
+									<TableHead key={header.id} className="py-1 px-2 mx-4">
+										{header.isPlaceholder
+											? null
+											: flexRender(header.column.columnDef.header, header.getContext())}
+										{header.id === "Violation" && (
 											<div className="flex items-center gap-x-1 w-fit">
-												{header.id === "Violation" && (
-													<>
-														<IndeterminateCheckbox
-															title={
-																table.getColumn(header.id)?.getFilterValue() === "SATISFIED"
-																	? "Only show satisfied bindings"
-																	: table.getColumn(header.id)?.getFilterValue() === "VIOLATED"
-																		? "Only show violated bindings"
-																		: "Show both satisfied and violated bindings"
-															}
-															state={
-																table.getColumn(header.id)?.getFilterValue() === "SATISFIED"
-																	? "unchecked"
-																	: table.getColumn(header.id)?.getFilterValue() === "VIOLATED"
-																		? "checked"
-																		: "indeterminate"
-															}
-															newState={(newChecked) => {
-																table
-																	.getColumn(header.id)
-																	?.setFilterValue(
-																		newChecked === "indeterminate"
-																			? undefined
-																			: newChecked === "unchecked"
-																				? "SATISFIED"
-																				: "VIOLATED",
-																	);
-															}}
-														/>
-														{table.getColumn(header.id)?.getFilterValue() === undefined
-															? "any"
-															: table.getColumn(header.id)?.getFilterValue() === "VIOLATED"
-																? "viol."
-																: "sat."}
-													</>
-												)}
-												{header.id !== "Violation" && (
-													<DebouncedInput
-														debounce={200}
-														placeholder="Search..."
-														value={(table.getColumn(header.id)?.getFilterValue() as string) ?? ""}
-														onChange={(newVal) =>
-															table.getColumn(header.id)?.setFilterValue(newVal)
-														}
-														className="max-w-20 text-xs py-0 h-6 my-1 bg-white"
-													/>
-												)}
+												<IndeterminateCheckbox
+													title={
+														violated === false
+															? "Only show satisfied bindings"
+															: violated === true
+																? "Only show violated bindings"
+																: "Show both satisfied and violated bindings"
+													}
+													state={
+														violated === false
+															? "unchecked"
+															: violated === true
+																? "checked"
+																: "indeterminate"
+													}
+													newState={(newChecked) => {
+														const next =
+															newChecked === "indeterminate"
+																? null
+																: newChecked === "unchecked"
+																	? false
+																	: true;
+														setPage({ pageIndex: 0, violated: next });
+													}}
+												/>
+												{violated === null ? "any" : violated ? "viol." : "sat."}
 											</div>
-										</TableHead>
-									);
-								})}
+										)}
+									</TableHead>
+								))}
 							</TableRow>
 						))}
 					</TableHeader>
 					<TableBody className="text-xs">
-						{table.getRowModel().rows?.length !== 0 ? (
+						{isLoading ? (
+							<TableRow>
+								<TableCell colSpan={columns.length || 1} className="h-24 text-center">
+									<div className="flex items-center justify-center gap-x-2">
+										Loading… <Spinner />
+									</div>
+								</TableCell>
+							</TableRow>
+						) : rows.length > 0 ? (
 							table.getRowModel().rows.map((row) => (
-								<TableRow
-									key={row.id}
-									data-state={row.getIsSelected() && "selected"}
-									className="divide-x w-fit"
-								>
+								<TableRow key={row.id} className="divide-x w-fit">
 									{row.getVisibleCells().map((cell) => (
-										<TableCell key={cell.id} className="">
+										<TableCell key={cell.id}>
 											{flexRender(cell.column.columnDef.cell, cell.getContext())}
 										</TableCell>
 									))}
@@ -137,7 +167,7 @@ export function DataTablePagination<TData, TValue>({
 							))
 						) : (
 							<TableRow>
-								<TableCell colSpan={columns.length} className="h-24 text-center">
+								<TableCell colSpan={columns.length || 1} className="h-24 text-center">
 									No results.
 								</TableCell>
 							</TableRow>
@@ -149,41 +179,35 @@ export function DataTablePagination<TData, TValue>({
 				<div className="flex items-center space-x-2">
 					<p className="font-medium">Rows per page</p>
 					<Select
-						value={`${table.getState().pagination.pageSize}`}
+						value={`${pageSize}`}
 						onValueChange={(value) => {
-							table.setPageSize(Number(value));
+							setPageSize(Number(value));
+							setPage((prev) => ({ ...prev, pageIndex: 0 }));
 						}}
 					>
 						<SelectTrigger className="h-8 w-[70px]">
-							<SelectValue placeholder={table.getState().pagination.pageSize} />
+							<SelectValue placeholder={pageSize} />
 						</SelectTrigger>
 						<SelectContent side="top">
-							{[10, 20, 30, 40, 50].map((pageSize) => (
-								<SelectItem key={pageSize} value={`${pageSize}`}>
-									{pageSize}
+							{[10, 20, 30, 40, 50].map((n) => (
+								<SelectItem key={n} value={`${n}`}>
+									{n}
 								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>
 				</div>
 				<div className="flex w-full min-w-[150px] items-center justify-center font-medium">
-					Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+					Page {pageIndex + 1} of {pageCount} ({filteredCount} rows)
 				</div>
 				<div className="flex items-center space-x-2 justify-end">
-					{/* <Button
-              variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
-              onClick={() => table.setPageIndex(0)}
-              disabled={!table.getCanPreviousPage()}
-            >
-              <span className="sr-only">Go to first page</span>
-              <DoubleArrowLeftIcon className="h-4 w-4" />
-            </Button> */}
 					<Button
 						variant="outline"
 						className="h-8 w-8 p-0"
-						onClick={() => table.previousPage()}
-						disabled={!table.getCanPreviousPage()}
+						onClick={() =>
+							setPage((prev) => ({ ...prev, pageIndex: Math.max(0, prev.pageIndex - 1) }))
+						}
+						disabled={pageIndex === 0}
 					>
 						<span className="sr-only">Go to previous page</span>
 						<ChevronLeftIcon className="h-4 w-4" />
@@ -191,53 +215,21 @@ export function DataTablePagination<TData, TValue>({
 					<Button
 						variant="outline"
 						className="h-8 w-8 p-0"
-						onClick={() => table.nextPage()}
-						disabled={!table.getCanNextPage()}
+						onClick={() =>
+							setPage((prev) => ({
+								...prev,
+								pageIndex: Math.min(pageCount - 1, prev.pageIndex + 1),
+							}))
+						}
+						disabled={pageIndex >= pageCount - 1}
 					>
 						<span className="sr-only">Go to next page</span>
 						<ChevronRightIcon className="h-4 w-4" />
 					</Button>
-					{/* <Button
-              variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
-              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-              disabled={!table.getCanNextPage()}
-            >
-              <span className="sr-only">Go to last page</span>
-              <DoubleArrowRightIcon className="h-4 w-4" />
-            </Button> */}
 				</div>
 			</div>
 		</div>
 	);
-}
-
-// A typical debounced input react component
-function DebouncedInput({
-	value: initialValue,
-	onChange,
-	debounce = 500,
-	...props
-}: {
-	value: string | number;
-	onChange: (value: string | number) => void;
-	debounce?: number;
-} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange">) {
-	const [value, setValue] = useState(initialValue);
-
-	useEffect(() => {
-		setValue(initialValue);
-	}, [initialValue]);
-
-	useEffect(() => {
-		const timeout = setTimeout(() => {
-			onChange(value);
-		}, debounce);
-
-		return () => clearTimeout(timeout);
-	}, [value, debounce, onChange]);
-
-	return <Input {...props} value={value} onChange={(e) => setValue(e.target.value)} />;
 }
 
 export default DataTablePagination;

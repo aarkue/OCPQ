@@ -5,10 +5,13 @@ export type OCELInfo = {
 	num_events: number;
 	object_types: OCELType[];
 	event_types: OCELType[];
-	object_ids: string[];
-	event_ids: string[];
 	e2o_types: Record<string, Record<string, [number, Set<string>]>>;
 	o2o_types: Record<string, Record<string, [number, Set<string>]>>;
+};
+
+export type SampleIds = {
+	object_ids: string[];
+	event_ids: string[];
 };
 export type OCELAttributeValue = string | number | boolean | null;
 export type OCELObjectAttribute = {

@@ -147,7 +147,9 @@ export default function DataExtractionBlueprintEditor() {
 			);
 		} catch (e) {
 			console.warn("Failed to save blueprint data to localStorage:", e);
-			toast.error("Failed to save blueprint changes locally. Your work may not persist after leaving or refreshing the page.");
+			toast.error(
+				"Failed to save blueprint changes locally. Your work may not persist after leaving or refreshing the page.",
+			);
 		}
 	}
 

@@ -18,6 +18,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useBackend, useOcelInfo } from "@/hooks";
 import type { OCELGraphOptions } from "@/types/generated/OCELGraphOptions";
 import type { OCELEvent, OCELObject } from "@/types/ocel";
+import { useOcelSampleIds } from "../hooks/useOcelSampleIds";
 
 type GraphNode = (OCELEvent | OCELObject) & {
 	neighbors?: GraphNode[];
@@ -38,6 +39,7 @@ export default function OcelGraphViewer({
 	initialGrapOptions?: { type: "event" | "object"; id?: string };
 }) {
 	const ocelInfo = useOcelInfo();
+	const { data: sampleIds } = useOcelSampleIds(100);
 	const [graphData, setGraphData] = useState<GraphData>({
 		nodes: [],
 		links: [],
@@ -47,9 +49,23 @@ export default function OcelGraphViewer({
 		maxDistance: 2,
 		relsSizeIgnoreThreshold: 10,
 		rootIsObject: initialGrapOptions?.type !== "event",
-		root: initialGrapOptions?.id ?? ocelInfo?.object_ids[0] ?? "",
+		root: initialGrapOptions?.id ?? "",
 		spanningTree: false,
 	});
+
+	// Fill the root from the first sample id once it resolves, if the caller
+	// didn't provide one explicitly. Guarded by a ref so clearing the input
+	// later doesn't trigger another auto-fill.
+	const hasAutoFilledRootRef = useRef(false);
+	useEffect(() => {
+		if (hasAutoFilledRootRef.current) return;
+		if (initialGrapOptions?.id !== undefined || options.root !== "") return;
+		const firstId = (options.rootIsObject ? sampleIds?.object_ids : sampleIds?.event_ids)?.[0];
+		if (firstId) {
+			hasAutoFilledRootRef.current = true;
+			setOptions((o) => ({ ...o, root: firstId }));
+		}
+	}, [sampleIds, initialGrapOptions?.id, options.root, options.rootIsObject]);
 
 	const data = useMemo(() => {
 		const gData = graphData;
@@ -438,7 +454,7 @@ function GraphOptions({
 	options: OCELGraphOptions;
 	setOptions: (newVal: OCELGraphOptions) => unknown;
 }) {
-	const ocelInfo = useOcelInfo()!;
+	const { data: sampleIds } = useOcelSampleIds(100);
 	const backend = useBackend();
 	const [loading, setLoading] = useState(false);
 	const optionsRef = useRef(options);
@@ -513,12 +529,12 @@ function GraphOptions({
 							Root ID
 						</Label>
 						<datalist id="object-ids">
-							{ocelInfo.object_ids.slice(0, 100).map((id) => (
+							{(sampleIds?.object_ids ?? []).map((id) => (
 								<option key={id} value={id} />
 							))}
 						</datalist>
 						<datalist id="event-ids">
-							{ocelInfo.event_ids.slice(0, 100).map((id) => (
+							{(sampleIds?.event_ids ?? []).map((id) => (
 								<option key={id} value={id} />
 							))}
 						</datalist>

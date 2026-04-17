@@ -18,7 +18,6 @@ import { MainRouterProvider } from "$/router";
 import type { DiscoverConstraintsResponse } from "$/routes/visual-editor/helper/types";
 import type { DBTranslationInput } from "$/types/DBTranslationInput";
 import type { BindingBoxTree } from "$/types/generated/BindingBoxTree";
-import type { EvaluateBoxTreeResult } from "$/types/generated/EvaluateBoxTreeResult";
 import type { OCPQJobOptions } from "$/types/generated/OCPQJobOptions";
 import type { ConnectionConfig, JobStatus } from "$/types/hpc-backend";
 import type {
@@ -102,19 +101,20 @@ const tauriBackend: BackendProvider = {
 		}
 	},
 
-	"ocel/check-constraints-box": (tree, measurePerformance) => {
-		console.log("Called once");
-		return new Promise(async (res, rej) => {
-			try {
-				const r = await invoke<EvaluateBoxTreeResult>("check_with_box_tree", {
-					req: { tree, measurePerformance },
-				});
-				res(r);
-			} catch (e) {
-				console.log(e);
-				rej(e);
-			}
+	"ocel/check-constraints-box": async (tree, measurePerformance) => {
+		return await invoke("check_with_box_tree", {
+			req: { tree, measurePerformance },
 		});
+	},
+	"ocel/eval-results/page": async (req) => {
+		try {
+			return await invoke("get_eval_result_page", { req });
+		} catch (e) {
+			if (typeof e === "string" && e.includes("stale eval_version")) {
+				throw new Error("STALE_EVAL_VERSION");
+			}
+			throw e;
+		}
 	},
 	"ocel/discover-constraints": async (options) => {
 		return await invoke<DiscoverConstraintsResponse>(
@@ -146,6 +146,9 @@ const tauriBackend: BackendProvider = {
 	},
 	"ocel/graph": async (options) => {
 		return await invoke("ocel_graph", { options });
+	},
+	"ocel/sample-ids": async (limit: number) => {
+		return await invoke("get_sample_ids", { limit });
 	},
 	"ocel/get-event": async (req) => {
 		return await invoke("get_event", { req });

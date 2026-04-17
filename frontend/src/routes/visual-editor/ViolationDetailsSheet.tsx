@@ -1,8 +1,7 @@
-import { lazy, memo, Suspense, useContext, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useContext, useMemo } from "react";
 import toast from "react-hot-toast";
 import { TbTableExport } from "react-icons/tb";
 import AlertHelper from "@/components/AlertHelper";
-import { columnsForBinding } from "@/components/binding-table/columns";
 import type PaginatedBindingTable from "@/components/binding-table/PaginatedBindingTable";
 import Spinner from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
@@ -28,9 +27,8 @@ const DataTablePaginationLazy = lazy(
 	async () => await import("@/components/binding-table/PaginatedBindingTable"),
 ) as typeof PaginatedBindingTable;
 
-const DEFAULT_CUTOFF = 10_000;
 const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
-	violationResPerNodes,
+	violationResPerNodes: _violationResPerNodes,
 	reset,
 	initialMode,
 	node,
@@ -46,45 +44,21 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
 	const hasConstraints = "Box" in node ? node.Box[0].constraints.length > 0 : true;
 
 	const { showElementInfo, violationsPerNode } = useContext(VisualEditorContext);
-	const labels = useMemo(() => {
-		// If violation info is available (it should?!) determine labels based on the first binding
-		if (
-			violationsPerNode?.evalRes[nodeID]?.situations &&
-			violationsPerNode?.evalRes[nodeID]?.situations.length > 0
-		) {
-			return Object.keys(violationsPerNode?.evalRes[nodeID]?.situations[0][0].labelMap);
-		}
-		return "Box" in node ? (node.Box[0].labels?.map((l) => l.label) ?? []) : [];
-	}, [nodeID, node, violationsPerNode]);
-	const [appliedCutoff, _setAppliedCutoff] = useState<number | undefined>(DEFAULT_CUTOFF);
-	const violationDetails = useMemo(() => {
-		return violationsPerNode?.evalRes[nodeID];
-	}, [nodeID, violationsPerNode]);
-	const items = useMemo(() => {
-		return violationsPerNode?.evalRes[nodeID]?.situations.slice(0, appliedCutoff) ?? [];
-	}, [appliedCutoff, violationsPerNode, nodeID]);
+	const labels = useMemo(
+		() => ("Box" in node ? (node.Box[0].labels?.map((l) => l.label) ?? []) : []),
+		[node],
+	);
 
-	const numBindings = violationsPerNode?.evalRes[nodeID]?.situationCount ?? 0;
-	const numViolations = violationsPerNode?.evalRes[nodeID]?.situationViolatedCount ?? 0;
-	const firstItem = items.length > 0 ? (items[0].length > 0 ? items[0][0] : undefined) : undefined;
-	const columns = useMemo(() => {
-		if (items.length >= 1 && firstItem !== undefined) {
-			return columnsForBinding(
-				firstItem,
-				violationResPerNodes.objectIds,
-				violationResPerNodes.eventIds,
-				showElementInfo,
-				node,
-				hasConstraints,
-			);
-		}
-		return [];
-	}, [violationResPerNodes, node, hasConstraints, items.length, firstItem, showElementInfo]); // eslint-disable-line -- showElementInfo excluded: unstable inline context ref
+	const summary = violationsPerNode?.evalRes[nodeID];
+	const nodeIndex = violationsPerNode?.nodeIdtoIndex[nodeID];
+	const evalVersion = violationsPerNode?.evalVersion;
+	const numBindings = summary?.situationCount ?? 0;
+	const numViolations = summary?.situationViolatedCount ?? 0;
 
 	return (
 		<Sheet
 			modal={false}
-			open={violationDetails !== undefined}
+			open={summary !== undefined}
 			onOpenChange={(o) => {
 				if (!o) {
 					reset();
@@ -92,7 +66,7 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
 				}
 			}}
 		>
-			{violationDetails !== undefined && (
+			{summary !== undefined && (
 				<SheetContent
 					side="left"
 					className="h-screen flex flex-col w-[50vw] min-w-fit"
@@ -209,7 +183,6 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
 										submitAction="Export"
 										onSubmit={async (data, _ev) => {
 											try {
-												const nodeIndex = violationsPerNode?.nodeIdtoIndex[nodeID];
 												if (nodeIndex !== undefined) {
 													const res = await toast.promise(
 														backend["ocel/export-bindings"](nodeIndex, data),
@@ -239,31 +212,11 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
 										}}
 									/>
 								</div>
-								{numBindings > DEFAULT_CUTOFF && (
-									<div className="flex items-center gap-x-2">
-										{appliedCutoff !== undefined
-											? `For performance reasons, only the first ${DEFAULT_CUTOFF} output bindings are shown.`
-											: "All output bindings are shown."}
-										{/* <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        if (appliedCutoff !== undefined) {
-                          setAppliedCutoff(undefined);
-                        } else {
-                          setAppliedCutoff(DEFAULT_CUTOFF);
-                        }
-                      }}
-                    >
-                      {appliedCutoff !== undefined ? "Show All" : "Undo"}
-                    </Button> */}
-									</div>
-								)}
 							</div>
 						</SheetDescription>
 					</SheetHeader>
 
-					{items.length > 0 && (
+					{evalVersion !== undefined && nodeIndex !== undefined && numBindings > 0 && (
 						<Suspense
 							fallback={
 								<div className="flex items-center gap-x-2">
@@ -273,8 +226,13 @@ const ViolationDetailsSheet = memo(function ViolationDetailsSheet({
 						>
 							<DataTablePaginationLazy
 								key={JSON.stringify(node)}
-								columns={columns}
-								data={items}
+								evalVersion={evalVersion}
+								nodeIndex={nodeIndex}
+								totalCount={numBindings}
+								totalViolatedCount={numViolations}
+								node={node}
+								addViolationStatus={hasConstraints}
+								showElementInfo={showElementInfo}
 								initialMode={initialMode}
 							/>
 						</Suspense>

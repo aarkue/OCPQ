@@ -12,15 +12,18 @@ import type { BinnedEdgeDurationStats } from "./types/generated/BinnedEdgeDurati
 import type { ConnectDataSourceRequest } from "./types/generated/ConnectDataSourceRequest";
 import type { DataExtractionBlueprint } from "./types/generated/DataExtractionBlueprint";
 import type { DataSourceMetadata } from "./types/generated/DataSourceMetadata";
-import type { EvaluateBoxTreeResult } from "./types/generated/EvaluateBoxTreeResult";
+import type { EvalPageRequest } from "./types/generated/EvalPageRequest";
+import type { EvalPageResponse } from "./types/generated/EvalPageResponse";
+import type { EvaluateBoxTreeSummary } from "./types/generated/EvaluateBoxTreeSummary";
 import type { ExecuteExtractionResponse } from "./types/generated/ExecuteExtractionResponse";
 import type { OCELGraphOptions } from "./types/generated/OCELGraphOptions";
 import type { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 import type { TableExportOptions } from "./types/generated/TableExportOptions";
 import type { ConnectionConfig, JobStatus } from "./types/hpc-backend";
-import type { OCELEvent, OCELInfo, OCELObject } from "./types/ocel";
+import type { OCELEvent, OCELInfo, OCELObject, SampleIds } from "./types/ocel";
 export type BackendProvider = {
 	"ocel/info": () => Promise<OCELInfo | undefined>;
+	"ocel/sample-ids": (limit: number) => Promise<SampleIds | null>;
 	"ocel/upload"?: (file: File) => Promise<OCELInfo>;
 	"ocel/upload-from-xes"?: (file: File) => Promise<OCELInfo>;
 	"ocel/available"?: () => Promise<string[]>;
@@ -30,7 +33,8 @@ export type BackendProvider = {
 	"ocel/check-constraints-box": (
 		tree: BindingBoxTree,
 		measurePerformance?: boolean,
-	) => Promise<EvaluateBoxTreeResult>;
+	) => Promise<EvaluateBoxTreeSummary>;
+	"ocel/eval-results/page": (req: EvalPageRequest) => Promise<EvalPageResponse>;
 	"ocel/export": (format: "XML" | "JSON" | "SQLITE") => Promise<Blob | undefined>;
 	"ocel/export-filter-box": (
 		tree: BindingBoxTree,
@@ -119,7 +123,9 @@ export async function warnForNoBackendProvider<T>(): Promise<T> {
 
 export const ErrorBackendContext: BackendProvider = {
 	"ocel/info": warnForNoBackendProvider,
+	"ocel/sample-ids": warnForNoBackendProvider,
 	"ocel/check-constraints-box": warnForNoBackendProvider,
+	"ocel/eval-results/page": warnForNoBackendProvider,
 	"ocel/create-db-query": warnForNoBackendProvider,
 	"ocel/export": warnForNoBackendProvider,
 	"ocel/export-filter-box": warnForNoBackendProvider,
@@ -152,6 +158,15 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 				method: "get",
 				headers: {},
 			});
+			return await res.json();
+		},
+		"ocel/sample-ids": async (limit) => {
+			const res = await fetch(`${localBackendURL}/ocel/sample-ids`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ limit }),
+			});
+			if (!res.ok) return null;
 			return await res.json();
 		},
 		"ocel/available": async () => {
@@ -208,6 +223,20 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 				return await result.json();
 			}
 			throw new Error(await result.text());
+		},
+		"ocel/eval-results/page": async (req) => {
+			const res = await fetch(`${localBackendURL}/ocel/eval-results/page`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(req),
+			});
+			if (res.status === 410) {
+				throw new Error("STALE_EVAL_VERSION");
+			}
+			if (!res.ok) {
+				throw new Error(`eval page failed: ${res.status}`);
+			}
+			return await res.json();
 		},
 		"ocel/export": async (format) => {
 			return await (

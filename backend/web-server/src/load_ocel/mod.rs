@@ -10,7 +10,7 @@ use ocpq_shared::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::{clear_eval_res, AppState};
 
 #[derive(Deserialize, Serialize)]
 pub struct LoadOcel {
@@ -61,6 +61,8 @@ pub fn load_ocel_file_to_state(
             let ocel_info: OCELInfo = (&locel).into();
             let mut x = state.ocel.write().unwrap();
             *x = Some(locel);
+            drop(x);
+            clear_eval_res(state);
             Some(ocel_info)
         }
         Err(e) => {

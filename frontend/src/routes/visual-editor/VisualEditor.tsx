@@ -61,6 +61,7 @@ import {
 import DatabaseTranslationButton from "./helper/DatabaseTranslationButton";
 import {
 	evaluateConstraints,
+	mergeSubTrees,
 	getParentNodeID,
 	getParentsNodeIDs,
 } from "./helper/evaluation/evaluate-constraints";
@@ -624,113 +625,105 @@ export default function VisualEditor(props: VisualEditorProps) {
 							className="relative bg-fuchsia-100 disabled:bg-fuchsia-200 border-fuchsia-300 hover:bg-fuchsia-200 hover:border-fuchsia-300"
 							onClick={async (ev) => {
 								setEvaluationLoading(true);
-								const subTrees = evaluateConstraints(instance.getNodes(), instance.getEdges());
-								const evalRes: Record<string, EvaluationRes> = {};
-								const evalNodes: Record<string, BindingBoxTreeNode> = {};
+								const { tree, nodesOrder } = mergeSubTrees(
+									evaluateConstraints(instance.getNodes(), instance.getEdges()),
+								);
 								const measurePerformance = ev.shiftKey;
-								let objectIDs: string[] = [];
-								let eventIDs: string[] = [];
-								const nodeIdtoIndex: Record<string, number> = {};
 								if (measurePerformance) {
 									toast(
 										"Measuring performance by evaluating constraint 10+1 times. The first 10 execution times in seconds will be saved as a JSON file in your Downloads folder.",
 									);
 								}
-								await Promise.allSettled(
-									subTrees.map(async ({ tree, nodesOrder }) => {
-										const res = await toast.promise(
-											backend["ocel/check-constraints-box"](tree, measurePerformance),
-											{
-												loading: "Evaluating...",
-												success: (res) => (
+								try {
+									const res = await toast.promise(
+										backend["ocel/check-constraints-box"](tree, measurePerformance),
+										{
+											loading: "Evaluating...",
+											success: (res) => (
+												<span>
+													<b>Evaluation finished</b>
+													<br />
 													<span>
-														<b>Evaluation finished</b>
+														Situations per step:
 														<br />
-														<span>
-															Situations per step:
-															<br />
-															<span className="font-mono">
-																{res.evaluationResults.map((r) => r.situationCount).join(", ")}
-															</span>
-															<br />
-															Violations per step:
-															<br />
-															<span className="font-mono">
-																{res.evaluationResults
-																	.map((r) => r.situationViolatedCount)
-																	.join(", ")}
-															</span>
+														<span className="font-mono">
+															{res.nodeSummaries.map((r) => r.situationCount).join(", ")}
+														</span>
+														<br />
+														Violations per step:
+														<br />
+														<span className="font-mono">
+															{res.nodeSummaries.map((r) => r.situationViolatedCount).join(", ")}
 														</span>
 													</span>
-												),
-												error: (e) => (
-													<>
-														Evaluation failed
+												</span>
+											),
+											error: (e) => (
+												<>
+													Evaluation failed
+													<br />
+													{String(e)}
+												</>
+											),
+										},
+									);
+									if (res.bindingsSkipped) {
+										toast.error(
+											(x) => (
+												<>
+													<div className="">
+														<b className="text-red-600">Some bindings were skipped!</b>
 														<br />
-														{String(e)}
-													</>
-												),
+														<p className="text-sm">
+															The query yielded too many results and could not be fully computed.
+															<br />
+															The returned counts and results represent just a small sample.
+															<br />
+														</p>
+														<div className="text-right">
+															<Button onClick={() => toast.dismiss(x.id)} variant="destructive">
+																Understood
+															</Button>
+														</div>
+													</div>
+												</>
+											),
+											{
+												duration: Number.POSITIVE_INFINITY,
+												position: "top-center",
 											},
 										);
-										if (res.bindingsSkipped) {
-											toast.error(
-												(x) => (
-													<>
-														<div className="">
-															<b className="text-red-600">Some bindings were skipped!</b>
-															<br />
-															<p className="text-sm">
-																The query yielded too many results and could not be fully computed.
-																<br />
-																The returned counts and results represent just a small sample.
-																<br />
-															</p>
-															<div className="text-right">
-																<Button onClick={() => toast.dismiss(x.id)} variant="destructive">
-																	Understood
-																</Button>
-															</div>
-														</div>
-													</>
-												),
-												{
-													duration: Number.POSITIVE_INFINITY,
-													position: "top-center",
-												},
-											);
-										}
-										res.evaluationResults.forEach((evRes, i) => {
-											evalRes[nodesOrder[i].id] = evRes;
-										});
-										tree.nodes.forEach((node, i) => {
-											evalNodes[nodesOrder[i].id] = node;
-											nodeIdtoIndex[nodesOrder[i].id] = i;
-										});
-										objectIDs = res.objectIds;
-										eventIDs = res.eventIds;
-										setViolationInfo((vi) => ({
-											...vi,
-											violationsPerNode: {
-												evalRes,
-												objectIds: res.objectIds,
-												eventIds: res.eventIds,
-												evalNodes,
-												nodeIdtoIndex,
-											},
-										}));
-									}),
-								).then(() => {
-									setEvaluationLoading(false);
+									}
+									const evalRes: Record<string, EvaluationRes> = {};
+									const evalNodes: Record<string, BindingBoxTreeNode> = {};
+									const nodeIdtoIndex: Record<string, number> = {};
+									res.nodeSummaries.forEach((summary, i) => {
+										evalRes[nodesOrder[i].id] = summary;
+									});
+									tree.nodes.forEach((node, i) => {
+										evalNodes[nodesOrder[i].id] = node;
+										nodeIdtoIndex[nodesOrder[i].id] = i;
+									});
+									setViolationInfo((vi) => ({
+										...vi,
+										violationsPerNode: {
+											evalRes,
+											evalVersion: res.evalVersion,
+											evalNodes,
+											nodeIdtoIndex,
+										},
+									}));
 									flushData({
 										violations: {
 											evalRes,
-											objectIds: objectIDs,
-											eventIds: eventIDs,
+											evalVersion: res.evalVersion,
 											evalNodes,
 											nodeIdtoIndex,
 										},
 									});
-								});
+								} finally {
+									setEvaluationLoading(false);
+								}
 							}}
 						>
 							{isEvaluationLoading && (
@@ -792,27 +785,25 @@ export default function VisualEditor(props: VisualEditorProps) {
 										throw new Error("Invalid Option");
 									}
 									setEvaluationLoading(true);
-									const subTrees = evaluateConstraints(instance.getNodes(), instance.getEdges());
-									await Promise.allSettled(
-										subTrees.map(async ({ tree, nodesOrder: _nodesOrder }) => {
-											const type: "JSON" | "XML" | "SQLITE" = cfg.exportFormat;
-											await toast
-												.promise(backend["ocel/export-filter-box"](tree, type), {
-													success: "Exported!",
-													loading: "Exporting...",
-													error: "Failed to export!",
-												})
-												.then((res) => {
-													// Otherwise, it might be tauri export
-													if (res) {
-														backend["download-blob"](
-															res,
-															`${props.constraintInfo.name}-export.${type.toLowerCase()}`,
-														);
-													}
-												});
-										}),
-									).then(() => setEvaluationLoading(false));
+									const { tree } = mergeSubTrees(
+										evaluateConstraints(instance.getNodes(), instance.getEdges()),
+									);
+									const type: "JSON" | "XML" | "SQLITE" = cfg.exportFormat;
+									try {
+										const res = await toast.promise(backend["ocel/export-filter-box"](tree, type), {
+											success: "Exported!",
+											loading: "Exporting...",
+											error: "Failed to export!",
+										});
+										if (res) {
+											backend["download-blob"](
+												res,
+												`${props.constraintInfo.name}-export.${type.toLowerCase()}`,
+											);
+										}
+									} finally {
+										setEvaluationLoading(false);
+									}
 								}}
 							/>
 						)}

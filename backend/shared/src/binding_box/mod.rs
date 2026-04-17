@@ -20,11 +20,12 @@ use process_mining::{
     OCEL,
 };
 use serde::{Deserialize, Serialize};
-pub use structs::{Binding, BindingBox, BindingBoxTree, BindingStep, ViolationReason};
+pub use structs::{
+    Binding, BindingBox, BindingBoxTree, BindingStep, EventVariable, LabelValue, ObjectVariable,
+    ViolationReason,
+};
 use ts_rs::TS;
 
-#[derive(TS)]
-#[ts(export)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EvaluateBoxTreeResult {
@@ -32,30 +33,7 @@ pub struct EvaluateBoxTreeResult {
     pub object_ids: Vec<String>,
     pub event_ids: Vec<String>,
     pub bindings_skipped: bool,
-}
-
-impl EvaluateBoxTreeResult {
-    pub fn clone_first_few(&self) -> Self {
-        Self {
-            evaluation_results: self
-                .evaluation_results
-                .iter()
-                .map(|res_with_count| EvaluationResultWithCount {
-                    situations: res_with_count
-                        .situations
-                        .iter()
-                        .take(10_000)
-                        .cloned()
-                        .collect(),
-                    situation_count: res_with_count.situation_count,
-                    situation_violated_count: res_with_count.situation_violated_count,
-                })
-                .collect(),
-            object_ids: self.object_ids.clone(),
-            event_ids: self.event_ids.clone(),
-            bindings_skipped: self.bindings_skipped,
-        }
-    }
+    pub eval_version: u64,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,6 +177,7 @@ pub fn evaluate_box_tree(
             .map(|e| ocel.get_ev_id(&e).to_string())
             .collect(),
         bindings_skipped,
+        eval_version: 0,
     })
 }
 
@@ -439,4 +418,200 @@ pub fn filter_ocel_box_tree(tree: BindingBoxTree, ocel: &SlimLinkedOCEL) -> Resu
     }
     println!("Filtering (excl. export) took {:?}", filter_now.elapsed());
     Ok(filtered_ocel)
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvaluateBoxTreeSummary {
+    /// One entry per evaluation node, index-aligned with `evaluation_results`.
+    pub node_summaries: Vec<NodeSummary>,
+    pub bindings_skipped: bool,
+    /// Monotonic version counter. Every new evaluation bumps it; page requests
+    /// must carry the version they think is current, or the server rejects.
+    #[ts(type = "number")]
+    pub eval_version: u64,
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeSummary {
+    pub situation_count: usize,
+    pub situation_violated_count: usize,
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvalPageRequest {
+    #[ts(type = "number")]
+    pub eval_version: u64,
+    pub node_index: usize,
+    pub offset: usize,
+    pub limit: usize,
+    /// None = both; Some(true) = only violated; Some(false) = only satisfied.
+    pub violated: Option<bool>,
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvalPageResponse {
+    pub rows: Vec<BindingRow>,
+    /// Total rows after filtering (offset+limit applied AFTER).
+    pub filtered_count: usize,
+}
+
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BindingRow {
+    pub objects: Vec<(ObjectVariable, String)>,
+    pub events: Vec<(EventVariable, String)>,
+    pub labels: Vec<(String, LabelValue)>,
+    pub violation: Option<ViolationReason>,
+}
+
+impl EvaluateBoxTreeResult {
+    pub fn summary(&self) -> EvaluateBoxTreeSummary {
+        EvaluateBoxTreeSummary {
+            node_summaries: self
+                .evaluation_results
+                .iter()
+                .map(|r| NodeSummary {
+                    situation_count: r.situation_count,
+                    situation_violated_count: r.situation_violated_count,
+                })
+                .collect(),
+            bindings_skipped: self.bindings_skipped,
+            eval_version: self.eval_version,
+        }
+    }
+
+    pub fn get_page(&self, req: &EvalPageRequest) -> Result<EvalPageResponse, String> {
+        if req.eval_version != self.eval_version {
+            return Err(format!(
+                "stale eval_version: client has {}, server has {}",
+                req.eval_version, self.eval_version
+            ));
+        }
+        let node = self
+            .evaluation_results
+            .get(req.node_index)
+            .ok_or_else(|| format!("node_index {} out of range", req.node_index))?;
+
+        // Cheap total via cached counts — no first-pass iteration needed.
+        let filtered_count = match req.violated {
+            None => node.situation_count,
+            Some(true) => node.situation_violated_count,
+            Some(false) => node.situation_count - node.situation_violated_count,
+        };
+
+        let limit = req.limit.min(1000);
+        let rows = node
+            .situations
+            .iter()
+            .filter(|(_, v)| match req.violated {
+                None => true,
+                Some(want) => v.is_some() == want,
+            })
+            .skip(req.offset)
+            .take(limit)
+            .map(|(b, v)| self.binding_to_row(b, v))
+            .collect();
+
+        Ok(EvalPageResponse {
+            rows,
+            filtered_count,
+        })
+    }
+
+    fn binding_to_row(&self, b: &Binding, v: &Option<ViolationReason>) -> BindingRow {
+        BindingRow {
+            objects: b
+                .object_map
+                .iter()
+                .map(|(var, idx)| (*var, self.object_ids[(*idx).into_inner()].clone()))
+                .collect(),
+            events: b
+                .event_map
+                .iter()
+                .map(|(var, idx)| (*var, self.event_ids[(*idx).into_inner()].clone()))
+                .collect(),
+            labels: b.label_map.clone(),
+            violation: *v,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn result_with(violated: usize, total: usize, version: u64) -> EvaluateBoxTreeResult {
+        let situations = (0..total)
+            .map(|i| {
+                let v = (i < violated).then_some(ViolationReason::TooFewMatchingEvents(0));
+                (Binding::default(), v)
+            })
+            .collect();
+        EvaluateBoxTreeResult {
+            evaluation_results: vec![EvaluationResultWithCount {
+                situations,
+                situation_count: total,
+                situation_violated_count: violated,
+            }],
+            eval_version: version,
+            ..Default::default()
+        }
+    }
+
+    fn req(violated: Option<bool>, offset: usize, limit: usize) -> EvalPageRequest {
+        EvalPageRequest {
+            eval_version: 1,
+            node_index: 0,
+            offset,
+            limit,
+            violated,
+        }
+    }
+
+    #[test]
+    fn stale_version_is_rejected() {
+        let err = result_with(1, 3, 5).get_page(&req(None, 0, 10)).unwrap_err();
+        assert!(err.starts_with("stale eval_version"), "got: {err}");
+    }
+
+    #[test]
+    fn node_index_out_of_range() {
+        let res = result_with(0, 0, 1);
+        let mut r = req(None, 0, 10);
+        r.node_index = 99;
+        assert!(res.get_page(&r).is_err());
+    }
+
+    #[test]
+    fn pagination_and_filters() {
+        // (violated, offset, limit, expected rows, expected filtered_count)
+        let cases = [
+            (None, 0, 10, 3, 3),
+            (None, 1, 1, 1, 3),
+            (Some(true), 0, 10, 1, 1),
+            (Some(false), 0, 10, 2, 2),
+            (None, 10, 10, 0, 3),
+        ];
+        let res = result_with(1, 3, 1);
+        for (violated, offset, limit, rows, total) in cases {
+            let p = res.get_page(&req(violated, offset, limit)).unwrap();
+            let ctx = format!("{violated:?} offset={offset} limit={limit}");
+            assert_eq!(p.rows.len(), rows, "{ctx}");
+            assert_eq!(p.filtered_count, total, "{ctx}");
+        }
+    }
 }

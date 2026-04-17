@@ -33,8 +33,6 @@ pub struct OCELInfo {
     pub num_events: usize,
     pub object_types: Vec<OCELType>,
     pub event_types: Vec<OCELType>,
-    pub object_ids: Vec<String>,
-    pub event_ids: Vec<String>,
     pub e2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>>,
     pub o2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>>,
 }
@@ -104,14 +102,6 @@ impl From<&SlimLinkedOCEL> for OCELInfo {
                 .get_ev_types()
                 .flat_map(|ot| val.get_ev_type(ot).cloned())
                 .collect(),
-            event_ids: val
-                .get_all_evs()
-                .map(|ev| val.get_ev_id(&ev).to_string())
-                .collect(),
-            object_ids: val
-                .get_all_obs()
-                .map(|ob| val.get_ob_id(&ob).to_string())
-                .collect(),
             e2o_types,
             o2o_types,
         }
@@ -162,4 +152,32 @@ pub fn get_object_info(ocel: &SlimLinkedOCEL, req: IndexOrID) -> Option<ObjectWi
         IndexOrID::Index(index) => Some((ocel.get_full_ob(&index.into()).into_owned(), index)),
     };
     ob_with_index.map(|(object, index)| ObjectWithIndex { object, index })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SampleIdsRequest {
+    /// Maximum number of IDs to return per list. Capped at 1000 server-side.
+    pub limit: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SampleIds {
+    pub object_ids: Vec<String>,
+    pub event_ids: Vec<String>,
+}
+
+pub fn get_sample_ids(ocel: &SlimLinkedOCEL, limit: usize) -> SampleIds {
+    let limit = limit.min(1000);
+    SampleIds {
+        object_ids: ocel
+            .get_all_obs()
+            .take(limit)
+            .map(|ob| ocel.get_ob_id(&ob).to_string())
+            .collect(),
+        event_ids: ocel
+            .get_all_evs()
+            .take(limit)
+            .map(|ev| ocel.get_ev_id(&ev).to_string())
+            .collect(),
+    }
 }

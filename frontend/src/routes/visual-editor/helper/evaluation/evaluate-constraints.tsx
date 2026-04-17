@@ -1,6 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import { formatSeconds } from "@/components/TimeDurationInput";
 import type { BindingBoxTree } from "@/types/generated/BindingBoxTree";
+import type { BindingBoxTreeNode } from "@/types/generated/BindingBoxTreeNode";
 import type { Constraint } from "@/types/generated/Constraint";
 import type { Filter } from "@/types/generated/Filter";
 import type { SizeFilter } from "@/types/generated/SizeFilter";
@@ -117,6 +118,42 @@ export function evaluateConstraints(
 	}
 
 	return ret;
+}
+
+type SubTree = {
+	tree: BindingBoxTree;
+	nodesOrder: Node<EventTypeNodeData | GateNodeData>[];
+};
+
+// Concatenate subtrees into one BindingBoxTree, offsetting every child index so
+// the merged tree is a forest the backend evaluates per-root.
+function shift(node: BindingBoxTreeNode, offset: number): BindingBoxTreeNode {
+	if ("Box" in node) {
+		const [box, children] = node.Box;
+		return { Box: [box, children.map((c) => c + offset)] };
+	}
+	if ("OR" in node) return { OR: [node.OR[0] + offset, node.OR[1] + offset] };
+	if ("AND" in node) return { AND: [node.AND[0] + offset, node.AND[1] + offset] };
+	return { NOT: node.NOT + offset };
+}
+
+export function mergeSubTrees(subTrees: SubTree[]): SubTree {
+	if (subTrees.length <= 1) {
+		return subTrees[0] ?? { tree: { nodes: [], edgeNames: [] }, nodesOrder: [] };
+	}
+	const nodes: BindingBoxTreeNode[] = [];
+	const edgeNames: BindingBoxTree["edgeNames"] = [];
+	const nodesOrder: SubTree["nodesOrder"] = [];
+	let offset = 0;
+	for (const sub of subTrees) {
+		nodes.push(...sub.tree.nodes.map((n) => shift(n, offset)));
+		for (const [[from, to], name] of sub.tree.edgeNames) {
+			edgeNames.push([[from + offset, to + offset], name]);
+		}
+		nodesOrder.push(...sub.nodesOrder);
+		offset += sub.tree.nodes.length;
+	}
+	return { tree: { nodes, edgeNames }, nodesOrder };
 }
 
 // biome-ignore lint/correctness/noUnusedVariables: kept for LaTeX export

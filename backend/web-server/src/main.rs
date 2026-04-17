@@ -14,13 +14,17 @@ use tokio::{net::TcpListener, task::JoinHandle};
 
 use std::{
     io::Cursor,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, RwLock,
+    },
 };
 
 use ocpq_shared::{
     binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvaluateBoxTreeResult,
-        ExportFormat, FilterExportWithBoxTreeRequest,
+        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvalPageRequest,
+        EvalPageResponse, EvaluateBoxTreeResult, EvaluateBoxTreeSummary, ExportFormat,
+        FilterExportWithBoxTreeRequest,
     },
     data_extraction::{
         blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
@@ -76,6 +80,7 @@ pub struct AppState {
     client: Arc<RwLock<Option<Client>>>,
     jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
     eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
+    eval_version_counter: Arc<AtomicU64>,
 }
 
 struct AppError(String);
@@ -106,6 +111,7 @@ async fn main() {
         .route("/ocel/load", post(load_ocel_file_req))
         .route("/ocel/unload", post(unload_ocel))
         .route("/ocel/info", get(get_loaded_ocel_info))
+        .route("/ocel/sample-ids", post(get_sample_ids_handler))
         .route(
             "/ocel/upload-json",
             post(upload_ocel_json).layer(DefaultBodyLimit::disable()),
@@ -125,6 +131,7 @@ async fn main() {
         .route("/ocel/available", get(get_available_ocels))
         .route("/ocel/graph", post(ocel_graph_req))
         .route("/ocel/check-constraints-box", post(check_with_box_tree_req))
+        .route("/ocel/eval-results/page", post(eval_results_page))
         .route("/ocel/create-db-query", post(translate_to_db_req))
         .route(
             "/ocel/export-filter-box",
@@ -189,9 +196,21 @@ async fn get_loaded_ocel_info(
     }
 }
 
+async fn get_sample_ids_handler(
+    State(state): State<AppState>,
+    Json(req): Json<ocpq_shared::SampleIdsRequest>,
+) -> (StatusCode, Json<Option<ocpq_shared::SampleIds>>) {
+    match with_ocel_from_state(&State(state), |ocel| {
+        ocpq_shared::get_sample_ids(ocel, req.limit)
+    }) {
+        Some(x) => (StatusCode::OK, Json(Some(x))),
+        None => (StatusCode::NOT_FOUND, Json(None)),
+    }
+}
+
 async fn unload_ocel(State(state): State<AppState>) -> StatusCode {
     *state.ocel.write().unwrap() = None;
-    *state.eval_res.write().unwrap() = None;
+    clear_eval_res(&state);
     StatusCode::OK
 }
 
@@ -205,6 +224,8 @@ async fn upload_ocel_xml<'a>(
             let locel = SlimLinkedOCEL::from_ocel(ocel);
             let ocel_info: OCELInfo = (&locel).into();
             *x = Some(locel);
+            drop(x);
+            clear_eval_res(&state);
             Ok(Json(ocel_info))
         }
         Err(e) => Err(e.to_string().into()),
@@ -220,6 +241,8 @@ async fn upload_ocel_sqlite<'a>(
     let locel = SlimLinkedOCEL::from_ocel(ocel);
     let ocel_info: OCELInfo = (&locel).into();
     *x = Some(locel);
+    drop(x);
+    clear_eval_res(&state);
 
     (StatusCode::OK, Json(ocel_info))
 }
@@ -233,6 +256,8 @@ async fn upload_ocel_json<'a>(
     let ocel_info: OCELInfo = (&locel).into();
     let mut x = state.ocel.write().unwrap();
     *x = Some(locel);
+    drop(x);
+    clear_eval_res(&state);
     (StatusCode::OK, Json(ocel_info))
 }
 
@@ -249,8 +274,16 @@ async fn upload_ocel_xes_conversion<'a>(
     let ocel_info: OCELInfo = (&locel).into();
     let mut x = state.ocel.write().unwrap();
     *x = Some(locel);
+    drop(x);
+    clear_eval_res(&state);
     (StatusCode::OK, Json(ocel_info))
 }
+/// Drop any cached evaluation result. Must be called whenever `state.ocel` is replaced,
+/// because bindings reference indices that are only valid for the OCEL they were produced from.
+pub fn clear_eval_res(state: &AppState) {
+    *state.eval_res.write().unwrap() = None;
+}
+
 pub fn with_ocel_from_state<T, F>(State(state): &State<AppState>, f: F) -> Option<T>
 where
     F: FnOnce(&SlimLinkedOCEL) -> T,
@@ -274,18 +307,39 @@ pub async fn ocel_graph_req<'a>(
 pub async fn check_with_box_tree_req<'a>(
     state: State<AppState>,
     Json(req): Json<CheckWithBoxTreeRequest>,
-) -> axum::response::Result<Json<Option<EvaluateBoxTreeResult>>, (StatusCode, String)> {
-    let ocel_guard = state.ocel.read().unwrap();
-    let ocel = ocel_guard.as_ref();
-    if let Some(ocel) = ocel {
-        let res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))
-            .map_err(|s| (StatusCode::BAD_REQUEST, s))?;
-        let res_to_ret = res.clone_first_few();
-        let mut new_eval_res_state = state.eval_res.write().unwrap();
-        *new_eval_res_state = Some(res);
-        return Ok(Json(Some(res_to_ret)));
+) -> axum::response::Result<Json<Option<EvaluateBoxTreeSummary>>, (StatusCode, String)> {
+    let mut res = {
+        let ocel_guard = state.ocel.read().unwrap();
+        let ocel = ocel_guard
+            .as_ref()
+            .ok_or((StatusCode::NOT_FOUND, "No OCEL Loaded".to_string()))?;
+        evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))
+            .map_err(|s| (StatusCode::BAD_REQUEST, s))?
+    };
+    // Hold the eval_res lock while assigning the version so the cached snapshot
+    // and the version we hand to the client are always consistent, even under
+    // concurrent evaluations.
+    let mut eval_guard = state.eval_res.write().unwrap();
+    res.eval_version = state.eval_version_counter.fetch_add(1, Ordering::SeqCst) + 1;
+    let summary = res.summary();
+    *eval_guard = Some(res);
+    Ok(Json(Some(summary)))
+}
+
+async fn eval_results_page(
+    State(state): State<AppState>,
+    Json(req): Json<EvalPageRequest>,
+) -> Result<Json<EvalPageResponse>, (StatusCode, String)> {
+    let guard = state.eval_res.read().unwrap();
+    let res = guard.as_ref().ok_or((
+        StatusCode::NOT_FOUND,
+        "No evaluation result cached".to_string(),
+    ))?;
+    match res.get_page(&req) {
+        Ok(page) => Ok(Json(page)),
+        Err(e) if e.starts_with("stale eval_version") => Err((StatusCode::GONE, e)),
+        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
     }
-    Err((StatusCode::NOT_FOUND, "No OCEL Loaded".to_string()))
 }
 
 pub async fn export_ocel_req(
@@ -511,13 +565,23 @@ async fn execute_extraction_handler(
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
-    // Replace the currently loaded OCEL with the extracted one
-    let mut ocel_guard = state.ocel.write().unwrap();
-    *ocel_guard = Some(locel);
-
-    // Clear the cached evaluation result (outdated)
-    let mut eval_guard = state.eval_res.write().unwrap();
-    *eval_guard = None;
-
+    *state.ocel.write().unwrap() = Some(locel);
+    clear_eval_res(&state);
     Ok(Json(response))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clear_eval_res_drops_cached_result() {
+        let state = AppState::default();
+        *state.eval_res.write().unwrap() = Some(EvaluateBoxTreeResult::default());
+        assert!(state.eval_res.read().unwrap().is_some());
+
+        clear_eval_res(&state);
+
+        assert!(state.eval_res.read().unwrap().is_none());
+    }
 }
