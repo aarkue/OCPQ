@@ -175,8 +175,8 @@ export function DataTablePagination({
 					</TableBody>
 				</Table>
 			</div>
-			<div className="grid grid-cols-[1fr_1fr_1fr] items-center justify-between px-2 text-xs mt-2 w-full">
-				<div className="flex items-center space-x-2">
+			<div className="grid grid-cols-[1fr_1fr_auto] space-x-2 items-center justify-between px-2 text-xs mt-2 w-full">
+				<div className="flex items-center justify-center space-x-2">
 					<p className="font-medium">Rows per page</p>
 					<Select
 						value={`${pageSize}`}
@@ -197,8 +197,8 @@ export function DataTablePagination({
 						</SelectContent>
 					</Select>
 				</div>
-				<div className="flex w-full min-w-[150px] items-center justify-center font-medium">
-					Page {pageIndex + 1} of {pageCount} ({filteredCount} rows)
+				<div className="flex items-center justify-center">
+					Page {pageIndex + 1} of {pageCount}
 				</div>
 				<div className="flex items-center space-x-2 justify-end">
 					<Button

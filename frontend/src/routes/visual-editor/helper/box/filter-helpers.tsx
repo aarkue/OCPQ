@@ -189,6 +189,14 @@ function StringListInput({
 	);
 }
 
+function isoToLocalInput(iso: string | null): string {
+	if (!iso) return "";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "";
+	const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+	return local.toISOString().slice(0, 16);
+}
+
 function TimeRangeInput({
 	value,
 	onChange,
@@ -200,18 +208,20 @@ function TimeRangeInput({
 		<div>
 			<Input
 				type="datetime-local"
-				value={value.from?.slice(0, 16) ?? ""}
+				value={isoToLocalInput(value.from)}
 				onChange={(ev) => {
-					const iso = ev.currentTarget.valueAsDate?.toISOString();
-					onChange({ ...value, from: iso ?? null });
+					const v = ev.currentTarget.value;
+					const iso = v ? new Date(v).toISOString() : null;
+					onChange({ ...value, from: iso });
 				}}
 			/>
 			<Input
 				type="datetime-local"
-				value={value.to?.slice(0, 16) ?? ""}
+				value={isoToLocalInput(value.to)}
 				onChange={(ev) => {
-					const iso = ev.currentTarget.valueAsDate?.toISOString();
-					onChange({ ...value, to: iso ?? null });
+					const v = ev.currentTarget.value;
+					const iso = v ? new Date(v).toISOString() : null;
+					onChange({ ...value, to: iso });
 				}}
 			/>
 		</div>

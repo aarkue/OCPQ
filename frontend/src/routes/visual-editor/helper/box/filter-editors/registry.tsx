@@ -12,6 +12,8 @@ import { deDupe, getNodeRelationshipSupport } from "@/lib/variable-hints";
 import type { Constraint } from "@/types/generated/Constraint";
 import type { Filter } from "@/types/generated/Filter";
 import type { SizeFilter } from "@/types/generated/SizeFilter";
+import type { ValueFilter } from "@/types/generated/ValueFilter";
+import type { OCELType } from "@/types/ocel";
 import { VisualEditorContext } from "../../VisualEditorContext";
 import { EventVarSelector, ObjectOrEventVarSelector, ObjectVarSelector } from "../FilterChooser";
 import {
@@ -24,6 +26,34 @@ import {
 } from "../filter-helpers";
 import { EvOrObVarName, EvVarName, ObVarName } from "../variable-names";
 import type { FilterDisplayProps, FilterEditorProps } from "./types";
+
+// Derive a default ValueFilter from the OCEL attribute type (lowercase)
+function defaultValueFilterForAttr(
+	attributeName: string,
+	ocelTypes: OCELType[],
+	isEvent: boolean,
+): ValueFilter | undefined {
+	if (attributeName === "ocel:id") return { type: "String", is_in: [""] };
+	if (attributeName === "ocel:time" && isEvent) return { type: "Time", from: null, to: null };
+	const dtype = ocelTypes
+		.flatMap((t) => t.attributes)
+		.find((a) => a.name === attributeName)
+		?.type?.toLowerCase();
+	switch (dtype) {
+		case "float":
+			return { type: "Float", min: null, max: null };
+		case "integer":
+			return { type: "Integer", min: null, max: null };
+		case "boolean":
+			return { type: "Boolean", is_true: true };
+		case "time":
+			return { type: "Time", from: null, to: null };
+		case "string":
+			return { type: "String", is_in: [""] };
+		default:
+			return undefined;
+	}
+}
 
 const CELEditor = lazy(async () => await import("@/components/CELEditor"));
 
@@ -548,6 +578,7 @@ registerEditor<Filter & { type: "EventAttributeValueFilter" }>(
 	"EventAttributeValueFilter",
 	function EventAttributeValueFilterEditor({ value, updateValue, availableEventVars, nodeID }) {
 		const { getTypesForVariable } = useContext(VisualEditorContext);
+		const eventTypes = getTypesForVariable(nodeID, value.event, "event");
 		return (
 			<div className="flex items-start gap-x-2 pt-4">
 				<EventVarSelector
@@ -559,14 +590,18 @@ registerEditor<Filter & { type: "EventAttributeValueFilter" }>(
 					availableAttributes={[
 						"ocel:id",
 						"ocel:time",
-						...deDupe(
-							getTypesForVariable(nodeID, value.event, "event").flatMap((t) =>
-								t.attributes.map((at) => at.name),
-							),
-						),
+						...deDupe(eventTypes.flatMap((t) => t.attributes.map((at) => at.name))),
 					]}
 					value={value.attribute_name}
-					onChange={(newV) => newV !== undefined && updateValue({ ...value, attribute_name: newV })}
+					onChange={(newV) => {
+						if (newV === undefined) return;
+						const inferred = defaultValueFilterForAttr(newV, eventTypes, true);
+						updateValue({
+							...value,
+							attribute_name: newV,
+							value_filter: inferred ?? value.value_filter,
+						});
+					}}
 				/>
 				<AttributeValueFilterSelector
 					value={value.value_filter}
@@ -599,6 +634,7 @@ registerEditor<Filter & { type: "ObjectAttributeValueFilter" }>(
 		nodeID,
 	}) {
 		const { getTypesForVariable } = useContext(VisualEditorContext);
+		const objectTypes = getTypesForVariable(nodeID, value.object, "object");
 		return (
 			<div className="flex items-start gap-x-2 pt-4">
 				<ObjectVarSelector
@@ -609,14 +645,18 @@ registerEditor<Filter & { type: "ObjectAttributeValueFilter" }>(
 				<AttributeNameSelector
 					availableAttributes={[
 						"ocel:id",
-						...deDupe(
-							getTypesForVariable(nodeID, value.object, "object").flatMap((t) =>
-								t.attributes.map((at) => at.name),
-							),
-						),
+						...deDupe(objectTypes.flatMap((t) => t.attributes.map((at) => at.name))),
 					]}
 					value={value.attribute_name}
-					onChange={(newV) => newV !== undefined && updateValue({ ...value, attribute_name: newV })}
+					onChange={(newV) => {
+						if (newV === undefined) return;
+						const inferred = defaultValueFilterForAttr(newV, objectTypes, false);
+						updateValue({
+							...value,
+							attribute_name: newV,
+							value_filter: inferred ?? value.value_filter,
+						});
+					}}
 				/>
 				<Combobox
 					value={value.at_time.type}

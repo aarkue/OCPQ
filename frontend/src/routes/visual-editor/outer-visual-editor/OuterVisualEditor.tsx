@@ -79,6 +79,12 @@ export default function VisualEditorOuter() {
 		}
 	}, [activeIndex]);
 
+	const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>();
+	function scheduleAutoSave() {
+		if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+		autoSaveTimer.current = setTimeout(saveData, 400);
+	}
+
 	function saveData() {
 		if (
 			currentInstanceAndData.instance !== undefined &&
@@ -206,6 +212,7 @@ export default function VisualEditorOuter() {
 									viewport: prevDataRef.current[activeIndex]?.flowJson?.viewport,
 								}
 							: undefined,
+					scheduleAutoSave,
 				}}
 			>
 				<div className="flex flex-col justify-start items-center mb-2 gap-y-2 h-full">

@@ -86,7 +86,8 @@ interface VisualEditorProps {
 }
 
 export default function VisualEditor(props: VisualEditorProps) {
-	const { setInstance, registerOtherDataGetter, otherData, flushData } = useContext(FlowContext);
+	const { setInstance, registerOtherDataGetter, otherData, flushData, scheduleAutoSave } =
+		useContext(FlowContext);
 	const instance = useReactFlow<Node<EventTypeNodeData | GateNodeData>, Edge<EventTypeLinkData>>();
 
 	const [violationDetails, setViolationDetails] = useState<{
@@ -471,6 +472,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 	const [filterMode, setFilterMode] = useState<"shown" | "hidden">("hidden");
 
 	const contextMenuTriggerRef = useRef<HTMLButtonElement>(null);
+	const contextMenuPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
 	const COLORS = {
 		// https://colordesigner.io/color-scheme-builder?mode=lch#0067A6-FA9805-CE2727-00851D-A90A76-E0F20D-e9488f-0481cc-16cc9d-080999
@@ -552,11 +554,8 @@ export default function VisualEditor(props: VisualEditorProps) {
 				</ContextMenuTrigger>
 				<ContextMenuContent>
 					<ContextMenuItem
-						onClick={(ev) => {
-							const { x, y } = instance.screenToFlowPosition({
-								x: ev.clientX,
-								y: ev.clientY,
-							});
+						onClick={() => {
+							const { x, y } = instance.screenToFlowPosition(contextMenuPos.current);
 							addNewNode(x, y);
 						}}
 					>
@@ -587,6 +586,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 					ev.stopPropagation();
 					ev.preventDefault();
 					if (trigger && contextMenuTriggerRef.current) {
+						contextMenuPos.current = { x: ev.clientX, y: ev.clientY };
 						const newEv = new MouseEvent("contextmenu", {
 							bubbles: true,
 							cancelable: true,
@@ -614,6 +614,9 @@ export default function VisualEditor(props: VisualEditorProps) {
 				onSelectionChange={(sel) => {
 					selectedRef.current = sel;
 				}}
+				onNodesChange={scheduleAutoSave}
+				onEdgesChange={scheduleAutoSave}
+				onMoveEnd={scheduleAutoSave}
 			>
 				<Controls onInteractiveChange={() => {}} />
 				<Panel position="top-right" className="flex flex-row-reverse gap-x-2">

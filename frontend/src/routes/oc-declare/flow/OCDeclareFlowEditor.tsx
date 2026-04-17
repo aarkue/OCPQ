@@ -155,6 +155,7 @@ export default function OCDeclareFlowEditor({
 	const flowRef = useRef<ReactFlowInstance<ActivityNodeType, CustomEdgeType>>();
 	const ocelInfo = useOcelInfo();
 	const contextMenuTriggerRef = useRef<HTMLButtonElement>(null);
+	const contextMenuPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
 	const onConnect = useCallback<OnConnect>(
 		(connection) => {
@@ -456,11 +457,10 @@ export default function OCDeclareFlowEditor({
 									key={et.name}
 									onClick={(ev) => {
 										ev.stopPropagation();
-										// Go up three levels to get the actual context menu position
-										// Item -> SubContent -> SubTrigger -> Content
-										const rect =
-											ev.currentTarget.parentElement!.parentElement!.parentElement!.getBoundingClientRect();
-										createNewNodeAtPosition(flowRef.current!.screenToFlowPosition(rect), et.name);
+										createNewNodeAtPosition(
+											flowRef.current!.screenToFlowPosition(contextMenuPos.current),
+											et.name,
+										);
 									}}
 								>
 									{et.name}
@@ -476,12 +476,8 @@ export default function OCDeclareFlowEditor({
 									key={ot.name}
 									onClick={(ev) => {
 										ev.stopPropagation();
-										// Go up three levels to get the actual context menu position
-										// Item -> SubContent -> SubTrigger -> Content
-										const rect =
-											ev.currentTarget.parentElement!.parentElement!.parentElement!.getBoundingClientRect();
 										createNewNodeAtPosition(
-											flowRef.current!.screenToFlowPosition(rect),
+											flowRef.current!.screenToFlowPosition(contextMenuPos.current),
 											ot.name,
 											"init",
 										);
@@ -500,12 +496,8 @@ export default function OCDeclareFlowEditor({
 									key={ot.name}
 									onClick={(ev) => {
 										ev.stopPropagation();
-										// Go up three levels to get the actual context menu position
-										// Item -> SubContent -> SubTrigger -> Content
-										const rect =
-											ev.currentTarget.parentElement!.parentElement!.parentElement!.getBoundingClientRect();
 										createNewNodeAtPosition(
-											flowRef.current!.screenToFlowPosition(rect),
+											flowRef.current!.screenToFlowPosition(contextMenuPos.current),
 											ot.name,
 											"exit",
 										);
@@ -553,6 +545,7 @@ export default function OCDeclareFlowEditor({
 					connectionLineType={ConnectionLineType.Straight}
 					onContextMenu={(ev) => {
 						if (!ev.isDefaultPrevented() && contextMenuTriggerRef.current) {
+							contextMenuPos.current = { x: ev.clientX, y: ev.clientY };
 							const event = new MouseEvent("contextmenu", {
 								bubbles: true,
 								cancelable: true,

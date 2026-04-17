@@ -665,7 +665,7 @@ export default function FilterChooserDialog({
 			>
 				{alertState !== undefined && (
 					<AlertDialogContent
-						className="max-w-3xl max-h-[85vh] overflow-y-auto"
+						className="max-w-[min(56rem,95vw)] max-h-[85vh] overflow-y-auto"
 						onContextMenuCapture={(ev) => ev.stopPropagation()}
 					>
 						<AlertDialogHeader>

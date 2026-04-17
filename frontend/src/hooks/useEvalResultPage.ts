@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { EvalPageRequest } from "../types/generated/EvalPageRequest";
 import type { EvalPageResponse } from "../types/generated/EvalPageResponse";
 import { useBackend } from "./useBackend";
@@ -18,5 +18,6 @@ export function useEvalResultPage(req: EvalPageRequest | null) {
 		enabled: req !== null,
 		staleTime: Number.POSITIVE_INFINITY,
 		retry: false,
+		placeholderData: keepPreviousData,
 	});
 }

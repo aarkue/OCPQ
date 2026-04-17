@@ -37,10 +37,12 @@ export const FlowContext = createContext<{
 			  }
 			| undefined,
 	) => unknown;
+	scheduleAutoSave: () => unknown;
 }>({
 	instance: undefined,
 	registerOtherDataGetter: () => () => undefined,
 	setInstance: () => {},
 	otherData: undefined,
 	flushData: () => {},
+	scheduleAutoSave: () => {},
 });
