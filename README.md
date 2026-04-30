@@ -164,7 +164,7 @@ Then, install all dependencies (e.g., using `pnpm i` inside the `frontend` folde
 The repository is a Cargo workspace with three members:
 - `backend/shared`: library crate with the query engine, OC-Declare, and data extraction pipeline.
 - `backend/web-server`: standalone HTTP server used by the frontend and Docker setup.
-- `backend/ocpq_cli`: standalone CLI for evaluating a `BindingBoxTree` against an OCEL file (useful for benchmarking).
+- `backend/ocpq_cli`: standalone CLI with two subcommands: `evaluate` (run a `BindingBoxTree` against an OCEL file, useful for benchmarking) and `translate` (compile a `BindingBoxTree` to SQL or Cypher).
 
 For the full-stack web application navigate to the `backend/web-server` folder and run `cargo run --release` to start the backend, and navigate to the `frontend` folder and run `pnpm run dev` to start the frontend.
 By default, the backend server is available at `http://localhost:3000` while the frontend is available at `http://localhost:5173/`.
@@ -172,7 +172,13 @@ By default, the backend server is available at `http://localhost:3000` while the
 For the desktop application, [tauri](https://tauri.app/) is used.
 To run the desktop application, run `pnpm run tauri dev -- --release` inside the `tauri` folder.
 
-The CLI can be run via `cargo run --release -p ocpq_cli -- --ocel <path> --bbox-tree <path>`.
+The CLI exposes two subcommands:
+- Evaluate a `BindingBoxTree` against an OCEL file:
+  `cargo run --release -p ocpq_cli -- evaluate --ocel <path> --bbox-tree <path>`
+- Translate a `BindingBoxTree` (the JSON the frontend exports) to SQL or Cypher (experimental):
+  `cargo run --release -p ocpq_cli -- translate --tree <path> --target sqlite|duckdb|cypher [--mappings <path>] [--output <path>]`
+
+The optional `--mappings` JSON file maps OCEL event/object types to backend table (or graph label) names, e.g. `{"event_tables": {"pick item": "pickitem"}, "object_tables": {}}`. Missing entries fall back to the raw type name.
 
 
 Currently, there are few unnecessary warning messages in the output when running or building the frontend with vite.

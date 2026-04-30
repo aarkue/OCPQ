@@ -68,10 +68,44 @@ pub struct SqlParts<'a> {
     alias_type_map: HashMap<String, String>,
 }
 
+impl<'a> SqlParts<'a> {
+    /// Pick the next free alias of the form `<prefix>{N}` (1-indexed) and
+    /// reserve it in `used_keys`. Used for E2O (`ER1`, `ER2`, ...) and O2O
+    /// (`OR1`, `OR2`, ...) junction-table aliases.
+    fn next_alias(&mut self, prefix: &str) -> String {
+        let mut n = 1;
+        loop {
+            let candidate = format!("{}{}", prefix, n);
+            if !self.used_keys.contains(&candidate) {
+                self.used_keys.insert(candidate.clone());
+                return candidate;
+            }
+            n += 1;
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TableMappings {
     pub event_tables: HashMap<String, String>,
     pub object_tables: HashMap<String, String>,
+    /// E2O junction table. Defaults to `event_object` to match the OCEL SQL
+    /// schema produced by `process_mining`'s exporter.
+    pub e2o_table: String,
+    /// O2O junction table. Defaults to `object_object` (same exporter).
+    pub o2o_table: String,
+}
+
+impl Default for TableMappings {
+    fn default() -> Self {
+        Self {
+            event_tables: HashMap::new(),
+            object_tables: HashMap::new(),
+            e2o_table: "event_object".to_string(),
+            o2o_table: "object_object".to_string(),
+        }
+    }
 }
 
 impl TableMappings {
@@ -91,9 +125,9 @@ impl TableMappings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DBTranslationInput {
-    tree: BindingBoxTree,
-    database: DatabaseType,
-    table_mappings: TableMappings,
+    pub tree: BindingBoxTree,
+    pub database: DatabaseType,
+    pub table_mappings: TableMappings,
 }
 
 // Implementation of the General translate to SQL function
@@ -169,7 +203,7 @@ pub fn bindingbox_to_intermediate(tree: &BindingBoxTree, index: usize) -> InterM
     // Extract the relations we HAVE to translate to query language (O2O, E2O, TBE)
     let relations = extract_basic_relations(binding_box.filters.clone());
 
-    let constraints = extract_constraints(binding_box.constraints.clone());
+    let constraints = binding_box.constraints.clone();
 
     // Handle childs recursively with box to inter function
     let mut children = Vec::new();
@@ -258,44 +292,13 @@ pub fn extract_basic_relations(filters: Vec<Filter>) -> Vec<Relation> {
     result
 }
 
-// Extract Constraints we want to translate
-pub fn extract_constraints(mut constraints: Vec<Constraint>) -> Vec<Constraint> {
-    constraints.retain(|c| match c {
-        Constraint::Filter { filter: _ } => false,
-        Constraint::SizeFilter { filter: _ } => true,
-        Constraint::SAT { child_names: _ } => true,
-        Constraint::ANY { child_names: _ } => true,
-        Constraint::NOT { child_names: _ } => true,
-        Constraint::OR { child_names: _ } => true,
-        Constraint::AND { child_names: _ } => true,
-    });
-    constraints
-}
-
 // Extract other meaningful filters (maybe these in relations are enough, but CEL could be considered)
 pub fn extract_filters(
     filters: Vec<Filter>,
     size_filters: Vec<SizeFilter>,
 ) -> (Vec<Filter>, Vec<SizeFilter>) {
     let mut result = Vec::new();
-
-    let mut result_size = Vec::new();
-
-    for size_filter in &size_filters {
-        match size_filter {
-            SizeFilter::NumChilds {
-                child_name: _,
-                min: _,
-                max: _,
-            } => {
-                result_size.push(size_filter.clone());
-            }
-
-            _ => {
-                result_size.push(size_filter.clone()); // Take all for now
-            }
-        }
-    }
+    let result_size: Vec<SizeFilter> = size_filters.iter().cloned().collect();
 
     for filter in &filters {
         match filter {
@@ -359,19 +362,16 @@ pub fn construct_result(sql_parts: &mut SqlParts) -> String {
     // SELECT result
     result.push_str("SELECT ");
 
-    result.push_str(&sql_parts.select_fields.join(","));
-
-    result.push('\n');
-
-    // Handle Constraints and Childs here
+    result.push_str(&sql_parts.select_fields.join(", "));
 
     if !sql_parts.node.constraints.is_empty() {
         let child_constraint_string = construct_child_constraints(sql_parts);
         result.push_str(&format!(
-            ",\nCASE WHEN {} THEN 1 ELSE 0 END AS satisfied \n",
+            ",\nCASE WHEN {} THEN 1 ELSE 0 END AS satisfied",
             child_constraint_string
         ));
     }
+    result.push('\n');
 
     let mut contains_relation = false;
 
@@ -451,18 +451,49 @@ pub fn construct_select_fields_root(sql_parts: &SqlParts) -> Vec<String> {
     select_fields
 }
 
-pub fn construct_select_fields(sql_parts: &SqlParts) -> Vec<String> {
-    let mut select_fields = Vec::new();
-
-    for obj_var in sql_parts.node.object_vars.keys() {
-        select_fields.push(format!("O{}.ocel_id", o_alias(obj_var.0)));
+/// The list of (expression, alias) pairs that uniquely identify a binding
+/// of `node` -- one entry per object/event variable. The aliases are stable
+/// (a function of the variable index alone), so callers that produce the
+/// child SELECT and callers that consume it can derive the same names
+/// without sharing additional state.
+pub fn child_key_columns(node: &InterMediateNode) -> Vec<(String, String)> {
+    let mut cols = Vec::new();
+    for obj_var in node.object_vars.keys() {
+        let n = o_alias(obj_var.0);
+        cols.push((format!("O{n}.ocel_id"), format!("key_o{n}")));
     }
-
-    for event_var in sql_parts.node.event_vars.keys() {
-        select_fields.push(format!("E{}.ocel_id", e_alias(event_var.0)));
+    for event_var in node.event_vars.keys() {
+        let n = e_alias(event_var.0);
+        cols.push((format!("E{n}.ocel_id"), format!("key_e{n}")));
     }
+    cols
+}
 
-    select_fields
+/// SQL fragment that counts the distinct child bindings of `child_node`,
+/// used by `SizeFilter::NumChilds`.
+fn num_childs_count_expr(
+    child_sql: &str,
+    child_label: &str,
+    child_node: &InterMediateNode,
+    i: usize,
+    j: usize,
+) -> String {
+    let label = child_label.trim();
+    let key_aliases: Vec<String> = child_key_columns(child_node)
+        .into_iter()
+        .map(|(_, alias)| alias)
+        .collect();
+    // For a child without any new variables every passing parent binding
+    // produces the same singleton; `SELECT DISTINCT 1 ...` evaluates to 0
+    // or 1 row, which matches the in-memory evaluator's `c_res.len()`.
+    let distinct_list = if key_aliases.is_empty() {
+        "1".to_string()
+    } else {
+        key_aliases.join(", ")
+    };
+    format!(
+        "COALESCE((SELECT COUNT(*) FROM (SELECT DISTINCT {distinct_list} FROM ({child_sql}) AS child_{i}_{j}_{label}) AS child_{i}_{j}_{label}_d), 0)"
+    )
 }
 
 pub fn get_object_type(node: InterMediateNode, index: usize) -> String {
@@ -491,9 +522,17 @@ pub fn get_event_type(node: InterMediateNode, index: usize) -> String {
 pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
     let mut from_clauses = Vec::new();
     let mut is_first_join = true;
-    let mut counter = 0;
 
-    for relation in &sql_parts.node.relations {
+    // Snapshot the junction-table names as quoted SQL identifiers so the
+    // format! calls below can refer to them while `sql_parts` is mutably
+    // borrowed via `next_alias`.
+    let e2o_tbl = format!("\"{}\"", sql_parts.table_mappings.e2o_table);
+    let o2o_tbl = format!("\"{}\"", sql_parts.table_mappings.o2o_table);
+
+    // Clone the relation list so we can mutably borrow `sql_parts` inside the
+    // loop body (e.g. via `next_alias`).
+    let relations = sql_parts.node.relations.clone();
+    for relation in &relations {
         match relation {
             Relation::E2O {
                 event,
@@ -502,19 +541,13 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
             } => {
                 let event_alias = format!("E{}", e_alias(event.0));
                 let object_alias = format!("O{}", o_alias(object.0));
-                let mut event_object_alias = format!("E2O{}", counter);
-
-                while sql_parts.used_keys.contains(&event_object_alias) {
-                    counter += 1;
-                    event_object_alias = format!("E2O{}", counter);
-                }
-                sql_parts.used_keys.insert(event_object_alias.clone());
+                let event_object_alias = sql_parts.next_alias("ER");
 
                 if is_first_join {
                     // first join to distinct if we have to use INNER JOIN first
                     if sql_parts.used_keys.contains(&event_alias) {
                         if sql_parts.used_keys.contains(&object_alias) {
-                            from_clauses.push(format!("event_object AS {}", event_object_alias));
+                            from_clauses.push(format!("{e2o_tbl} AS {}", event_object_alias));
                             sql_parts.where_clauses.push(format!(
                                 "{}.ocel_event_id = {}.ocel_id",
                                 event_object_alias, event_alias
@@ -534,7 +567,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                                 object_alias
                             ));
                             from_clauses.push(format!(
-                                "INNER JOIN event_object AS {} ON {}.ocel_object_id = {}.ocel_id AND {}.ocel_event_id = {}.ocel_id",
+                                "INNER JOIN {e2o_tbl} AS {} ON {}.ocel_object_id = {}.ocel_id AND {}.ocel_event_id = {}.ocel_id",
                                 event_object_alias, event_object_alias, object_alias, event_object_alias, event_alias
                             ));
                             sql_parts.alias_type_map.insert(
@@ -554,7 +587,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                             event_alias
                         ));
                         from_clauses.push(format!(
-                            "INNER JOIN event_object AS {} ON {}.ocel_object_id = {}.ocel_id AND {}.ocel_event_id = {}.ocel_id",
+                            "INNER JOIN {e2o_tbl} AS {} ON {}.ocel_object_id = {}.ocel_id AND {}.ocel_event_id = {}.ocel_id",
                             event_object_alias, event_object_alias, object_alias, event_object_alias, event_alias
                         ));
 
@@ -574,7 +607,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                             event_alias
                         ));
                         from_clauses.push(format!(
-                            "INNER JOIN event_object AS {} ON {}.ocel_event_id = {}.ocel_id",
+                            "INNER JOIN {e2o_tbl} AS {} ON {}.ocel_event_id = {}.ocel_id",
                             event_object_alias, event_object_alias, event_alias
                         ));
                         from_clauses.push(format!(
@@ -604,13 +637,13 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                     if sql_parts.used_keys.contains(&object_alias) {
                         // both table created
                         from_clauses.push(format!(
-                            "INNER JOIN event_object AS {} ON {}.ocel_object_id = {}.ocel_id AND {}.ocel_event_id = {}.ocel_id",
+                            "INNER JOIN {e2o_tbl} AS {} ON {}.ocel_object_id = {}.ocel_id AND {}.ocel_event_id = {}.ocel_id",
                             event_object_alias, event_object_alias, object_alias, event_object_alias, event_alias
                         ));
                     } else {
                         // only event table
                         from_clauses.push(format!(
-                            "INNER JOIN event_object AS {} ON {}.ocel_event_id = {}.ocel_id",
+                            "INNER JOIN {e2o_tbl} AS {} ON {}.ocel_event_id = {}.ocel_id",
                             event_object_alias, event_object_alias, event_alias
                         ));
                         from_clauses.push(format!(
@@ -632,7 +665,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                 } else if sql_parts.used_keys.contains(&object_alias) {
                     // only object table created
                     from_clauses.push(format!(
-                        "INNER JOIN event_object AS {} ON {}.ocel_object_id = {}.ocel_id",
+                        "INNER JOIN {e2o_tbl} AS {} ON {}.ocel_object_id = {}.ocel_id",
                         event_object_alias, event_object_alias, object_alias
                     ));
                     from_clauses.push(format!(
@@ -661,7 +694,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                         event_alias
                     ));
                     from_clauses.push(format!(
-                        "INNER JOIN event_object AS {} ON {}.ocel_event_id = {}.ocel_id",
+                        "INNER JOIN {e2o_tbl} AS {} ON {}.ocel_event_id = {}.ocel_id",
                         event_object_alias, event_object_alias, event_alias
                     ));
                     from_clauses.push(format!(
@@ -694,18 +727,12 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
             } => {
                 let object1_alias = format!("O{}", o_alias(object_1.0));
                 let object2_alias = format!("O{}", o_alias(object_2.0));
-                let mut object_object_alias = format!("O2O{}", counter);
-
-                while sql_parts.used_keys.contains(&object_object_alias) {
-                    counter += 1;
-                    object_object_alias = format!("O2O{}", counter);
-                }
-                sql_parts.used_keys.insert(object_object_alias.clone());
+                let object_object_alias = sql_parts.next_alias("OR");
 
                 if is_first_join {
                     if sql_parts.used_keys.contains(&object1_alias) {
                         if sql_parts.used_keys.contains(&object2_alias) {
-                            from_clauses.push(format!("object_object AS {}", object_object_alias));
+                            from_clauses.push(format!("{o2o_tbl} AS {}", object_object_alias));
                             sql_parts.where_clauses.push(format!(
                                 "{}.ocel_source_id = {}.ocel_id",
                                 object_object_alias, object1_alias
@@ -724,7 +751,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                                 object2_alias
                             ));
                             from_clauses.push(format!(
-                                "INNER JOIN object_object AS {} ON {}.ocel_source_id = {}.ocel_id AND {}.ocel_target_id = {}.ocel_id",
+                                "INNER JOIN {o2o_tbl} AS {} ON {}.ocel_source_id = {}.ocel_id AND {}.ocel_target_id = {}.ocel_id",
                                 object_object_alias, object_object_alias, object1_alias, object_object_alias, object2_alias
                             ));
                             sql_parts.alias_type_map.insert(
@@ -743,7 +770,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                             object1_alias
                         ));
                         from_clauses.push(format!(
-                            "INNER JOIN object_object AS {} ON {}.ocel_source_id = {}.ocel_id AND {}.ocel_target_id = {}.ocel_id",
+                            "INNER JOIN {o2o_tbl} AS {} ON {}.ocel_source_id = {}.ocel_id AND {}.ocel_target_id = {}.ocel_id",
                             object_object_alias, object_object_alias, object1_alias, object_object_alias, object2_alias
                         ));
                         sql_parts.alias_type_map.insert(
@@ -761,7 +788,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                             object1_alias
                         ));
                         from_clauses.push(format!(
-                            "INNER JOIN object_object AS {} ON {}.ocel_source_id = {}.ocel_id",
+                            "INNER JOIN {o2o_tbl} AS {} ON {}.ocel_source_id = {}.ocel_id",
                             object_object_alias, object_object_alias, object1_alias
                         ));
                         from_clauses.push(format!(
@@ -790,12 +817,12 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                 } else if sql_parts.used_keys.contains(&object1_alias) {
                     if sql_parts.used_keys.contains(&object2_alias) {
                         from_clauses.push(format!(
-                            "INNER JOIN object_object AS {} ON {}.ocel_source_id = {}.ocel_id AND {}.ocel_target_id = {}.ocel_id",
+                            "INNER JOIN {o2o_tbl} AS {} ON {}.ocel_source_id = {}.ocel_id AND {}.ocel_target_id = {}.ocel_id",
                             object_object_alias, object_object_alias, object1_alias, object_object_alias, object2_alias
                         ));
                     } else {
                         from_clauses.push(format!(
-                            "INNER JOIN object_object AS {} ON {}.ocel_source_id = {}.ocel_id",
+                            "INNER JOIN {o2o_tbl} AS {} ON {}.ocel_source_id = {}.ocel_id",
                             object_object_alias, object_object_alias, object1_alias
                         ));
                         from_clauses.push(format!(
@@ -816,7 +843,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                     }
                 } else if sql_parts.used_keys.contains(&object2_alias) {
                     from_clauses.push(format!(
-                        "INNER JOIN object_object AS {} ON {}.ocel_target_id = {}.ocel_id",
+                        "INNER JOIN {o2o_tbl} AS {} ON {}.ocel_target_id = {}.ocel_id",
                         object_object_alias, object_object_alias, object2_alias
                     ));
                     from_clauses.push(format!(
@@ -844,7 +871,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                         object1_alias
                     ));
                     from_clauses.push(format!(
-                        "INNER JOIN object_object AS {} ON {}.ocel_source_id = {}.ocel_id",
+                        "INNER JOIN {o2o_tbl} AS {} ON {}.ocel_source_id = {}.ocel_id",
                         object_object_alias, object_object_alias, object1_alias
                     ));
                     from_clauses.push(format!(
@@ -930,7 +957,7 @@ pub fn construct_from_clauses(sql_parts: &mut SqlParts) -> Vec<String> {
                 let key = format!("E{}", e_alias(event_var.0));
                 if !sql_parts.used_keys.contains(&key) {
                     from_clauses.push(format!(
-                        "CROSS JOIN{} AS {}",
+                        " CROSS JOIN {} AS {}",
                         map_eventttables(sql_parts, event_type),
                         key
                     ));
@@ -1005,14 +1032,20 @@ pub fn construct_childstrings(sql_parts: &SqlParts) -> Vec<(String, String)> {
 pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
     let mut result_string = Vec::new();
 
-    for (i, constraint) in sql_parts.node.constraints.iter().enumerate() {
+    let e2o_tbl = format!("\"{}\"", sql_parts.table_mappings.e2o_table);
+    let o2o_tbl = format!("\"{}\"", sql_parts.table_mappings.o2o_table);
+
+    // Clone the constraint list so the loop body can mutably borrow `sql_parts`
+    // (e.g. via `next_alias`).
+    let constraints = sql_parts.node.constraints.clone();
+    for (i, constraint) in constraints.iter().enumerate() {
         match constraint {
             Constraint::ANY { child_names } => {
                 let mut parts = Vec::new();
                 for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                     if child_names.contains(child_label) {
                         parts.push(format!(
-                            "COALESCE((SELECT COUNT(*) FROM ({}) AS subqC_{i}_{j}_{label} WHERE subqC_{i}_{j}_{label}.satisfied = 1), 0) >= 1",
+                            "COALESCE((SELECT COUNT(*) FROM ({}) AS child_{i}_{j}_{label} WHERE child_{i}_{j}_{label}.satisfied = 1), 0) >= 1",
                             child_sql,
                             i = i,
                             j = j,
@@ -1031,7 +1064,7 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
                 for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                     if child_names.contains(child_label) {
                         parts.push(format!(
-                            "NOT EXISTS (SELECT 1 FROM ({}) AS subqC_{iterator1}_{iterator2}_{label} WHERE subqC_{iterator1}_{iterator2}_{label}.satisfied = 0)",
+                            "NOT EXISTS (SELECT 1 FROM ({}) AS child_{iterator1}_{iterator2}_{label} WHERE child_{iterator1}_{iterator2}_{label}.satisfied = 0)",
                             child_sql,
                             iterator1 = i,
                             iterator2 = j,
@@ -1048,7 +1081,7 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
                 for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                     if child_names.contains(child_label) {
                         parts.push(format!(
-                            "NOT EXISTS (SELECT 1 FROM ({}) AS subqC_{iterator1}_{iterator2}_{label} WHERE subqC_{iterator1}_{iterator2}_{label}.satisfied = 1)",
+                            "NOT EXISTS (SELECT 1 FROM ({}) AS child_{iterator1}_{iterator2}_{label} WHERE child_{iterator1}_{iterator2}_{label}.satisfied = 1)",
                             child_sql,
                             iterator1 = i,
                             iterator2 = j,
@@ -1065,7 +1098,7 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
                 for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                     if child_names.contains(child_label) {
                         result_string.push(format!(
-                            "NOT EXISTS (SELECT 1 FROM ({}) AS subqC_{iterator1}_{iterator2}_{label} WHERE subqC_{iterator1}_{iterator2}_{label}.satisfied = 0)",
+                            "NOT EXISTS (SELECT 1 FROM ({}) AS child_{iterator1}_{iterator2}_{label} WHERE child_{iterator1}_{iterator2}_{label}.satisfied = 0)",
                             child_sql,
                             iterator1 = i,
                             iterator2 = j,
@@ -1081,7 +1114,7 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
                 for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                     if child_names.contains(child_label) {
                         parts.push(format!(
-                            "NOT EXISTS (SELECT 1 FROM ({}) AS subqC_{iterator1}_{iterator2}_{label} WHERE subqC_{iterator1}_{iterator2}_{label}.satisfied = 0)",
+                            "NOT EXISTS (SELECT 1 FROM ({}) AS child_{iterator1}_{iterator2}_{label} WHERE child_{iterator1}_{iterator2}_{label}.satisfied = 0)",
                             child_sql,
                             iterator1 = i,
                             iterator2 = j,
@@ -1103,13 +1136,13 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
                 {
                     for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                         if child_label == child_name {
-                            let count_expr = format!(
-                            "COALESCE((SELECT COUNT(DISTINCT subqC_{i}_{j}_{label}.cnt_key) FROM ({}) AS subqC_{i}_{j}_{label}), 0)",
-                            child_sql,
-                            i = i,
-                            j = j,
-                            label = child_label.trim()
-                        );
+                            let count_expr = num_childs_count_expr(
+                                child_sql,
+                                child_label,
+                                &sql_parts.node.children[j].0,
+                                i,
+                                j,
+                            );
                             let clause = match (min, max) {
                                 (Some(min), Some(max)) => {
                                     format!("{count_expr} BETWEEN {min} AND {max}")
@@ -1126,20 +1159,10 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
 
             Constraint::Filter { filter } => match filter {
                 Filter::O2E { object, event, .. } => {
-                    let base_alias = format!("E2O{}{}", event.0, object.0);
-                    let mut alias = base_alias.clone();
-                    let mut counter = 1;
-
-                    while sql_parts.used_keys.contains(&alias) {
-                        alias = format!("{}_{}", base_alias, counter);
-                        counter += 1;
-                    }
-
-                    sql_parts.used_keys.insert(alias.clone());
+                    let alias = sql_parts.next_alias("ER");
                     result_string.push(format!(
-                            "EXISTS (SELECT 1 FROM {} AS {} WHERE {}.ocel_event_id = E{}.ocel_id AND {}.ocel_object_id = O{}.ocel_id)",
-                            map_eventttables(sql_parts, "object")
-                            ,alias, alias, e_alias(event.0), alias, o_alias(object.0)
+                            "EXISTS (SELECT 1 FROM {e2o_tbl} AS {} WHERE {}.ocel_event_id = E{}.ocel_id AND {}.ocel_object_id = O{}.ocel_id)",
+                            alias, alias, e_alias(event.0), alias, o_alias(object.0)
                         ));
                 }
 
@@ -1148,21 +1171,11 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
                     other_object,
                     ..
                 } => {
-                    let base_alias = format!("O2O{}{}", object.0, other_object.0);
-                    let mut alias = base_alias.clone();
-                    let mut counter = 1;
-
-                    while sql_parts.used_keys.contains(&alias) {
-                        alias = format!("{}_{}", base_alias, counter);
-                        counter += 1;
-                    }
-
-                    sql_parts.used_keys.insert(alias.clone());
+                    let alias = sql_parts.next_alias("OR");
 
                     result_string.push(format!(
-                            "EXISTS (SELECT 1 FROM {} AS {} WHERE {}.ocel_source_id = O{}.ocel_id AND {}.ocel_target_id = O{}.ocel_id)",
-                            map_objecttables(sql_parts, "object")
-                            ,alias, alias, o_alias(object.0), alias, o_alias(other_object.0)
+                            "EXISTS (SELECT 1 FROM {o2o_tbl} AS {} WHERE {}.ocel_source_id = O{}.ocel_id AND {}.ocel_target_id = O{}.ocel_id)",
+                            alias, alias, o_alias(object.0), alias, o_alias(other_object.0)
                         ));
                 }
 
@@ -1188,6 +1201,35 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
                     }
                 }
 
+                Filter::EventAttributeValueFilter {
+                    event,
+                    attribute_name,
+                    value_filter,
+                } => {
+                    result_string.push(event_attr_value_filter_clause(
+                        sql_parts,
+                        event,
+                        attribute_name,
+                        value_filter,
+                    ));
+                }
+
+                Filter::ObjectAttributeValueFilter {
+                    object,
+                    attribute_name,
+                    at_time,
+                    value_filter,
+                } => {
+                    result_string.push(object_attr_value_filter_clause(
+                        sql_parts,
+                        object,
+                        attribute_name,
+                        at_time,
+                        value_filter,
+                        i,
+                    ));
+                }
+
                 _ => {}
             },
         }
@@ -1201,6 +1243,18 @@ pub fn construct_child_constraints(sql_parts: &mut SqlParts) -> String {
 pub fn translate_to_sql_from_child(sql_parts: &mut SqlParts) -> String {
     sql_parts.base_from = construct_from_clauses(sql_parts);
     (sql_parts.join_clauses, sql_parts.where_clauses) = construct_basic_operations(sql_parts);
+
+    // Same canonical-row filter the root applies (see
+    // `translate_to_sql_from_intermediate`): the OCEL `object_<type>` schema
+    // stores attribute history as additional rows keyed by
+    // `ocel_changed_field`, and joining them blindly multiplies child
+    // bindings by the per-object snapshot count.
+    for obj_var in sql_parts.node.object_vars.keys() {
+        sql_parts.where_clauses.push(format!(
+            "O{}.ocel_changed_field IS NULL",
+            o_alias(obj_var.0)
+        ));
+    }
 
     let childs = construct_childstrings(sql_parts);
     sql_parts.child_sql = childs;
@@ -1217,30 +1271,17 @@ pub fn translate_to_sql_from_child(sql_parts: &mut SqlParts) -> String {
     };
 
     sql_parts.select_fields = {
-        let mut _tmp = Vec::new();
-
-        _tmp.push(format!(
+        let mut fields = Vec::new();
+        fields.push(format!(
             "CASE WHEN {} THEN 1 ELSE 0 END AS satisfied",
             sub_condition
         ));
-
-        let key_parts = construct_select_fields(sql_parts);
-
-        match key_parts.len() {
-            0 => {
-                _tmp.push("1 AS cnt_key".to_string());
-            }
-            1 => {
-                _tmp.push(format!("{} AS cnt_key", key_parts[0]));
-            }
-            _ => {
-                let delim = "'|'";
-                let concat = key_parts.join(&format!(" || {} || ", delim));
-                _tmp.push(format!("({}) AS cnt_key", concat));
-            }
+        // Expose the key columns under stable aliases; the size-filter
+        // consumer derives the same alias list to compute COUNT(DISTINCT ...).
+        for (expr, alias) in child_key_columns(&sql_parts.node) {
+            fields.push(format!("{expr} AS {alias}"));
         }
-
-        _tmp
+        fields
     };
 
     construct_result_child(sql_parts)
@@ -1281,31 +1322,19 @@ pub fn construct_filter_non_basic(sql_parts: &mut SqlParts) -> Vec<String> {
         {
             for (j, (child_sql, child_label)) in sql_parts.child_sql.iter().enumerate() {
                 if child_label == child_name {
+                    let count_expr = num_childs_count_expr(
+                        child_sql,
+                        child_label,
+                        &sql_parts.node.children[j].0,
+                        i,
+                        j,
+                    );
                     let clause = match (min, max) {
-                        (Some(min), Some(max)) =>
-                            format!(
-                                "COALESCE((SELECT COUNT(DISTINCT subqC_{i}_{j}_{label}.cnt_key) FROM ({}) AS subqC_{i}_{j}_{label}), 0) BETWEEN {} AND {}",
-                                child_sql, min, max,
-                                i = i,
-                                j = j,
-                                label = child_label.trim()
-                            ),
-                        (Some(min), None) =>
-                            format!(
-                                "COALESCE((SELECT COUNT(DISTINCT subqC_{i}_{j}_{label}.cnt_key) FROM ({}) AS subqC_{i}_{j}_{label}), 0) >= {}",
-                                child_sql, min,
-                                i = i,
-                                j = j,
-                                label = child_label.trim()
-                            ),
-                        (None, Some(max)) =>
-                            format!(
-                                "COALESCE((SELECT COUNT(DISTINCT subqC_{i}_{j}_{label}.cnt_key) FROM ({}) AS subqC_{i}_{j}_{label}), 0) <= {}",
-                                child_sql, max,
-                                i = i,
-                                j = j,
-                                label = child_label.trim()
-                            ),
+                        (Some(min), Some(max)) => {
+                            format!("{count_expr} BETWEEN {min} AND {max}")
+                        }
+                        (Some(min), None) => format!("{count_expr} >= {min}"),
+                        (None, Some(max)) => format!("{count_expr} <= {max}"),
                         (None, None) => continue,
                     };
                     result.push(clause);
@@ -1321,63 +1350,12 @@ pub fn construct_filter_non_basic(sql_parts: &mut SqlParts) -> Vec<String> {
                 attribute_name,
                 value_filter,
             } => {
-                let col = format!("E{}.\"{}\"", e_alias(event.0), attribute_name);
-
-                let clause = match value_filter {
-                    ValueFilter::String { is_in } => {
-                        let values = is_in
-                            .iter()
-                            .map(|v| format!("'{}'", v.replace('\'', "''")))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        format!("{} IN ({})", col, values)
-                    }
-
-                    ValueFilter::Boolean { is_true } => {
-                        format!("{} = {}", col, is_true)
-                    }
-
-                    ValueFilter::Integer { min, max } => {
-                        let mut parts = vec![];
-                        if let Some(min) = min {
-                            parts.push(format!("{} >= {}", col, min));
-                        }
-                        if let Some(max) = max {
-                            parts.push(format!("{} <= {}", col, max));
-                        }
-                        parts.join(" AND ")
-                    }
-
-                    ValueFilter::Float { min, max } => {
-                        let mut parts = vec![];
-                        if let Some(min) = min {
-                            parts.push(format!("{} >= {}", col, min));
-                        }
-                        if let Some(max) = max {
-                            parts.push(format!("{} <= {}", col, max));
-                        }
-                        parts.join(" AND ")
-                    }
-
-                    ValueFilter::Time { from, to } => {
-                        let mut parts = vec![];
-                        if let Some(from) = from {
-                            parts.push(format!(
-                                "{time} >= '{from}'",
-                                time = map_timestamp(sql_parts, col.clone())
-                            ));
-                        }
-                        if let Some(to) = to {
-                            parts.push(format!(
-                                "{time2} <= '{to}'",
-                                time2 = map_timestamp(sql_parts, col.clone())
-                            ));
-                        }
-                        parts.join(" AND ")
-                    }
-                };
-
-                result.push(clause);
+                result.push(event_attr_value_filter_clause(
+                    sql_parts,
+                    event,
+                    attribute_name,
+                    value_filter,
+                ));
             }
 
             Filter::ObjectAttributeValueFilter {
@@ -1386,122 +1364,14 @@ pub fn construct_filter_non_basic(sql_parts: &mut SqlParts) -> Vec<String> {
                 at_time,
                 value_filter,
             } => {
-                let object_alias = format!("O{}", o_alias(object.0));
-                let attr = attribute_name;
-                let temp_alias = format!("OA{}", i);
-                let value_sql = match value_filter {
-                    ValueFilter::String { is_in } => {
-                        let values = is_in
-                            .iter()
-                            .map(|v| format!("'{}'", v.replace('\'', "''")))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        format!("{}.{} IN ({})", object_alias, attr, values)
-                    }
-                    ValueFilter::Boolean { is_true } => {
-                        format!("{}.{} = {}", object_alias, attr, is_true)
-                    }
-                    ValueFilter::Integer { min, max } => {
-                        let mut parts = vec![];
-                        if let Some(min) = min {
-                            parts.push(format!("{}.{} >= {}", temp_alias, attr, min));
-                        }
-                        if let Some(max) = max {
-                            parts.push(format!("{}.{} <= {}", temp_alias, attr, max));
-                        }
-                        parts.join(" AND ")
-                    }
-                    ValueFilter::Float { min, max } => {
-                        let mut parts = vec![];
-                        if let Some(min) = min {
-                            parts.push(format!("{}.{} >= {}", temp_alias, attr, min));
-                        }
-                        if let Some(max) = max {
-                            parts.push(format!("{}.{} <= {}", temp_alias, attr, max));
-                        }
-                        parts.join(" AND ")
-                    }
-
-                    ValueFilter::Time { from, to } => {
-                        let mut parts = vec![];
-                        if let Some(from) = from {
-                            parts.push(format!(
-                                "{time_left} >= {time_right}",
-                                time_left =
-                                    map_timestamp(sql_parts, format!("{}.{}", object_alias, attr)),
-                                time_right = map_timestamp(sql_parts, from.to_string())
-                            ));
-                        }
-                        if let Some(to) = to {
-                            parts.push(format!(
-                                "{time_left} <= {time_right}",
-                                time_left =
-                                    map_timestamp(sql_parts, format!("{}.{}", object_alias, attr)),
-                                time_right = map_timestamp(sql_parts, to.to_string())
-                            ));
-                        }
-                        parts.join(" AND ")
-                    }
-                };
-
-                let mut object_type = "";
-
-                for (obj_var, types) in &sql_parts.node.object_vars {
-                    for object_typer in types {
-                        if obj_var.0 == object.0 {
-                            object_type = object_typer;
-                        }
-                    }
-                }
-
-                if object_type.is_empty() {
-                    let alias = format! {"O{}", object.0};
-                    object_type = &sql_parts.alias_type_map[&alias];
-                }
-
-                let clause = match at_time {
-                    ObjectValueFilterTimepoint::Sometime => {
-                        let condition = value_sql;
-                        format!(
-                            "EXISTS (SELECT 1\n FROM {otype} AS OA{iterator}\n WHERE OA{iterator}.ocel_id = {oid} AND {cond})",
-                            iterator = i,
-                            otype = map_objecttables(sql_parts, object_type),
-                            oid = format!("{}.ocel_id", object_alias),
-                            cond = condition
-                        )
-                    }
-
-                    ObjectValueFilterTimepoint::Always => {
-                        let condition = value_sql;
-                        format!(
-                            "NOT EXISTS (SELECT 1\n FROM {otype} AS OA{iterator}\n WHERE OA{iterator}.ocel_id = {oid} AND NOT ({cond})
-                            )",
-                            iterator = i,
-                            otype = map_objecttables(sql_parts, object_type),
-                            oid = format!("{}.ocel_id", object_alias),
-                            cond = condition
-                        )
-                    }
-
-                    ObjectValueFilterTimepoint::AtEvent { event } => {
-                        let event_time = format!("E{}.ocel_time", e_alias(event.0));
-                        let condition = value_sql;
-                        format!(
-                            "EXISTS (SELECT 1\n FROM {otype} AS OA{iterator}
-                            WHERE OA{iterator}.ocel_id = {oid} AND OA{iterator}.ocel_time = (SELECT MAX(OA2{iterator2}.ocel_time)
-                            FROM {otype} AS OA2{iterator2}\n WHERE OA2{iterator2}.ocel_id = {oid} AND {time_left} <= {time_right}) AND {cond})",
-                            iterator = i,
-                            iterator2 = i*3,
-                            time_left = map_timestamp(sql_parts, format!("OA2{}.ocel_time", i*3)),
-                            time_right = map_timestamp(sql_parts, event_time ),
-                            otype = map_objecttables(sql_parts, object_type),
-                            oid = format!("{}.ocel_id", object_alias),
-                            cond = condition
-                        )
-                    }
-                };
-
-                result.push(clause);
+                result.push(object_attr_value_filter_clause(
+                    sql_parts,
+                    object,
+                    attribute_name,
+                    at_time,
+                    value_filter,
+                    i,
+                ));
             }
 
             _ => {}
@@ -1509,6 +1379,167 @@ pub fn construct_filter_non_basic(sql_parts: &mut SqlParts) -> Vec<String> {
     }
 
     result
+}
+
+/// Build the SQL boolean clause for an `EventAttributeValueFilter`.
+///
+/// The result references the outer event alias `E{n}` directly; it does not
+/// wrap the predicate in an EXISTS subquery because event attribute history
+/// is not represented in the OCEL SQLite/DuckDB schema (events are immutable).
+fn event_attr_value_filter_clause(
+    sql_parts: &SqlParts,
+    event: &EventVariable,
+    attribute_name: &str,
+    value_filter: &ValueFilter,
+) -> String {
+    let col = format!("E{}.\"{}\"", e_alias(event.0), attribute_name);
+    match value_filter {
+        ValueFilter::String { is_in } => {
+            let values = is_in
+                .iter()
+                .map(|v| format!("'{}'", v.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{} IN ({})", col, values)
+        }
+        ValueFilter::Boolean { is_true } => format!("{} = {}", col, is_true),
+        ValueFilter::Integer { min, max } => {
+            let mut parts = vec![];
+            if let Some(min) = min {
+                parts.push(format!("{} >= {}", col, min));
+            }
+            if let Some(max) = max {
+                parts.push(format!("{} <= {}", col, max));
+            }
+            parts.join(" AND ")
+        }
+        ValueFilter::Float { min, max } => {
+            let mut parts = vec![];
+            if let Some(min) = min {
+                parts.push(format!("{} >= {}", col, min));
+            }
+            if let Some(max) = max {
+                parts.push(format!("{} <= {}", col, max));
+            }
+            parts.join(" AND ")
+        }
+        ValueFilter::Time { from, to } => {
+            let mut parts = vec![];
+            let ts = map_timestamp(sql_parts, col.clone());
+            if let Some(from) = from {
+                parts.push(format!("{ts} >= '{from}'"));
+            }
+            if let Some(to) = to {
+                parts.push(format!("{ts} <= '{to}'"));
+            }
+            parts.join(" AND ")
+        }
+    }
+}
+
+/// Build the SQL boolean clause for an `ObjectAttributeValueFilter`.
+///
+/// `iter_id` must be unique per call within the enclosing `SqlParts` so the
+/// per-filter `OA{n}` and `OA2{n}` subquery aliases don't collide. Object
+/// attributes change over time in the OCEL schema (one row per snapshot in
+/// `object_<type>`), so the predicate is wrapped in an EXISTS/NOT EXISTS
+/// subquery according to `at_time`.
+fn object_attr_value_filter_clause(
+    sql_parts: &SqlParts,
+    object: &ObjectVariable,
+    attribute_name: &str,
+    at_time: &ObjectValueFilterTimepoint,
+    value_filter: &ValueFilter,
+    iter_id: usize,
+) -> String {
+    let object_alias = format!("O{}", o_alias(object.0));
+    let attr = attribute_name;
+    let temp_alias = format!("OA{}", iter_id);
+    // The condition refers to the EXISTS subquery alias `OA{iter_id}` so it
+    // checks every snapshot of the object for `Sometime`/`Always` semantics
+    // (and the latest snapshot before the event for `AtEvent`).
+    let value_sql = match value_filter {
+        ValueFilter::String { is_in } => {
+            let values = is_in
+                .iter()
+                .map(|v| format!("'{}'", v.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}.{} IN ({})", temp_alias, attr, values)
+        }
+        ValueFilter::Boolean { is_true } => {
+            format!("{}.{} = {}", temp_alias, attr, is_true)
+        }
+        ValueFilter::Integer { min, max } => {
+            let mut parts = vec![];
+            if let Some(min) = min {
+                parts.push(format!("{}.{} >= {}", temp_alias, attr, min));
+            }
+            if let Some(max) = max {
+                parts.push(format!("{}.{} <= {}", temp_alias, attr, max));
+            }
+            parts.join(" AND ")
+        }
+        ValueFilter::Float { min, max } => {
+            let mut parts = vec![];
+            if let Some(min) = min {
+                parts.push(format!("{}.{} >= {}", temp_alias, attr, min));
+            }
+            if let Some(max) = max {
+                parts.push(format!("{}.{} <= {}", temp_alias, attr, max));
+            }
+            parts.join(" AND ")
+        }
+        ValueFilter::Time { from, to } => {
+            let mut parts = vec![];
+            let ts = map_timestamp(sql_parts, format!("{}.{}", temp_alias, attr));
+            if let Some(from) = from {
+                parts.push(format!(
+                    "{ts} >= {time_right}",
+                    time_right = map_timestamp(sql_parts, format!("'{from}'")),
+                ));
+            }
+            if let Some(to) = to {
+                parts.push(format!(
+                    "{ts} <= {time_right}",
+                    time_right = map_timestamp(sql_parts, format!("'{to}'")),
+                ));
+            }
+            parts.join(" AND ")
+        }
+    };
+
+    let mut object_type = "";
+    for (obj_var, types) in &sql_parts.node.object_vars {
+        for object_typer in types {
+            if obj_var.0 == object.0 {
+                object_type = object_typer;
+            }
+        }
+    }
+    if object_type.is_empty() {
+        // alias_type_map is keyed by `o_alias`-formatted aliases ("O{n+1}").
+        object_type = &sql_parts.alias_type_map[&object_alias];
+    }
+    let otype = map_objecttables(sql_parts, object_type);
+    let oid = format!("{}.ocel_id", object_alias);
+
+    match at_time {
+        ObjectValueFilterTimepoint::Sometime => format!(
+            "EXISTS (SELECT 1 FROM {otype} AS OA{iter_id} WHERE OA{iter_id}.ocel_id = {oid} AND {value_sql})",
+        ),
+        ObjectValueFilterTimepoint::Always => format!(
+            "NOT EXISTS (SELECT 1 FROM {otype} AS OA{iter_id} WHERE OA{iter_id}.ocel_id = {oid} AND NOT ({value_sql}))",
+        ),
+        ObjectValueFilterTimepoint::AtEvent { event } => {
+            let event_time = format!("E{}.ocel_time", e_alias(event.0));
+            let time_left = map_timestamp(sql_parts, format!("OA2{iter_id}.ocel_time"));
+            let time_right = map_timestamp(sql_parts, event_time);
+            format!(
+                "EXISTS (SELECT 1 FROM {otype} AS OA{iter_id} WHERE OA{iter_id}.ocel_id = {oid} AND OA{iter_id}.ocel_time = (SELECT MAX(OA2{iter_id}.ocel_time) FROM {otype} AS OA2{iter_id} WHERE OA2{iter_id}.ocel_id = {oid} AND {time_left} <= {time_right}) AND {value_sql})",
+            )
+        }
+    }
 }
 
 pub fn map_objecttables(sql_parts: &SqlParts, object_type: &str) -> String {
@@ -1575,21 +1606,23 @@ pub fn map_timestamp(sql_parts: &SqlParts, alias: String) -> String {
 
 // Cypher Translation
 
-pub struct CypherParts {
+pub struct CypherParts<'a> {
     node: InterMediateNode,
     match_clauses: Vec<String>,
     child_queries: Vec<(String, String)>,
     where_clauses: Vec<String>,
     return_clauses: Vec<String>,
     used_alias: HashSet<String>,
-    event_tables: HashMap<String, String>,
-    object_tables: HashMap<String, String>,
+    table_mappings: &'a TableMappings,
     alias_type: HashMap<String, String>,
 }
 
-pub fn translate_to_cypher_shared(tree: BindingBoxTree) -> String {
-    // Convert to Intermediate
-
+/// Translate a `BindingBoxTree` to a Cypher query.
+///
+/// `table_mappings` is used to map OCEL event/object type names to the labels
+/// used in the target graph database. For types absent from the mappings the
+/// raw type name is used unchanged.
+pub fn translate_to_cypher_shared(tree: BindingBoxTree, table_mappings: &TableMappings) -> String {
     let inter = convert_to_intermediate(tree);
 
     let mut cypher_parts = CypherParts {
@@ -1599,14 +1632,9 @@ pub fn translate_to_cypher_shared(tree: BindingBoxTree) -> String {
         where_clauses: vec![],
         return_clauses: vec![],
         used_alias: HashSet::new(),
-        event_tables: HashMap::new(),
-        object_tables: HashMap::new(),
+        table_mappings,
         alias_type: HashMap::new(),
     };
-
-    get_event_table_cypher(&mut cypher_parts);
-
-    get_object_table_cypher(&mut cypher_parts);
 
     convert_to_cypher_from_inter(&mut cypher_parts)
 }
@@ -1643,21 +1671,13 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
                 let event_type = get_event_type(cypher_parts.node.clone(), event.0);
                 let object_type = get_object_type(cypher_parts.node.clone(), object.0);
 
-                let mut mapped_event_type = cypher_parts
-                    .event_tables
-                    .get(&event_type)
-                    .cloned()
-                    .unwrap_or_else(|| "no type found event".to_string());
-
-                let mut mapped_object_type = cypher_parts
-                    .object_tables
-                    .get(&object_type)
-                    .cloned()
-                    .unwrap_or_else(|| "no type found object".to_string());
-
-                if mapped_event_type == "no type found event"
-                    && mapped_event_type == "no type found event"
-                {
+                // Resolve labels via the user-supplied TableMappings; fall back to
+                // the alias_type recorded by an earlier match clause when the type
+                // cannot be derived from the local node (variable inherited from
+                // outer scope).
+                let mut mapped_event_type =
+                    cypher_parts.table_mappings.event_table(&event_type).to_string();
+                if mapped_event_type == event_type && event_type == "no type found event" {
                     mapped_event_type = cypher_parts
                         .alias_type
                         .get(&event_alias)
@@ -1665,7 +1685,11 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
                         .unwrap_or_else(|| "unknown".to_string());
                 }
 
-                if mapped_object_type == "no type found object" {
+                let mut mapped_object_type = cypher_parts
+                    .table_mappings
+                    .object_table(&object_type)
+                    .to_string();
+                if mapped_object_type == object_type && object_type == "no type found object" {
                     mapped_object_type = cypher_parts
                         .alias_type
                         .get(&object_alias)
@@ -1701,18 +1725,10 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
                 let object2_type = get_object_type(cypher_parts.node.clone(), object_2.0);
 
                 let mut mapped_object1_type = cypher_parts
-                    .object_tables
-                    .get(&object1_type)
-                    .cloned()
-                    .unwrap_or_else(|| "no type found object".to_string());
-
-                let mut mapped_object2_type = cypher_parts
-                    .object_tables
-                    .get(&object2_type)
-                    .cloned()
-                    .unwrap_or_else(|| "no type found object".to_string());
-
-                if mapped_object1_type == "no type found object" {
+                    .table_mappings
+                    .object_table(&object1_type)
+                    .to_string();
+                if mapped_object1_type == object1_type && object1_type == "no type found object" {
                     mapped_object1_type = cypher_parts
                         .alias_type
                         .get(&object1_alias)
@@ -1720,7 +1736,11 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
                         .unwrap_or_else(|| "unknown".to_string());
                 }
 
-                if mapped_object2_type == "no type found object" {
+                let mut mapped_object2_type = cypher_parts
+                    .table_mappings
+                    .object_table(&object2_type)
+                    .to_string();
+                if mapped_object2_type == object2_type && object2_type == "no type found object" {
                     mapped_object2_type = cypher_parts
                         .alias_type
                         .get(&object2_alias)
@@ -1753,14 +1773,15 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
         for object_type in types {
             let key = format!("o{}", o_alias(obj_var.0));
             if !cypher_parts.used_alias.contains(&key) {
-                let type1 = &cypher_parts.object_tables[&object_type.clone()];
-                cypher_parts.match_clauses.push(format!(
-                    "({}:{})",
-                    key,
-                    &cypher_parts.object_tables[&object_type.clone()]
-                ));
+                let mapped = cypher_parts
+                    .table_mappings
+                    .object_table(object_type)
+                    .to_string();
+                cypher_parts
+                    .match_clauses
+                    .push(format!("({}:{})", key, mapped));
                 cypher_parts.used_alias.insert(key.clone());
-                cypher_parts.alias_type.insert(key, type1.to_string());
+                cypher_parts.alias_type.insert(key, mapped);
             }
         }
     }
@@ -1769,261 +1790,20 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
         for event_type in types {
             let key = format!("e{}", e_alias(event_var.0));
             if !cypher_parts.used_alias.contains(&key) {
-                let type1 = &cypher_parts.event_tables[&event_type.clone()];
-                cypher_parts.match_clauses.push(format!(
-                    "({}:{})",
-                    key,
-                    &cypher_parts.event_tables[&event_type.clone()]
-                ));
+                let mapped = cypher_parts
+                    .table_mappings
+                    .event_table(event_type)
+                    .to_string();
+                cypher_parts
+                    .match_clauses
+                    .push(format!("({}:{})", key, mapped));
                 cypher_parts.used_alias.insert(key.clone());
-                cypher_parts.alias_type.insert(key, type1.to_string());
+                cypher_parts.alias_type.insert(key, mapped);
             }
         }
     }
 }
 
-pub fn get_event_table_cypher(cypher_parts: &mut CypherParts) {
-    // Order Management
-    cypher_parts
-        .event_tables
-        .insert("confirm order".to_string(), "confirmorder".to_string());
-    cypher_parts
-        .event_tables
-        .insert("create package".to_string(), "createpackage".to_string());
-    cypher_parts
-        .event_tables
-        .insert("failed delivery".to_string(), "faileddelivery".to_string());
-    cypher_parts.event_tables.insert(
-        "item out of stock".to_string(),
-        "itemoutofstock".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "package delivered".to_string(),
-        "packagedelivered".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("pay order".to_string(), "payorder".to_string());
-    cypher_parts.event_tables.insert(
-        "payment reminder".to_string(),
-        "paymentreminder".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("pick item".to_string(), "pickitem".to_string());
-    cypher_parts
-        .event_tables
-        .insert("place order".to_string(), "placeorder".to_string());
-    cypher_parts
-        .event_tables
-        .insert("reorder item".to_string(), "reorderitem".to_string());
-    cypher_parts
-        .event_tables
-        .insert("send package".to_string(), "sendpackage".to_string());
-
-    // Bpic
-    cypher_parts
-        .event_tables
-        .insert("A_Accepted".to_string(), "A_Accepted".to_string());
-    cypher_parts
-        .event_tables
-        .insert("A_Cancelled".to_string(), "A_Cancelled".to_string());
-    cypher_parts
-        .event_tables
-        .insert("A_Complete".to_string(), "A_Complete".to_string());
-    cypher_parts
-        .event_tables
-        .insert("A_Concept".to_string(), "A_Concept".to_string());
-    cypher_parts.event_tables.insert(
-        "A_Create Application".to_string(),
-        "A_CreateApplication".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("A_Denied".to_string(), "A_Denied".to_string());
-    cypher_parts
-        .event_tables
-        .insert("A_Incomplete".to_string(), "A_Incomplete".to_string());
-    cypher_parts
-        .event_tables
-        .insert("A_Pending".to_string(), "A_Pending".to_string());
-    cypher_parts
-        .event_tables
-        .insert("A_Submitted".to_string(), "A_Submitted".to_string());
-    cypher_parts
-        .event_tables
-        .insert("A_Validating".to_string(), "A_Validating".to_string());
-
-    cypher_parts
-        .event_tables
-        .insert("O_Accepted".to_string(), "O_Accepted".to_string());
-    cypher_parts
-        .event_tables
-        .insert("O_Cancelled".to_string(), "O_Cancelled".to_string());
-    cypher_parts
-        .event_tables
-        .insert("O_Create Offer".to_string(), "O_CreateOffer".to_string());
-    cypher_parts
-        .event_tables
-        .insert("O_Created".to_string(), "o_Created".to_string());
-    cypher_parts
-        .event_tables
-        .insert("O_Refused".to_string(), "O_Refused".to_string());
-    cypher_parts
-        .event_tables
-        .insert("O_Returned".to_string(), "O_Returned".to_string());
-    cypher_parts.event_tables.insert(
-        "O_Sent (mail and online)".to_string(),
-        "O_Sent(mailandonline)".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "O_Sent (online only)".to_string(),
-        "O_Sent (online only)".to_string(),
-    );
-
-    cypher_parts.event_tables.insert(
-        "W_Assess potential fraud".to_string(),
-        "W_Assesspotentialfraud".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "W_Call after offers".to_string(),
-        "W_Callafteroffers".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "W_Call incomplete files".to_string(),
-        "W_Callincompletefiles".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "W_Complete application".to_string(),
-        "W_Completeapplication".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("W_Handle leads".to_string(), "W_Handle leads".to_string());
-    cypher_parts.event_tables.insert(
-        "W_Personal Loan collection".to_string(),
-        "W_PersonalLoancollection".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "W_Shorten completion".to_string(),
-        "W_Shortencompletion".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "W_Validate application".to_string(),
-        "W_Validateapplication".to_string(),
-    );
-
-    //Container
-    cypher_parts.event_tables.insert(
-        "Register Customer Order".to_string(),
-        "RegisterCustomerOrder".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "Create Transport Document".to_string(),
-        "CreateTransportDocument".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("Book Vehicles".to_string(), "BookVehicles".to_string());
-    cypher_parts.event_tables.insert(
-        "Order Empty Containers".to_string(),
-        "OrderEmptyContainers".to_string(),
-    );
-    cypher_parts.event_tables.insert(
-        "Pick Up Empty Container".to_string(),
-        "PickUpEmptyContainer".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("Collect Goods".to_string(), "CollectGoods".to_string());
-    cypher_parts
-        .event_tables
-        .insert("Load Truck".to_string(), "LoadTruck".to_string());
-    cypher_parts.event_tables.insert(
-        "Drive to Terminal".to_string(),
-        "DrivetoTerminal".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("Weigh".to_string(), "Weigh".to_string());
-    cypher_parts
-        .event_tables
-        .insert("Place in Stock".to_string(), "PlaceinStock".to_string());
-    cypher_parts.event_tables.insert(
-        "Bring to Loading Bay".to_string(),
-        "BringtoLoadingBay".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("Load to Vehicle".to_string(), "LoadtoVehicle".to_string());
-    cypher_parts.event_tables.insert(
-        "Reschedule Container".to_string(),
-        "RescheduleContainer".to_string(),
-    );
-    cypher_parts
-        .event_tables
-        .insert("Depart".to_string(), "Depart".to_string());
-}
-
-pub fn get_object_table_cypher(cypher_parts: &mut CypherParts) {
-    // Order Management
-    cypher_parts
-        .object_tables
-        .insert("customers".to_string(), "customers".to_string());
-    cypher_parts
-        .object_tables
-        .insert("employees".to_string(), "employees".to_string());
-    cypher_parts
-        .object_tables
-        .insert("items".to_string(), "items".to_string());
-    cypher_parts
-        .object_tables
-        .insert("orders".to_string(), "orders".to_string());
-    cypher_parts
-        .object_tables
-        .insert("packages".to_string(), "packages".to_string());
-    cypher_parts
-        .object_tables
-        .insert("products".to_string(), "products".to_string());
-
-    // Bpic
-    cypher_parts
-        .object_tables
-        .insert("Application".to_string(), "application".to_string());
-    cypher_parts
-        .object_tables
-        .insert("Case_R".to_string(), "Case_R".to_string());
-    cypher_parts
-        .object_tables
-        .insert("Offer".to_string(), "Offer".to_string());
-    cypher_parts
-        .object_tables
-        .insert("Workflow".to_string(), "Workflow".to_string());
-
-    // Order Management
-    cypher_parts
-        .object_tables
-        .insert("Customer Order".to_string(), "CustomerOrder".to_string());
-    cypher_parts.object_tables.insert(
-        "Transport Document".to_string(),
-        "TransportDocument".to_string(),
-    );
-    cypher_parts
-        .object_tables
-        .insert("Container".to_string(), "Container".to_string());
-    cypher_parts
-        .object_tables
-        .insert("Truck".to_string(), "Truck".to_string());
-    cypher_parts
-        .object_tables
-        .insert("Handling Unit".to_string(), "HandlingUnit".to_string());
-    cypher_parts
-        .object_tables
-        .insert("Forklift".to_string(), "Forklift".to_string());
-    cypher_parts
-        .object_tables
-        .insert("Vehicle".to_string(), "Vehicle".to_string());
-}
 
 // Construct return clauses
 pub fn construct_return_clauses(cypher_parts: &mut CypherParts) {
@@ -2115,19 +1895,18 @@ pub fn construct_filter_clauses(cypher_parts: &mut CypherParts) {
 
 pub fn construct_childstrings_cypher(cypher_parts: &mut CypherParts) {
     for (inter_node, node_label) in &cypher_parts.node.children {
-        let mut child_cypheer_parts = CypherParts {
+        let mut child_cypher_parts = CypherParts {
             node: inter_node.clone(),
             match_clauses: vec![],
             child_queries: vec![],
             return_clauses: vec![],
             where_clauses: vec![],
-            event_tables: cypher_parts.event_tables.clone(),
-            object_tables: cypher_parts.object_tables.clone(),
+            table_mappings: cypher_parts.table_mappings,
             used_alias: cypher_parts.used_alias.clone(),
             alias_type: cypher_parts.alias_type.clone(),
         };
 
-        let child_cypher = translate_to_cypher_from_child(&mut child_cypheer_parts);
+        let child_cypher = translate_to_cypher_from_child(&mut child_cypher_parts);
         cypher_parts
             .child_queries
             .push((child_cypher, node_label.clone()));
