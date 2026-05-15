@@ -1,5 +1,4 @@
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+ocpq_shared::use_mimalloc!();
 
 use axum::{
     body::Bytes,

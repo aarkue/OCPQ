@@ -1675,8 +1675,10 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
                 // the alias_type recorded by an earlier match clause when the type
                 // cannot be derived from the local node (variable inherited from
                 // outer scope).
-                let mut mapped_event_type =
-                    cypher_parts.table_mappings.event_table(&event_type).to_string();
+                let mut mapped_event_type = cypher_parts
+                    .table_mappings
+                    .event_table(&event_type)
+                    .to_string();
                 if mapped_event_type == event_type && event_type == "no type found event" {
                     mapped_event_type = cypher_parts
                         .alias_type
@@ -1803,7 +1805,6 @@ pub fn construct_match_clauses(cypher_parts: &mut CypherParts) {
         }
     }
 }
-
 
 // Construct return clauses
 pub fn construct_return_clauses(cypher_parts: &mut CypherParts) {

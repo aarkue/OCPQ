@@ -21,7 +21,7 @@ use ts_rs::TS;
 use crate::cel::{add_cel_label, check_cel_predicate, get_vars_in_cel_program};
 #[derive(TS)]
 #[ts(export)]
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Variable {
     Event(EventVariable),
     Object(ObjectVariable),
@@ -99,22 +99,89 @@ impl LabelValue {
     }
 }
 
+pub(crate) enum EvInsertion {
+    Inserted { pos: usize },
+    Replaced { pos: usize, prev: EventIndex },
+}
+
+pub(crate) enum ObInsertion {
+    Inserted { pos: usize },
+    Replaced { pos: usize, prev: ObjectIndex },
+}
+
 impl Binding {
     pub fn expand_with_ev(mut self, ev_var: EventVariable, ev_index: EventIndex) -> Self {
         match self.event_map.binary_search_by_key(&ev_var, |x| x.0) {
             Ok(i) => self.event_map[i] = (ev_var, ev_index),
             Err(i) => self.event_map.insert(i, (ev_var, ev_index)),
         }
-        // self.event_map.insert(ev_var, ev_index);
         self
     }
+
+    pub(crate) fn extend_with_ev_in_place(
+        &mut self,
+        ev_var: EventVariable,
+        ev_index: EventIndex,
+    ) -> EvInsertion {
+        match self.event_map.binary_search_by_key(&ev_var, |x| x.0) {
+            Ok(i) => {
+                let prev = self.event_map[i].1;
+                self.event_map[i] = (ev_var, ev_index);
+                EvInsertion::Replaced { pos: i, prev }
+            }
+            Err(i) => {
+                self.event_map.insert(i, (ev_var, ev_index));
+                EvInsertion::Inserted { pos: i }
+            }
+        }
+    }
+
+    pub(crate) fn revert_ev(&mut self, insertion: EvInsertion, ev_var: EventVariable) {
+        match insertion {
+            EvInsertion::Inserted { pos } => {
+                self.event_map.remove(pos);
+            }
+            EvInsertion::Replaced { pos, prev } => {
+                self.event_map[pos] = (ev_var, prev);
+            }
+        }
+    }
+
     pub fn expand_with_ob(mut self, ob_var: ObjectVariable, ob_index: ObjectIndex) -> Self {
         match self.object_map.binary_search_by_key(&ob_var, |x| x.0) {
             Ok(i) => self.object_map[i] = (ob_var, ob_index),
             Err(i) => self.object_map.insert(i, (ob_var, ob_index)),
         }
-        // self.object_map.insert(ev_var, ob_index);
         self
+    }
+
+    pub(crate) fn extend_with_ob_in_place(
+        &mut self,
+        ob_var: ObjectVariable,
+        ob_index: ObjectIndex,
+    ) -> ObInsertion {
+        match self.object_map.binary_search_by_key(&ob_var, |x| x.0) {
+            Ok(i) => {
+                let prev = self.object_map[i].1;
+                self.object_map[i] = (ob_var, ob_index);
+                ObInsertion::Replaced { pos: i, prev }
+            }
+            Err(i) => {
+                self.object_map.insert(i, (ob_var, ob_index));
+                ObInsertion::Inserted { pos: i }
+            }
+        }
+    }
+
+    pub(crate) fn revert_ob(&mut self, insertion: ObInsertion, ob_var: ObjectVariable) {
+        match insertion {
+            ObInsertion::Inserted { pos } => {
+                self.object_map.remove(pos);
+            }
+            ObInsertion::Replaced { pos, prev } => {
+                self.object_map[pos] = (ob_var, prev);
+            }
+        }
     }
     pub fn add_label(&mut self, label: String, value: LabelValue) {
         match self.label_map.binary_search_by_key(&&label, |x| &x.0) {
@@ -265,9 +332,6 @@ pub struct BindingBoxTree {
 }
 
 impl BindingBoxTree {
-    /// Compute the step order for each node once. Step order depends only on the
-    /// BindingBox structure, so it is stable across all parent bindings and can
-    /// be computed once per tree instead of once per (node, parent_binding) pair.
     pub fn compute_step_cache(&self, ocel: &SlimLinkedOCEL) -> Vec<Vec<BindingStep>> {
         self.nodes
             .iter()
@@ -282,10 +346,6 @@ impl BindingBoxTree {
         if self.nodes.is_empty() {
             return Ok((vec![], false));
         }
-        // Collect every index that is referenced as a child by some other node.
-        // Whatever remains is a root of the forest; evaluate each with an empty
-        // binding so multi-root trees (submitted as one merged request from the
-        // frontend) produce a unified result.
         let mut is_child = vec![false; self.nodes.len()];
         for node in &self.nodes {
             match node {
@@ -426,61 +486,306 @@ pub enum ViolationReason {
     UnknownChildSet,
 }
 
-pub type EvaluationResult = (usize, Binding, Option<ViolationReason>);
+pub type EvaluationResult = (usize, std::sync::Arc<Binding>, Option<ViolationReason>);
 pub type EvaluationResults = Vec<EvaluationResult>;
 use rayon::prelude::*;
+
+fn check_constraints(
+    constraints: &[Constraint],
+    binding: &Binding,
+    child_res: &HashMap<String, Vec<(std::sync::Arc<Binding>, Option<ViolationReason>)>>,
+    ocel: &SlimLinkedOCEL,
+) -> Result<Option<ViolationReason>, String> {
+    for (constr_index, constr) in constraints.iter().enumerate() {
+        let viol = match constr {
+            Constraint::Filter { filter } => {
+                if filter.check_binding(binding, ocel)? {
+                    None
+                } else {
+                    Some(ViolationReason::ConstraintNotSatisfied(constr_index))
+                }
+            }
+            Constraint::SizeFilter { filter } => {
+                if filter.check(binding, child_res, ocel)? {
+                    None
+                } else {
+                    Some(ViolationReason::ConstraintNotSatisfied(constr_index))
+                }
+            }
+            Constraint::SAT { child_names } => {
+                let violated = child_names.iter().any(|child_name| {
+                    if let Some(c_res) = child_res.get(child_name) {
+                        c_res.iter().any(|(_b, v)| v.is_some())
+                    } else {
+                        true
+                    }
+                });
+                if violated {
+                    Some(ViolationReason::ConstraintNotSatisfied(constr_index))
+                } else {
+                    None
+                }
+            }
+            Constraint::ANY { child_names } => {
+                let violated = child_names.iter().any(|child_name| {
+                    if let Some(c_res) = child_res.get(child_name) {
+                        c_res.iter().all(|(_b, v)| v.is_some())
+                    } else {
+                        true
+                    }
+                });
+                if violated {
+                    Some(ViolationReason::ConstraintNotSatisfied(constr_index))
+                } else {
+                    None
+                }
+            }
+            Constraint::NOT { child_names } => {
+                let violated = child_names.iter().all(|child_name| {
+                    if let Some(c_res) = child_res.get(child_name) {
+                        c_res.iter().any(|(_b, v)| v.is_none())
+                    } else {
+                        true
+                    }
+                });
+                if violated {
+                    Some(ViolationReason::ConstraintNotSatisfied(constr_index))
+                } else {
+                    None
+                }
+            }
+            Constraint::OR { child_names } => {
+                let any_sat = child_names.iter().any(|child_name| {
+                    if let Some(c_res) = child_res.get(child_name) {
+                        c_res.iter().all(|(_b, v)| v.is_none())
+                    } else {
+                        true
+                    }
+                });
+                if any_sat {
+                    None
+                } else {
+                    Some(ViolationReason::ConstraintNotSatisfied(constr_index))
+                }
+            }
+            Constraint::AND { child_names } => {
+                let any_sat = child_names.iter().all(|child_name| {
+                    if let Some(c_res) = child_res.get(child_name) {
+                        c_res.iter().all(|(_b, v)| v.is_none())
+                    } else {
+                        true
+                    }
+                });
+                if any_sat {
+                    None
+                } else {
+                    Some(ViolationReason::ConstraintNotSatisfied(constr_index))
+                }
+            }
+        };
+        if let Some(vr) = viol {
+            return Ok(Some(vr));
+        }
+    }
+    Ok(None)
+}
+
+/// Describes how much child evaluation a binding box requires during streaming evaluation.
+pub(crate) enum ChildDemand {
+    /// No children need evaluation (no constraints or labels reference them).
+    None,
+    /// Only child counts are needed, bounded per child: `max+1` when max is set (detects exceeding it), else `min`.
+    Counts(HashMap<String, usize>),
+    /// Full child evaluation required (labels or non-NumChilds constraints present).
+    Full,
+}
+
+enum BindingEmission {
+    FilteredOut,
+    Emit(Option<ViolationReason>),
+}
+
+fn num_childs_count_limit(min: Option<usize>, max: Option<usize>) -> usize {
+    max.map(|m| m.saturating_add(1)).unwrap_or(min.unwrap_or(0))
+}
+
+fn add_num_childs_count_limit(
+    counts: &mut HashMap<String, usize>,
+    child_name: &str,
+    min: Option<usize>,
+    max: Option<usize>,
+) {
+    let limit = num_childs_count_limit(min, max);
+    counts
+        .entry(child_name.to_string())
+        .and_modify(|existing| *existing = (*existing).max(limit))
+        .or_insert(limit);
+}
+
+impl ChildDemand {
+    pub(crate) fn required_for(bbox: &BindingBox) -> Self {
+        if !bbox.labels.is_empty() {
+            return Self::Full;
+        }
+
+        let mut counts = HashMap::new();
+        for sf in &bbox.size_filters {
+            match sf {
+                SizeFilter::NumChilds {
+                    child_name,
+                    min,
+                    max,
+                } => add_num_childs_count_limit(&mut counts, child_name, *min, *max),
+                _ => return Self::Full,
+            }
+        }
+
+        for constraint in &bbox.constraints {
+            match constraint {
+                Constraint::Filter { .. } => {}
+                Constraint::SizeFilter {
+                    filter:
+                        SizeFilter::NumChilds {
+                            child_name,
+                            min,
+                            max,
+                        },
+                } => add_num_childs_count_limit(&mut counts, child_name, *min, *max),
+                _ => return Self::Full,
+            }
+        }
+
+        if counts.is_empty() {
+            Self::None
+        } else {
+            Self::Counts(counts)
+        }
+    }
+}
+
+fn check_num_childs_count(count: Option<usize>, min: Option<usize>, max: Option<usize>) -> bool {
+    if let Some(count) = count {
+        !min.is_some_and(|min| count < min) && !max.is_some_and(|max| count > max)
+    } else {
+        false
+    }
+}
+
+fn check_size_filter_with_counts(
+    filter: &SizeFilter,
+    child_counts: &HashMap<String, usize>,
+) -> bool {
+    match filter {
+        SizeFilter::NumChilds {
+            child_name,
+            min,
+            max,
+        } => check_num_childs_count(child_counts.get(child_name).copied(), *min, *max),
+        _ => false,
+    }
+}
+
+fn check_constraints_with_counts(
+    constraints: &[Constraint],
+    binding: &Binding,
+    child_counts: &HashMap<String, usize>,
+    ocel: &SlimLinkedOCEL,
+) -> Result<Option<ViolationReason>, String> {
+    for (constr_index, constr) in constraints.iter().enumerate() {
+        let violated = match constr {
+            Constraint::Filter { filter } => !filter.check_binding(binding, ocel)?,
+            Constraint::SizeFilter { filter } => {
+                !check_size_filter_with_counts(filter, child_counts)
+            }
+            _ => true,
+        };
+        if violated {
+            return Ok(Some(ViolationReason::ConstraintNotSatisfied(constr_index)));
+        }
+    }
+    Ok(None)
+}
 
 impl BindingBoxTreeNode {
     pub fn evaluate(
         &self,
         own_index: usize,
-        parent_binding: Binding,
+        mut parent_binding: Binding,
         tree: &BindingBoxTree,
         ocel: &SlimLinkedOCEL,
         step_cache: &[Vec<BindingStep>],
     ) -> Result<
         (
-            (EvaluationResults, Vec<(Binding, Option<ViolationReason>)>),
+            (
+                EvaluationResults,
+                Vec<(std::sync::Arc<Binding>, Option<ViolationReason>)>,
+            ),
             bool,
         ),
         String,
     > {
+        self.evaluate_in_place(own_index, &mut parent_binding, tree, ocel, step_cache)
+    }
+
+    fn evaluate_in_place(
+        &self,
+        own_index: usize,
+        parent_binding: &mut Binding,
+        tree: &BindingBoxTree,
+        ocel: &SlimLinkedOCEL,
+        step_cache: &[Vec<BindingStep>],
+    ) -> Result<
+        (
+            (
+                EvaluationResults,
+                Vec<(std::sync::Arc<Binding>, Option<ViolationReason>)>,
+            ),
+            bool,
+        ),
+        String,
+    > {
+        use std::sync::Arc;
         let (bbox, children) = self.to_box();
+        let child_edges: Vec<(usize, String)> = children
+            .iter()
+            .map(|c| {
+                (
+                    *c,
+                    tree.edge_names
+                        .get(&(own_index, *c))
+                        .cloned()
+                        .unwrap_or_else(|| format!("{UNNAMED}{c}")),
+                )
+            })
+            .collect();
         let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
-            bbox.expand_with_steps(parent_binding, ocel, &step_cache[own_index])?;
+            bbox.expand_with_steps_in_place(parent_binding, ocel, &step_cache[own_index])?;
         enum BindingResult {
-            FilteredOutBySizeFilter(Binding, EvaluationResults),
-            Sat(Binding, EvaluationResults),
-            Viol(Binding, ViolationReason, EvaluationResults),
+            FilteredOutBySizeFilter(std::sync::Arc<Binding>, EvaluationResults),
+            Sat(std::sync::Arc<Binding>, EvaluationResults),
+            Viol(std::sync::Arc<Binding>, ViolationReason, EvaluationResults),
         }
         let expanded_len = expanded.len();
-        let it = rayon_cancel::CancelAdapter::new(expanded.into_par_iter());
-        let x = it.canceller();
+        let it = rayon_cancel::CancelAdapter::new(expanded.into_par_iter().with_min_len(256));
+        let canceller = it.canceller();
         let re: Vec<BindingResult> = it
             .map(|mut b| {
                 let mut all_res = Vec::new();
-                let mut child_res = HashMap::with_capacity(children.len());
-                for c in children.as_ref() {
-                    let c_name = tree
-                        .edge_names
-                        .get(&(own_index, *c))
-                        .cloned()
-                        .unwrap_or(format!("{UNNAMED}{c}"));
-                    // c_name_map.insert(c_name.clone(), c);
+                let mut child_res = HashMap::with_capacity(child_edges.len());
+                for (c, c_name) in &child_edges {
                     let ((c_res, violations), _c_skipped) =
-                        tree.nodes[*c].evaluate(*c, b.clone(), tree, ocel, step_cache)?;
-                    child_res.insert(c_name, violations);
-                    if children.len() * c_res.len() * expanded_len > 25_000_000 {
-                        x.cancel();
+                        tree.nodes[*c].evaluate_in_place(*c, &mut b, tree, ocel, step_cache)?;
+                    child_res.insert(c_name.clone(), violations);
+                    if child_edges.len() * c_res.len() * expanded_len > 150_000_000 {
+                        canceller.cancel();
                         println!(
-                            "Too much too handle! {}*{}*{}={}",
+                            "Too much to handle! {}*{}*{}={}",
                             child_res.len(),
                             c_res.len(),
                             expanded_len,
-                            children.len() * c_res.len() * expanded_len
+                            child_edges.len() * c_res.len() * expanded_len
                         );
                     }
-
                     all_res.extend(c_res);
                 }
                 for label_fun in &bbox.labels {
@@ -488,116 +793,22 @@ impl BindingBoxTreeNode {
                 }
                 for sf in &bbox.size_filters {
                     if !sf.check(&b, &child_res, ocel)? {
-                        // Vec::default to NOT include child results if a size filter filters the parent binding out
-                        // Otherwise, pass all_res
                         return Ok::<BindingResult, String>(
-                            BindingResult::FilteredOutBySizeFilter(b.clone(), Vec::default()),
+                            BindingResult::FilteredOutBySizeFilter(Arc::new(b), Vec::default()),
                         );
                     }
                 }
-
-                for (constr_index, constr) in bbox.constraints.iter().enumerate() {
-                    let viol = match constr {
-                        Constraint::Filter { filter } => {
-                            if filter.check_binding(&b, ocel)? {
-                                None
-                            } else {
-                                Some(ViolationReason::ConstraintNotSatisfied(constr_index))
-                            }
-                        }
-                        Constraint::SizeFilter { filter } => {
-                            if filter.check(&b, &child_res, ocel)? {
-                                None
-                            } else {
-                                Some(ViolationReason::ConstraintNotSatisfied(constr_index))
-                            }
-                        }
-                        // For-all semantics!
-                        Constraint::SAT { child_names } => {
-                            let violated = child_names.iter().any(|child_name| {
-                                if let Some(c_res) = child_res.get(child_name) {
-                                    c_res.iter().any(|(_b, v)| v.is_some())
-                                } else {
-                                    true
-                                }
-                            });
-                            if violated {
-                                Some(ViolationReason::ConstraintNotSatisfied(constr_index))
-                            } else {
-                                None
-                            }
-                        }
-                        // SAT with any (exists) semantics
-                        Constraint::ANY { child_names } => {
-                            let violated = child_names.iter().any(|child_name| {
-                                if let Some(c_res) = child_res.get(child_name) {
-                                    c_res.iter().all(|(_b, v)| v.is_some())
-                                } else {
-                                    true
-                                }
-                            });
-                            if violated {
-                                Some(ViolationReason::ConstraintNotSatisfied(constr_index))
-                            } else {
-                                None
-                            }
-                        }
-                        Constraint::NOT { child_names } => {
-                            let violated = child_names.iter().all(|child_name| {
-                                if let Some(c_res) = child_res.get(child_name) {
-                                    c_res.iter().any(|(_b, v)| v.is_none())
-                                } else {
-                                    true
-                                }
-                            });
-                            if violated {
-                                Some(ViolationReason::ConstraintNotSatisfied(constr_index))
-                            } else {
-                                None
-                            }
-                        }
-                        Constraint::OR { child_names } => {
-                            // println!("Child indices: {:?}, Children: {:?}", child_names, children);
-                            let any_sat = child_names.iter().any(|child_name| {
-                                if let Some(c_res) = child_res.get(child_name) {
-                                    c_res.iter().all(|(_b, v)| v.is_none())
-                                } else {
-                                    true
-                                }
-                            });
-                            if any_sat {
-                                None
-                            } else {
-                                Some(ViolationReason::ConstraintNotSatisfied(constr_index))
-                            }
-                        }
-                        Constraint::AND { child_names } => {
-                            // println!("Child indices: {:?}, Children: {:?}", child_names, children);
-                            let any_sat = child_names.iter().all(|child_name| {
-                                if let Some(c_res) = child_res.get(child_name) {
-                                    c_res.iter().all(|(_b, v)| v.is_none())
-                                } else {
-                                    true
-                                }
-                            });
-                            if any_sat {
-                                None
-                            } else {
-                                Some(ViolationReason::ConstraintNotSatisfied(constr_index))
-                            }
-                        }
-                    };
-                    if let Some(vr) = viol {
-                        all_res.push((own_index, b.clone(), Some(vr)));
-                        return Ok(BindingResult::Viol(b, vr, all_res));
-                    }
+                if let Some(vr) = check_constraints(&bbox.constraints, &b, &child_res, ocel)? {
+                    let arc_b = Arc::new(b);
+                    all_res.push((own_index, Arc::clone(&arc_b), Some(vr)));
+                    return Ok(BindingResult::Viol(arc_b, vr, all_res));
                 }
-                all_res.push((own_index, b.clone(), None));
-                Ok(BindingResult::Sat(b, all_res))
+                let arc_b = Arc::new(b);
+                all_res.push((own_index, Arc::clone(&arc_b), None));
+                Ok(BindingResult::Sat(arc_b, all_res))
             })
             .collect::<Result<_, _>>()?;
-        // .collect();
-        let recursive_calls_cancelled = x.is_cancelled();
+        let recursive_calls_cancelled = canceller.is_cancelled();
         Ok((
             re.into_par_iter()
                 .fold(
@@ -629,6 +840,271 @@ impl BindingBoxTreeNode {
                 ),
             expanding_skipped_bindings || recursive_calls_cancelled,
         ))
+    }
+
+    fn evaluate_no_descendants_binding(
+        &self,
+        bbox: &BindingBox,
+        binding: &mut Binding,
+        tree: &BindingBoxTree,
+        ocel: &SlimLinkedOCEL,
+        step_cache: &[Vec<BindingStep>],
+        child_edges: &[(usize, String)],
+        child_demand: &ChildDemand,
+    ) -> Result<BindingEmission, String> {
+        use std::sync::Arc;
+
+        match child_demand {
+            ChildDemand::Full => {
+                let mut child_res = HashMap::with_capacity(child_edges.len());
+                for (c, c_name) in child_edges {
+                    let mut violations: Vec<(Arc<Binding>, Option<ViolationReason>)> = Vec::new();
+                    let mut child_sink =
+                        |bd: Arc<Binding>, vr: Option<ViolationReason>| -> Result<(), String> {
+                            violations.push((bd, vr));
+                            Ok(())
+                        };
+                    let _c_skipped = tree.nodes[*c].evaluate_no_descendants_in_place(
+                        *c,
+                        binding,
+                        tree,
+                        ocel,
+                        step_cache,
+                        &mut child_sink,
+                    )?;
+                    child_res.insert(c_name.clone(), violations);
+                }
+                for label_fun in &bbox.labels {
+                    add_cel_label(binding, Some(&child_res), ocel, label_fun)?;
+                }
+                for sf in &bbox.size_filters {
+                    if !sf.check(binding, &child_res, ocel)? {
+                        return Ok(BindingEmission::FilteredOut);
+                    }
+                }
+                Ok(
+                    match check_constraints(&bbox.constraints, binding, &child_res, ocel)? {
+                        Some(vr) => BindingEmission::Emit(Some(vr)),
+                        None => BindingEmission::Emit(None),
+                    },
+                )
+            }
+            ChildDemand::Counts(count_limits) => {
+                let mut child_counts = HashMap::with_capacity(count_limits.len());
+                for (c, c_name) in child_edges {
+                    if let Some(&limit) = count_limits.get(c_name) {
+                        let (count, _skipped) = tree.nodes[*c]
+                            .evaluate_no_descendants_count_limited(
+                                *c, binding, tree, ocel, step_cache, limit,
+                            )?;
+                        child_counts.insert(c_name.clone(), count);
+                    }
+                }
+                for sf in &bbox.size_filters {
+                    if !check_size_filter_with_counts(sf, &child_counts) {
+                        return Ok(BindingEmission::FilteredOut);
+                    }
+                }
+                Ok(
+                    match check_constraints_with_counts(
+                        &bbox.constraints,
+                        binding,
+                        &child_counts,
+                        ocel,
+                    )? {
+                        Some(vr) => BindingEmission::Emit(Some(vr)),
+                        None => BindingEmission::Emit(None),
+                    },
+                )
+            }
+            ChildDemand::None => {
+                let child_res = HashMap::new();
+                Ok(
+                    match check_constraints(&bbox.constraints, binding, &child_res, ocel)? {
+                        Some(vr) => BindingEmission::Emit(Some(vr)),
+                        None => BindingEmission::Emit(None),
+                    },
+                )
+            }
+        }
+    }
+
+    fn evaluate_no_descendants_count_limited(
+        &self,
+        own_index: usize,
+        parent_binding: &mut Binding,
+        tree: &BindingBoxTree,
+        ocel: &SlimLinkedOCEL,
+        step_cache: &[Vec<BindingStep>],
+        limit: usize,
+    ) -> Result<(usize, bool), String> {
+        if limit == 0 {
+            return Ok((0, false));
+        }
+
+        let (bbox, children) = self.to_box();
+        if children.is_empty()
+            && bbox.labels.is_empty()
+            && bbox.size_filters.is_empty()
+            && bbox.constraints.is_empty()
+        {
+            return bbox.count_with_steps_in_place(
+                parent_binding,
+                ocel,
+                &step_cache[own_index],
+                limit,
+            );
+        }
+
+        let child_edges: Vec<(usize, String)> = children
+            .iter()
+            .map(|c| {
+                (
+                    *c,
+                    tree.edge_names
+                        .get(&(own_index, *c))
+                        .cloned()
+                        .unwrap_or_else(|| format!("{UNNAMED}{c}")),
+                )
+            })
+            .collect();
+        let child_demand = ChildDemand::required_for(&bbox);
+        let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
+            bbox.expand_with_steps_in_place(parent_binding, ocel, &step_cache[own_index])?;
+
+        let mut count = 0;
+        for mut b in expanded {
+            if matches!(
+                self.evaluate_no_descendants_binding(
+                    bbox.as_ref(),
+                    &mut b,
+                    tree,
+                    ocel,
+                    step_cache,
+                    &child_edges,
+                    &child_demand,
+                )?,
+                BindingEmission::Emit(_)
+            ) {
+                count += 1;
+                if count >= limit {
+                    return Ok((count, expanding_skipped_bindings));
+                }
+            }
+        }
+
+        Ok((count, expanding_skipped_bindings))
+    }
+
+    /// Like `evaluate`, but does not accumulate per-node descendant bindings.
+    /// Streams (binding, violation) pairs for this node into `sink` instead of
+    /// collecting them into a `Vec`. Returns whether any expansion was skipped.
+    ///
+    /// Recursive child calls materialize results only when the parent needs
+    /// full child bindings; simple `NumChilds` checks count up to the required
+    /// bound instead.
+    pub fn evaluate_no_descendants(
+        &self,
+        own_index: usize,
+        mut parent_binding: Binding,
+        tree: &BindingBoxTree,
+        ocel: &SlimLinkedOCEL,
+        step_cache: &[Vec<BindingStep>],
+        sink: &mut dyn FnMut(
+            std::sync::Arc<Binding>,
+            Option<ViolationReason>,
+        ) -> Result<(), String>,
+    ) -> Result<bool, String> {
+        self.evaluate_no_descendants_in_place(
+            own_index,
+            &mut parent_binding,
+            tree,
+            ocel,
+            step_cache,
+            sink,
+        )
+    }
+
+    // `sink` is type-erased (`&mut dyn FnMut`) to prevent issues with recursion limits
+    fn evaluate_no_descendants_in_place(
+        &self,
+        own_index: usize,
+        parent_binding: &mut Binding,
+        tree: &BindingBoxTree,
+        ocel: &SlimLinkedOCEL,
+        step_cache: &[Vec<BindingStep>],
+        sink: &mut dyn FnMut(
+            std::sync::Arc<Binding>,
+            Option<ViolationReason>,
+        ) -> Result<(), String>,
+    ) -> Result<bool, String> {
+        use std::sync::Arc;
+        let (bbox, children) = self.to_box();
+        let child_demand = ChildDemand::required_for(&bbox);
+        let child_edges: Vec<(usize, String)> = children
+            .iter()
+            .map(|c| {
+                (
+                    *c,
+                    tree.edge_names
+                        .get(&(own_index, *c))
+                        .cloned()
+                        .unwrap_or_else(|| format!("{UNNAMED}{c}")),
+                )
+            })
+            .collect();
+        let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
+            bbox.expand_with_steps_in_place(parent_binding, ocel, &step_cache[own_index])?;
+        enum BindingResult {
+            FilteredOutBySizeFilter,
+            Sat(std::sync::Arc<Binding>),
+            Viol(std::sync::Arc<Binding>, ViolationReason),
+        }
+
+        if child_edges.is_empty()
+            && bbox.labels.is_empty()
+            && bbox.size_filters.is_empty()
+            && bbox.constraints.is_empty()
+        {
+            for b in expanded {
+                sink(Arc::new(b), None)?;
+            }
+            return Ok(expanding_skipped_bindings);
+        }
+
+        let it = expanded.into_par_iter().with_min_len(256);
+        let re: Vec<BindingResult> = it
+            .map(|mut b| {
+                match self.evaluate_no_descendants_binding(
+                    bbox.as_ref(),
+                    &mut b,
+                    tree,
+                    ocel,
+                    step_cache,
+                    &child_edges,
+                    &child_demand,
+                )? {
+                    BindingEmission::FilteredOut => {
+                        Ok::<BindingResult, String>(BindingResult::FilteredOutBySizeFilter)
+                    }
+                    BindingEmission::Emit(Some(vr)) => {
+                        Ok::<BindingResult, String>(BindingResult::Viol(Arc::new(b), vr))
+                    }
+                    BindingEmission::Emit(None) => {
+                        Ok::<BindingResult, String>(BindingResult::Sat(Arc::new(b)))
+                    }
+                }
+            })
+            .collect::<Result<_, _>>()?;
+
+        for x in re {
+            match x {
+                BindingResult::FilteredOutBySizeFilter => {}
+                BindingResult::Sat(b) => sink(b, None)?,
+                BindingResult::Viol(b, v) => sink(b, Some(v))?,
+            }
+        }
+        Ok(expanding_skipped_bindings)
     }
 }
 
@@ -939,7 +1415,7 @@ impl SizeFilter {
     pub fn check(
         &self,
         binding: &Binding,
-        child_res: &HashMap<String, Vec<(Binding, Option<ViolationReason>)>>,
+        child_res: &HashMap<String, Vec<(std::sync::Arc<Binding>, Option<ViolationReason>)>>,
         ocel: &SlimLinkedOCEL,
     ) -> Result<bool, String> {
         match self {
