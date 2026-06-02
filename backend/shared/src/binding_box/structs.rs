@@ -1211,7 +1211,11 @@ impl Filter {
                     .ok_or_else(|| format!("Event Variable {ev_var_2} without value"))?;
                 let e1_time = e1.get_time(ocel);
                 let e2_time = e2.get_time(ocel);
-                let duration_diff = (*e2_time - e1_time).num_milliseconds() as f64 / 1000.0;
+                let diff = *e2_time - e1_time;
+                let duration_diff = match diff.num_microseconds() {
+                    Some(us) => us as f64 / 1_000_000.0,
+                    None => diff.num_milliseconds() as f64 / 1000.0,
+                };
                 Ok(!min_sec.is_some_and(|min_sec| duration_diff < min_sec)
                     && !max_sec.is_some_and(|max_sec| duration_diff > max_sec))
             }

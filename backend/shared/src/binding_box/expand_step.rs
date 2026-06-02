@@ -214,8 +214,11 @@ impl BindingBox {
                                 if let Some(ref_ev) = ref_ev {
                                     let ref_ev_time = ocel.get_ev_time(ref_ev);
                                     let e_time = ocel.get_ev_time(e_index);
-                                    let duration_diff =
-                                        (*e_time - ref_ev_time).num_milliseconds() as f64 / 1000.0;
+                                    let diff = *e_time - ref_ev_time;
+                                    let duration_diff = match diff.num_microseconds() {
+                                        Some(us) => us as f64 / 1_000_000.0,
+                                        None => diff.num_milliseconds() as f64 / 1000.0,
+                                    };
                                     !min_sec.is_some_and(|m| duration_diff < m)
                                         && !max_sec.is_some_and(|m| duration_diff > m)
                                 } else {
