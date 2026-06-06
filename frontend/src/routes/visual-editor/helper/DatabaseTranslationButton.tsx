@@ -74,7 +74,7 @@ export default function DatabaseTranslationButton({
 			}
 			title="Generate Database Query"
 			initialData={{
-				dialect: "SQLite" as "SQLite" | "DuckDB",
+				dialect: "SQLite" as "SQLite" | "DuckDB" | "PostgreSQL",
 				objectMapping: getTranslationValue(ocelInfo.object_types.map((ot) => ot.name)),
 				eventMapping: getTranslationValue(ocelInfo.event_types.map((et) => et.name)),
 			}}
@@ -98,6 +98,7 @@ export default function DatabaseTranslationButton({
 								<SelectContent>
 									<SelectItem value="SQLite">SQLite</SelectItem>
 									<SelectItem value="DuckDB">DuckDB</SelectItem>
+									<SelectItem value="PostgreSQL">PostgreSQL</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
@@ -385,8 +386,12 @@ export default function DatabaseTranslationButton({
 				const query = treeRes[0].tree;
 				const res = await backend["ocel/create-db-query"]({
 					table_mappings: {
-						event_tables: mapping.eventMapping,
-						object_tables: mapping.objectMapping,
+						event_tables: Object.fromEntries(
+							Object.entries(mapping.eventMapping).map(([type, table]) => [type, { table }]),
+						),
+						object_tables: Object.fromEntries(
+							Object.entries(mapping.objectMapping).map(([type, table]) => [type, { table }]),
+						),
 					},
 					tree: query,
 					database: mapping.dialect,
