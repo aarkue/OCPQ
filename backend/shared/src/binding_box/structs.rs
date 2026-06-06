@@ -74,6 +74,46 @@ pub struct Binding {
     pub label_map: Vec<(String, LabelValue)>,
 }
 
+/// SQL-execution-path binding. Stores ocel_ids directly instead of
+/// `EventIndex` / `ObjectIndex` offsets into a `SlimLinkedOCEL`. The
+/// SQL backends never allocate indices for their bindings: the row
+/// stream surfaces ocel_ids verbatim, and the id-native CEL evaluator
+/// resolves attributes by id via a [`crate::cel::Resolver`] trait
+/// object.
+///
+/// Not exported through `ts-rs`: today the front-end consumes only
+/// in-memory `Binding`s. When the SQL surface starts going over the
+/// wire, add `#[ts(export)]` here.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub struct BindingId {
+    pub event_map: Vec<(EventVariable, std::sync::Arc<String>)>,
+    pub object_map: Vec<(ObjectVariable, std::sync::Arc<String>)>,
+    pub label_map: Vec<(String, LabelValue)>,
+}
+
+impl BindingId {
+    pub fn add_label(&mut self, label: String, value: LabelValue) {
+        match self.label_map.binary_search_by_key(&&label, |x| &x.0) {
+            Ok(i) => self.label_map[i] = (label, value),
+            Err(i) => self.label_map.insert(i, (label, value)),
+        }
+    }
+
+    pub fn get_ev_id(&self, ev_var: &EventVariable) -> Option<&std::sync::Arc<String>> {
+        match self.event_map.binary_search_by_key(ev_var, |x| x.0) {
+            Ok(i) => Some(&self.event_map[i].1),
+            Err(_) => None,
+        }
+    }
+    pub fn get_ob_id(&self, ob_var: &ObjectVariable) -> Option<&std::sync::Arc<String>> {
+        match self.object_map.binary_search_by_key(ob_var, |x| x.0) {
+            Ok(i) => Some(&self.object_map[i].1),
+            Err(_) => None,
+        }
+    }
+}
+
 #[derive(TS)]
 #[ts(export)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -776,7 +816,13 @@ impl BindingBoxTreeNode {
                     let ((c_res, violations), _c_skipped) =
                         tree.nodes[*c].evaluate_in_place(*c, &mut b, tree, ocel, step_cache)?;
                     child_res.insert(c_name.clone(), violations);
-                    if child_edges.len() * c_res.len() * expanded_len > 150_000_000 {
+                    // Cap raised from 150M to 100B for the corpus probe;
+                    // user explicitly asked to remove / raise it so the
+                    // automated differential check produces honest numbers
+                    // instead of a "Too much to handle" partial. Interactive
+                    // engine paths inherit the higher cap; revisit if it
+                    // causes runaway memory on UI sessions.
+                    if child_edges.len() * c_res.len() * expanded_len > 100_000_000_000 {
                         canceller.cancel();
                         println!(
                             "Too much to handle! {}*{}*{}={}",

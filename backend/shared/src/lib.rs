@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+pub use duckdb;
 pub use mimalloc;
 pub use process_mining;
 

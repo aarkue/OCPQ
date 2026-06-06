@@ -1,3 +1,5 @@
  
 target/
 bench-results*.jsonl
+ocpq-exec-result-*.json
+ocpq-res-export-*.json

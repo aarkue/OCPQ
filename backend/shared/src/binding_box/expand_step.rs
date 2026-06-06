@@ -186,17 +186,6 @@ impl BindingBox {
             return Ok(());
         }
         let step = &steps[idx];
-        if idx > 0 && matches!(step, BindingStep::Filter(_)) {
-            return self.apply_step_recursive_emit(
-                b,
-                counter,
-                ocel,
-                steps,
-                idx + 1,
-                max_bindings,
-                emit,
-            );
-        }
         match step {
             BindingStep::BindEv(ev_var, time_constr) => {
                 let ev_types = self

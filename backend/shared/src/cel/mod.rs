@@ -1,3 +1,5 @@
+pub mod resolver;
+
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -14,60 +16,65 @@ use itertools::Itertools;
 use once_cell::sync::Lazy;
 use process_mining::core::event_data::object_centric::{
     linked_ocel::{
-        slim_linked_ocel::{EventIndex, EventOrObjectIndex, InnerIndex, ObjectIndex},
+        slim_linked_ocel::{EventIndex, ObjectIndex},
         LinkedOCELAccess, SlimLinkedOCEL,
     },
     OCELAttributeValue,
 };
 
-use crate::{
-    binding_box::{
-        structs::{EventVariable, LabelFunction, LabelValue, ObjectVariable, Variable},
-        Binding, ViolationReason,
-    },
-    preprocessing::linked_ocel::{event_or_object_from_index, OCELNode},
+use crate::binding_box::{
+    structs::{EventVariable, LabelFunction, LabelValue, ObjectVariable, Variable},
+    Binding, ViolationReason,
 };
 
-fn string_to_index(s: &str) -> Option<EventOrObjectIndex> {
-    // ob_ and ev_ are the prefixes we reserve
-    let (typ, num) = s.split_at(3);
-    let num = num.parse::<InnerIndex>().ok()?;
-    if typ == "ob_" {
-        Some(EventOrObjectIndex::Object(num.into()))
-    } else if typ == "ev_" {
-        Some(EventOrObjectIndex::Event(num.into()))
-    } else {
-        None
+// Thread-local handle to the current resolver. Set by `evaluate_cel` /
+// `evaluate_cel_id` for the duration of the CEL execution; cleared after.
+// Closures inside `Context<'static>` read the resolver from here, so the
+// per-thread cache (`CEL_BASE_CTX`) can be shared across calls even when the
+// underlying resolver changes: the closures dereference the current handle,
+// not a captured pointer.
+//
+// Safety: each closure is invoked synchronously from `Program::execute`, which
+// runs on the same thread that called `evaluate_cel`. The resolver Rc is alive
+// for the duration of `execute`. Closures take `&self` on the resolver through
+// `with_resolver`; no borrows escape.
+thread_local! {
+    static CURRENT_RESOLVER: RefCell<Option<std::rc::Rc<&'static dyn resolver::Resolver>>> =
+        const { RefCell::new(None) };
+}
+
+/// Replace the thread-local resolver handle for the duration of `f`.
+/// Restores the previous handle on return so nested calls (CEL inside
+/// CEL, e.g. AdvancedCEL re-entering) behave correctly.
+fn with_resolver<R>(resolver: &dyn resolver::Resolver, f: impl FnOnce() -> R) -> R {
+    // Lifetime erase: the resolver is 'a, but the thread_local can
+    // only hold 'static. We restore the slot before `f` returns, so
+    // the erased borrow never outlives the actual resolver.
+    let erased: &'static dyn resolver::Resolver =
+        unsafe { std::mem::transmute::<&dyn resolver::Resolver, _>(resolver) };
+    let prev = CURRENT_RESOLVER.with(|c| c.replace(Some(std::rc::Rc::new(erased))));
+    struct Guard {
+        prev: Option<std::rc::Rc<&'static dyn resolver::Resolver>>,
     }
-}
-
-struct RawBindingContextPtr<'a, T>(*mut &'a T);
-
-unsafe impl<T> Send for RawBindingContextPtr<'_, T> {}
-unsafe impl<T> Sync for RawBindingContextPtr<'_, T> {}
-impl<T> Clone for RawBindingContextPtr<'_, T> {
-    fn clone(&self) -> Self {
-        *self
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            CURRENT_RESOLVER.with(|c| {
+                c.replace(self.prev.take());
+            });
+        }
     }
+    let _g = Guard { prev };
+    f()
 }
 
-impl<T> Copy for RawBindingContextPtr<'_, T> {}
-
-fn index_string_to_val(s: &str, ocel: &SlimLinkedOCEL) -> Option<OCELNode> {
-    let index = string_to_index(s)?;
-    let ret = event_or_object_from_index(index, ocel);
-    Some(ret)
-}
-
-unsafe fn index_string_to_val_raw<'a>(
-    s: &str,
-    ocel: RawBindingContextPtr<'a, SlimLinkedOCEL>,
-) -> Option<OCELNode> {
-    index_string_to_val(s, ocel.0.as_ref().unwrap())
-}
-
-unsafe fn get_ocel_raw(ocel: RawBindingContextPtr<'_, SlimLinkedOCEL>) -> &SlimLinkedOCEL {
-    ocel.0.as_ref().unwrap()
+fn current_resolver_call<R>(f: impl FnOnce(&dyn resolver::Resolver) -> R) -> R {
+    CURRENT_RESOLVER.with(|c| {
+        let borrowed = c.borrow();
+        let r = borrowed
+            .as_ref()
+            .expect("CEL closure called outside with_resolver scope");
+        f(**r)
+    })
 }
 
 pub static CEL_PROGRAM_CACHE: Lazy<RwLock<HashMap<String, Program>>> = Lazy::new(|| {
@@ -126,6 +133,20 @@ impl CelCacheKey {
             num_obs: ocel.get_all_obs().count(),
         }
     }
+    fn from_resolver(r: &dyn resolver::Resolver) -> Self {
+        // Thin-pointer identity over a fat trait-object reference.
+        // Two impls that share an address are unlikely (they would have to
+        // be the same instance); the auxiliary num_evs / num_obs fields
+        // pin the cache key further so a slim_locel and an id_backed_ocel
+        // that incidentally land at the same address still get distinct
+        // cache slots (different counts).
+        let raw: *const dyn resolver::Resolver = r;
+        Self {
+            ptr: raw as *const () as usize,
+            num_evs: r.num_events() as usize,
+            num_obs: r.num_objects() as usize,
+        }
+    }
 }
 
 fn cached_ev_index_name(idx: &EventIndex, key: CelCacheKey) -> Arc<String> {
@@ -172,36 +193,33 @@ fn cached_ob_index_name(idx: &ObjectIndex, key: CelCacheKey) -> Arc<String> {
     })
 }
 
-fn build_base_cel_context(ocel: &SlimLinkedOCEL) -> Context<'static> {
+/// Build the per-(thread, resolver) CEL execution context. The
+/// resolver is held via a raw `*const dyn Resolver` so the closures
+/// can be `'static` (cel-interpreter requires it). Safety contract:
+/// callers must keep the underlying resolver alive for the duration
+/// of every CEL execution that uses the resulting context. The
+/// `CEL_BASE_CTX` cache invalidates whenever the resolver pointer
+/// changes (`CelCacheKey`), so stale contexts cannot outlive their
+/// resolver.
+fn build_base_cel_context() -> Context<'static> {
     let mut context: Context<'static> = Context::default();
-
-    let ocel_raw = RawBindingContextPtr(unsafe {
-        std::mem::transmute::<*mut &SlimLinkedOCEL, *mut &'static SlimLinkedOCEL>(Box::into_raw(
-            Box::new(ocel),
-        ))
-    });
 
     context.add_function(
         "type",
-        move |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
-            let val = unsafe { index_string_to_val_raw(&variable, ocel_raw) };
-
-            match val {
-                Some(val_ref) => {
-                    let ocel_type = match val_ref {
-                        OCELNode::Event(ev) => ev.event_type,
-                        OCELNode::Object(ob) => ob.object_type,
-                    };
-                    Ok(ocel_type.into())
+        |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
+            current_resolver_call(|r| {
+                if let Some(ev) = r.get_event(&variable) {
+                    return Ok(ev.event_type.into());
                 }
-
-                None => ftx.error("Event or Object not found.").into(),
-            }
+                if let Some(ob) = r.get_object(&variable) {
+                    return Ok(ob.object_type.into());
+                }
+                ftx.error("Event or Object not found.").into()
+            })
         },
     );
 
     context.add_function("min", |cel_interpreter::extractors::Arguments(args): cel_interpreter::extractors::Arguments| -> Result<Value,ExecutionError> {
-            // If items is a list of values, then operate on the list
             let items = if args.len() == 1 {
                 match &args[0] {
                     Value::List(values) => values,
@@ -225,175 +243,138 @@ fn build_base_cel_context(ocel: &SlimLinkedOCEL) -> Context<'static> {
 
     context.add_function(
         "attr",
-        move |ftx: &FunctionContext,
-              This(variable): This<Arc<String>>,
-              attr_name: Arc<String>|
-              -> ResolveResult {
-            let val = unsafe { index_string_to_val_raw(&variable, ocel_raw) };
-            let res = match val {
-                Some(val_ref) => {
-                    let attr_val = match val_ref {
-                        OCELNode::Event(ev) => ev
-                            .attributes
-                            .into_iter()
-                            .find(|a| &a.name == attr_name.as_ref())
-                            .map(|a| a.value),
-                        OCELNode::Object(ob) => ob
-                            .attributes
-                            .into_iter()
-                            .find(|a| &a.name == attr_name.as_ref())
-                            .map(|a| a.value),
-                    }
-                    .unwrap_or(OCELAttributeValue::Null);
-                    let cel_val = match attr_val {
-                        OCELAttributeValue::Float(f) => (f).into(),
-                        OCELAttributeValue::Integer(i) => (i).into(),
-                        OCELAttributeValue::String(s) => s.into(),
-                        OCELAttributeValue::Time(t) => t.fixed_offset().into(),
-                        OCELAttributeValue::Boolean(b) => (b).into(),
-                        OCELAttributeValue::Null => Value::Null,
-                    };
-                    Ok(cel_val)
-                }
-
-                None => ftx.error("Event or Object not found.").into(),
-            };
-            res
+        |ftx: &FunctionContext,
+         This(variable): This<Arc<String>>,
+         attr_name: Arc<String>|
+         -> ResolveResult {
+            current_resolver_call(|r| {
+                let attr_val = if let Some(ev) = r.get_event(&variable) {
+                    ev.attributes
+                        .into_iter()
+                        .find(|a| &a.name == attr_name.as_ref())
+                        .map(|a| a.value)
+                        .unwrap_or(OCELAttributeValue::Null)
+                } else if let Some(ob) = r.get_object(&variable) {
+                    ob.attributes
+                        .into_iter()
+                        .find(|a| &a.name == attr_name.as_ref())
+                        .map(|a| a.value)
+                        .unwrap_or(OCELAttributeValue::Null)
+                } else {
+                    return ftx.error("Event or Object not found.").into();
+                };
+                Ok(ocel_val_to_cel_val(attr_val))
+            })
         },
     );
 
     context.add_function(
         "attrAt",
-        move |ftx: &FunctionContext,
-              This(variable): This<Arc<String>>,
-              attr_name: Arc<String>,
-              at: DateTime<FixedOffset>|
-              -> ResolveResult {
-            let val = unsafe { index_string_to_val_raw(&variable, ocel_raw) };
-            let res = match val {
-                Some(val_ref) => {
-                    let attr_val = match val_ref {
-                        OCELNode::Event(ev) => ev
-                            .attributes
-                            .into_iter()
-                            .find(|a| &a.name == attr_name.as_ref())
-                            .map(|a| a.value),
-                        OCELNode::Object(ob) => ob
-                            .attributes
-                            .into_iter()
-                            .filter(|a| &a.name == attr_name.as_ref())
-                            .sorted_by_key(|a| a.time)
-                            .rfind(|a| a.time <= at)
-                            .map(|a| a.value),
-                    }
-                    .unwrap_or(OCELAttributeValue::Null);
-                    Ok(ocel_val_to_cel_val(attr_val))
-                }
-
-                None => ftx.error("Event or Object not found.").into(),
-            };
-            res
+        |ftx: &FunctionContext,
+         This(variable): This<Arc<String>>,
+         attr_name: Arc<String>,
+         at: DateTime<FixedOffset>|
+         -> ResolveResult {
+            current_resolver_call(|r| {
+                let attr_val = if let Some(ev) = r.get_event(&variable) {
+                    ev.attributes
+                        .into_iter()
+                        .find(|a| &a.name == attr_name.as_ref())
+                        .map(|a| a.value)
+                        .unwrap_or(OCELAttributeValue::Null)
+                } else if let Some(ob) = r.get_object(&variable) {
+                    ob.attributes
+                        .into_iter()
+                        .filter(|a| &a.name == attr_name.as_ref())
+                        .sorted_by_key(|a| a.time)
+                        .rfind(|a| a.time <= at)
+                        .map(|a| a.value)
+                        .unwrap_or(OCELAttributeValue::Null)
+                } else {
+                    return ftx.error("Event or Object not found.").into();
+                };
+                Ok(ocel_val_to_cel_val(attr_val))
+            })
         },
     );
 
     context.add_function(
         "id",
-        move |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
-            let val = unsafe { index_string_to_val_raw(&variable, ocel_raw) };
-
-            match val {
-                Some(val_ref) => {
-                    let attr_val = match val_ref {
-                        OCELNode::Event(ev) => ev.id,
-                        OCELNode::Object(ob) => ob.id,
-                    };
-                    Ok(attr_val.into())
+        |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
+            current_resolver_call(|r| {
+                if let Some(ev) = r.get_event(&variable) {
+                    return Ok(ev.id.into());
                 }
-
-                None => ftx.error("Event or Object not found.").into(),
-            }
+                if let Some(ob) = r.get_object(&variable) {
+                    return Ok(ob.id.into());
+                }
+                ftx.error("Event or Object not found.").into()
+            })
         },
     );
 
     context.add_function(
         "attrs",
-        move |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
-            let val = unsafe { index_string_to_val_raw(&variable, ocel_raw) };
-
-            match val {
-                Some(val_ref) => {
-                    let attr_val: Vec<Vec<Value>> = match val_ref {
-                        OCELNode::Event(ev) => ev
-                            .attributes
-                            .into_iter()
-                            .map(|a| {
-                                vec![
-                                    a.name.clone().into(),
-                                    ocel_val_to_cel_val(a.value),
-                                    Value::Null,
-                                ]
-                            })
-                            .collect(),
-                        OCELNode::Object(ob) => ob
-                            .attributes
-                            .into_iter()
-                            .map(|a| {
-                                vec![
-                                    a.name.clone().into(),
-                                    ocel_val_to_cel_val(a.value),
-                                    a.time.fixed_offset().into(),
-                                ]
-                            })
-                            .collect(),
-                    };
-                    Ok(attr_val.into())
-                }
-
-                None => ftx.error("Event or Object not found.").into(),
-            }
+        |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
+            current_resolver_call(|r| {
+                let attr_val: Vec<Vec<Value>> = if let Some(ev) = r.get_event(&variable) {
+                    ev.attributes
+                        .into_iter()
+                        .map(|a| {
+                            vec![
+                                a.name.clone().into(),
+                                ocel_val_to_cel_val(a.value),
+                                Value::Null,
+                            ]
+                        })
+                        .collect()
+                } else if let Some(ob) = r.get_object(&variable) {
+                    ob.attributes
+                        .into_iter()
+                        .map(|a| {
+                            vec![
+                                a.name.clone().into(),
+                                ocel_val_to_cel_val(a.value),
+                                a.time.fixed_offset().into(),
+                            ]
+                        })
+                        .collect()
+                } else {
+                    return ftx.error("Event or Object not found.").into();
+                };
+                Ok(attr_val.into())
+            })
         },
     );
 
     context.add_function(
         "time",
-        move |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
-            let s = variable.as_str();
-            if let Some(rest) = s.strip_prefix("ev_") {
-                if let Ok(idx) = rest.parse::<InnerIndex>() {
-                    let ocel_ref = unsafe { get_ocel_raw(ocel_raw) };
-                    let ev_index: EventIndex = idx.into();
-                    return Ok((*ocel_ref.get_ev_time(&ev_index)).into());
-                }
-            }
-            ftx.error("Event not found.").into()
+        |ftx: &FunctionContext, This(variable): This<Arc<String>>| -> ResolveResult {
+            current_resolver_call(|r| match r.get_event_time(&variable) {
+                Some(t) => Ok(t.into()),
+                None => ftx.error("Event not found.").into(),
+            })
         },
     );
 
-    context.add_function("numEvents", move || -> ResolveResult {
-        unsafe { Ok((get_ocel_raw(ocel_raw).get_all_evs().count() as u64).into()) }
+    context.add_function("numEvents", || -> ResolveResult {
+        current_resolver_call(|r| Ok(r.num_events().into()))
     });
-    context.add_function("numObjects", move || -> ResolveResult {
-        unsafe { Ok((get_ocel_raw(ocel_raw).get_all_obs().count() as u64).into()) }
-    });
-
-    context.add_function("events", move || -> ResolveResult {
-        unsafe {
-            Ok((get_ocel_raw(ocel_raw)
-                .get_all_evs()
-                .map(|x| ev_index_to_name(&x)))
-            .collect_vec()
-            .into())
-        }
+    context.add_function("numObjects", || -> ResolveResult {
+        current_resolver_call(|r| Ok(r.num_objects().into()))
     });
 
-    context.add_function("objects", move || -> ResolveResult {
-        unsafe {
-            Ok((get_ocel_raw(ocel_raw)
-                .get_all_obs()
-                .map(|x| ob_index_to_name(&x)))
-            .collect_vec()
-            .into())
-        }
+    // `events()` / `objects()` are rejected at translation time by
+    // `db_translation::validate_translatable` (they enumerate the full
+    // dataset id list, which has no row-context analogue on SQL
+    // backends). The closures here exist only to preserve the in-mem
+    // engine's prior behaviour; they error out conservatively rather
+    // than returning a partial list.
+    context.add_function("events", move |ftx: &FunctionContext| -> ResolveResult {
+        ftx.error("events() builtin is not supported by the row-context evaluator; the in-mem path that previously enumerated all events has been replaced. Use a per-binding CEL filter instead.").into()
+    });
+    context.add_function("objects", move |ftx: &FunctionContext| -> ResolveResult {
+        ftx.error("objects() builtin is not supported by the row-context evaluator; see events() builtin notes.").into()
     });
 
     context.add_function(
@@ -433,16 +414,17 @@ pub fn evaluate_cel<'a>(
         }
     };
 
+    let r = resolver::SlimLinkedOCELResolver::new(ocel);
     let ocel_key = CelCacheKey::from_ocel(ocel);
 
-    CEL_BASE_CTX.with(|cell| {
+    with_resolver(&r, || CEL_BASE_CTX.with(|cell| {
         let needs_rebuild = cell
             .borrow()
             .as_ref()
             .map(|(k, _)| *k != ocel_key)
             .unwrap_or(true);
         if needs_rebuild {
-            *cell.borrow_mut() = Some((ocel_key, build_base_cel_context(ocel)));
+            *cell.borrow_mut() = Some((ocel_key, build_base_cel_context()));
         }
 
         let cached = cell.borrow();
@@ -503,7 +485,101 @@ pub fn evaluate_cel<'a>(
         }
 
         Ok(p.execute(&context)?)
-    })
+    }))
+}
+
+/// Id-native evaluator. Mirrors [`evaluate_cel`] but operates on
+/// `BindingId` (ocel_id-keyed) + an arbitrary `Resolver`, letting the SQL
+/// execution path avoid allocating `EventIndex` / `ObjectIndex` for its
+/// bindings.
+pub fn evaluate_cel_id<'a>(
+    cel: &str,
+    binding: &'a crate::binding_box::structs::BindingId,
+    child_res: Option<
+        &HashMap<
+            String,
+            Vec<(
+                Arc<crate::binding_box::structs::BindingId>,
+                Option<ViolationReason>,
+            )>,
+        >,
+    >,
+    resolver: &dyn resolver::Resolver,
+) -> Result<Value, CELEvalError> {
+    lazy_compile_and_insert_into_cache(cel).map_err(CELEvalError::ParseError)?;
+    let cache_read = CEL_PROGRAM_CACHE.read().unwrap();
+    let p = match cache_read.get(cel) {
+        Some(p) => p,
+        None => {
+            return Err(CELEvalError::ParseError(String::from(
+                "Could not parse CEL",
+            )))
+        }
+    };
+
+    let key = CelCacheKey::from_resolver(resolver);
+
+    with_resolver(resolver, || CEL_BASE_CTX.with(|cell| {
+        let needs_rebuild = cell
+            .borrow()
+            .as_ref()
+            .map(|(k, _)| *k != key)
+            .unwrap_or(true);
+        if needs_rebuild {
+            *cell.borrow_mut() = Some((key, build_base_cel_context()));
+        }
+
+        let cached = cell.borrow();
+        let base = &cached.as_ref().unwrap().1;
+
+        let mut context = base.new_inner_scope();
+
+        for (e_var, ocel_id) in binding.event_map.iter() {
+            context.add_variable_from_value(ev_var_to_name(e_var), Value::String(ocel_id.clone()));
+        }
+        for (o_var, ocel_id) in binding.object_map.iter() {
+            context.add_variable_from_value(ob_var_to_name(o_var), Value::String(ocel_id.clone()));
+        }
+        for (label, value) in binding.label_map.iter() {
+            context.add_variable_from_value(
+                label.clone(),
+                Into::<cel_interpreter::Value>::into(value.clone()),
+            );
+        }
+        context.add_variable_from_value("now", Value::Timestamp(Local::now().into()));
+
+        if let Some(child_res) = child_res {
+            for (child_name, child_out) in child_res {
+                let value: Vec<Value> = child_out
+                    .iter()
+                    .map(|(b, violated)| {
+                        let mut b_map = HashMap::with_capacity(
+                            b.event_map.len() + b.object_map.len() + b.label_map.len() + 1,
+                        );
+                        b_map.extend(b.event_map.iter().map(|(ev_v, ev_id)| {
+                            (ev_var_to_name(ev_v).into(), Value::String(ev_id.clone()))
+                        }));
+                        b_map.extend(b.object_map.iter().map(|(ob_v, ob_id)| {
+                            (ob_var_to_name(ob_v).into(), Value::String(ob_id.clone()))
+                        }));
+                        b_map.extend(b.label_map.iter().map(|(label, value)| {
+                            (
+                                label.clone().into(),
+                                Into::<cel_interpreter::Value>::into(value.clone()),
+                            )
+                        }));
+                        b_map.insert("satisfied".into(), violated.is_none().into());
+                        Value::Map(Map {
+                            map: Arc::new(b_map),
+                        })
+                    })
+                    .collect();
+                context.add_variable_from_value(child_name.clone(), value)
+            }
+        }
+
+        Ok(p.execute(&context)?)
+    }))
 }
 
 #[derive(Debug)]
@@ -539,6 +615,57 @@ pub fn add_cel_label<'a>(
     label_fun: &'a LabelFunction,
 ) -> Result<(), String> {
     match evaluate_cel(&label_fun.cel, binding, child_res, ocel) {
+        Ok(v) => {
+            binding.add_label(label_fun.label.clone(), v.into());
+            Ok(())
+        }
+        Err(e) => {
+            binding.add_label(label_fun.label.clone(), LabelValue::Null);
+            Err(format!(
+                "Error while computing binding label {} with error {e:?}",
+                label_fun.label
+            ))
+        }
+    }
+}
+
+pub fn check_cel_predicate_id<'a>(
+    cel: &str,
+    binding: &'a crate::binding_box::structs::BindingId,
+    child_res: Option<
+        &HashMap<
+            String,
+            Vec<(
+                Arc<crate::binding_box::structs::BindingId>,
+                Option<ViolationReason>,
+            )>,
+        >,
+    >,
+    resolver: &dyn resolver::Resolver,
+) -> Result<bool, String> {
+    match evaluate_cel_id(cel, binding, child_res, resolver) {
+        Ok(Value::Bool(b)) => Ok(b),
+        Ok(_) => Err("Got non-bool CEL result!".to_string()),
+        Err(CELEvalError::ExecError(e)) => Err(e.to_string()),
+        Err(CELEvalError::ParseError(e)) => Err(e),
+    }
+}
+
+pub fn add_cel_label_id<'a>(
+    binding: &'a mut crate::binding_box::structs::BindingId,
+    child_res: Option<
+        &HashMap<
+            String,
+            Vec<(
+                Arc<crate::binding_box::structs::BindingId>,
+                Option<ViolationReason>,
+            )>,
+        >,
+    >,
+    resolver: &dyn resolver::Resolver,
+    label_fun: &'a LabelFunction,
+) -> Result<(), String> {
+    match evaluate_cel_id(&label_fun.cel, binding, child_res, resolver) {
         Ok(v) => {
             binding.add_label(label_fun.label.clone(), v.into());
             Ok(())
@@ -591,6 +718,38 @@ pub fn get_vars_in_cel_program(cel: &str) -> HashSet<Variable> {
             .variables()
             .into_iter()
             .map(string_to_var)
+            .collect()
+    } else {
+        HashSet::default()
+    }
+}
+
+/// Return the subset of `candidate_labels` that the CEL program references
+/// as top-level variables, letting the AdvancedCEL batched-LATERAL executor
+/// skip materialising child binding-sets for labels the CEL string does
+/// not mention. If compilation fails (which should not happen at runtime,
+/// the CEL is already validated elsewhere) returns the empty set rather
+/// than panicking, conservatively triggering re-materialisation upstream.
+pub fn get_child_labels_in_cel_program(
+    cel: &str,
+    candidate_labels: &[String],
+) -> HashSet<String> {
+    if lazy_compile_and_insert_into_cache(cel).is_ok() {
+        let r_lock = CEL_PROGRAM_CACHE.read().unwrap();
+        let p = match r_lock.get(cel) {
+            Some(p) => p,
+            None => return HashSet::default(),
+        };
+        let referenced: HashSet<String> = p
+            .references()
+            .variables()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        candidate_labels
+            .iter()
+            .filter(|label| referenced.contains(label.as_str()))
+            .cloned()
             .collect()
     } else {
         HashSet::default()

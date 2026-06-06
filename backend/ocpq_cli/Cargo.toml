@@ -13,3 +13,7 @@ itertools = "0.11.0"
 chrono = "0.4.33"
 uuid = "1.7.0"
 clap = {version = "4.5.26", features = ["derive"]}
+tokio = {version = "1.43", features = ["macros", "rt-multi-thread"]}
+dbcon = {git = "https://github.com/aarkue/dbcon.git", branch = "feat/parquet+sql-queries"}
+anyhow = "1.0.95"
+libc = "0.2"
