@@ -2920,7 +2920,7 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 [[package]]
 name = "macros_process_mining"
 version = "0.5.5"
-source = "git+https://github.com/aarkue/rust4pm?branch=feat/ocel-import-export-traits-improved-memory#b299163029f3c87aca2e3a160db258a237e4bad1"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat/ocel-import-export-traits-improved-memory#0b132a6e267df78e1567d7d608b8cd627aa43cb4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4176,7 +4176,7 @@ dependencies = [
 [[package]]
 name = "process_mining"
 version = "0.5.6"
-source = "git+https://github.com/aarkue/rust4pm?branch=feat/ocel-import-export-traits-improved-memory#b299163029f3c87aca2e3a160db258a237e4bad1"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat/ocel-import-export-traits-improved-memory#0b132a6e267df78e1567d7d608b8cd627aa43cb4"
 dependencies = [
  "chrono",
  "csv",
