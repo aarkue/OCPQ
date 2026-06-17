@@ -114,7 +114,8 @@ pub fn evaluate_box_tree(
 
             for (index, binding, viol) in evaluation_results_flat {
                 let r = &mut evaluation_results[index];
-                r.situations.push((binding, viol));
+                r.situations
+                    .push((std::sync::Arc::unwrap_or_clone(binding), viol));
                 r.situation_count += 1;
                 if viol.is_some() {
                     r.situation_violated_count += 1;
@@ -152,7 +153,8 @@ pub fn evaluate_box_tree(
     for (index, binding, viol) in evaluation_results_flat {
         let r = &mut evaluation_results[index];
         // if r.situations.len() < 1000 {
-        r.situations.push((binding, viol));
+        r.situations
+            .push((std::sync::Arc::unwrap_or_clone(binding), viol));
         // }
         r.situation_count += 1;
         if viol.is_some() {
@@ -506,7 +508,6 @@ impl EvaluateBoxTreeResult {
             .get(req.node_index)
             .ok_or_else(|| format!("node_index {} out of range", req.node_index))?;
 
-        // Cheap total via cached counts — no first-pass iteration needed.
         let filtered_count = match req.violated {
             None => node.situation_count,
             Some(true) => node.situation_violated_count,
@@ -537,12 +538,12 @@ impl EvaluateBoxTreeResult {
             objects: b
                 .object_map
                 .iter()
-                .map(|(var, idx)| (*var, self.object_ids[(*idx).into_inner()].clone()))
+                .map(|(var, idx)| (*var, self.object_ids[(*idx).into_inner() as usize].clone()))
                 .collect(),
             events: b
                 .event_map
                 .iter()
-                .map(|(var, idx)| (*var, self.event_ids[(*idx).into_inner()].clone()))
+                .map(|(var, idx)| (*var, self.event_ids[(*idx).into_inner() as usize].clone()))
                 .collect(),
             labels: b.label_map.clone(),
             violation: *v,
@@ -584,7 +585,9 @@ mod tests {
 
     #[test]
     fn stale_version_is_rejected() {
-        let err = result_with(1, 3, 5).get_page(&req(None, 0, 10)).unwrap_err();
+        let err = result_with(1, 3, 5)
+            .get_page(&req(None, 0, 10))
+            .unwrap_err();
         assert!(err.starts_with("stale eval_version"), "got: {err}");
     }
 

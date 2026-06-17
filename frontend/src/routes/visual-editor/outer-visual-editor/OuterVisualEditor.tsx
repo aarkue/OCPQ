@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useOcelInfo } from "@/hooks";
 import {
 	parseLocalStorageValue,
+	QUERY_LOCALSTORAGE_OPEN_INDEX,
 	QUERY_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META,
 	QUERY_LOCALSTORAGE_SAVE_KEY_DATA,
 } from "@/lib/local-storage";
@@ -71,6 +72,16 @@ export default function VisualEditorOuter() {
 
 		prevDataRef.current = data;
 		setConstraints(meta);
+
+		// Honor a cross-route request to open a specific constraint (e.g. from Path Schemas).
+		const openIdxRaw = localStorage.getItem(QUERY_LOCALSTORAGE_OPEN_INDEX);
+		if (openIdxRaw !== null) {
+			localStorage.removeItem(QUERY_LOCALSTORAGE_OPEN_INDEX);
+			const openIdx = Number.parseInt(openIdxRaw, 10);
+			if (!Number.isNaN(openIdx) && openIdx >= 0 && openIdx < meta.length) {
+				setActiveIndex(openIdx);
+			}
+		}
 	}, []);
 
 	useEffect(() => {

@@ -85,7 +85,7 @@ export function OcelDropzone({
 						id="dropzone-ocel-file"
 						type="file"
 						className="hidden"
-						accept=".json, .xml, .sqlite, .xes, .xes.gz"
+						accept=".json, .json.gz, .xml, .xml.gz, .sqlite, .xes, .xes.gz"
 					/>
 				</label>
 			</div>

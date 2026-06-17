@@ -1,11 +1,9 @@
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+ocpq_shared::use_mimalloc!();
 
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -45,6 +43,11 @@ use ocpq_shared::{
         get_activity_statistics, get_edge_stats, ActivityStatistics, BinnedEdgeDurationStats,
     },
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
+    path_schemas::{
+        discover_path_schemas, enumerate_path_schemas, path_type_graph, schema_detail,
+        PathEnumerateOptions, PathSchemaDetail, PathSchemaDetailOptions, PathSchemaInfo,
+        PathSchemaOptions, PathSchemaResult, PathTypeGraph,
+    },
     process_mining::{
         core::{
             event_data::{
@@ -52,15 +55,15 @@ use ocpq_shared::{
                 object_centric::{
                     linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
                     ocel_json::export_ocel_json_to_vec,
-                    ocel_sql::{export_ocel_sqlite_to_vec, import_ocel_sqlite_from_slice},
-                    ocel_xml::{export_ocel_xml, import_ocel_xml_slice},
+                    ocel_sql::export_ocel_sqlite_to_vec,
+                    ocel_xml::export_ocel_xml,
                     OCELEvent, OCELObject,
                 },
             },
             process_models::oc_declare::OCDeclareArc,
         },
         discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions,
-        OCEL,
+        Importable,
     },
     table_export::{export_bindings_to_writer, TableExportOptions},
     trad_event_log::trad_log_to_ocel,
@@ -83,20 +86,6 @@ pub struct AppState {
     eval_version_counter: Arc<AtomicU64>,
 }
 
-struct AppError(String);
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, self.0).into_response()
-    }
-}
-
-impl From<String> for AppError {
-    fn from(err: String) -> Self {
-        Self(err)
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let state = AppState::default();
@@ -113,16 +102,8 @@ async fn main() {
         .route("/ocel/info", get(get_loaded_ocel_info))
         .route("/ocel/sample-ids", post(get_sample_ids_handler))
         .route(
-            "/ocel/upload-json",
-            post(upload_ocel_json).layer(DefaultBodyLimit::disable()),
-        )
-        .route(
-            "/ocel/upload-xml",
-            post(upload_ocel_xml).layer(DefaultBodyLimit::disable()),
-        )
-        .route(
-            "/ocel/upload-sqlite",
-            post(upload_ocel_sqlite).layer(DefaultBodyLimit::disable()),
+            "/ocel/upload/:format",
+            post(upload_ocel).layer(DefaultBodyLimit::disable()),
         )
         .route(
             "/ocel/upload-xes-conversion/:format",
@@ -130,6 +111,16 @@ async fn main() {
         )
         .route("/ocel/available", get(get_available_ocels))
         .route("/ocel/graph", post(ocel_graph_req))
+        .route("/ocel/path-schemas/type-graph", get(path_type_graph_req))
+        .route(
+            "/ocel/path-schemas/enumerate",
+            post(enumerate_path_schemas_req),
+        )
+        .route(
+            "/ocel/path-schemas/discover",
+            post(discover_path_schemas_req),
+        )
+        .route("/ocel/path-schemas/schema-detail", post(schema_detail_req))
         .route("/ocel/check-constraints-box", post(check_with_box_tree_req))
         .route("/ocel/eval-results/page", post(eval_results_page))
         .route("/ocel/create-db-query", post(translate_to_db_req))
@@ -214,51 +205,17 @@ async fn unload_ocel(State(state): State<AppState>) -> StatusCode {
     StatusCode::OK
 }
 
-async fn upload_ocel_xml<'a>(
+async fn upload_ocel(
     State(state): State<AppState>,
+    Path(format): Path<String>,
     ocel_bytes: Bytes,
-) -> Result<Json<OCELInfo>, AppError> {
-    match import_ocel_xml_slice(&ocel_bytes) {
-        Ok(ocel) => {
-            let mut x = state.ocel.write().unwrap();
-            let locel = SlimLinkedOCEL::from_ocel(ocel);
-            let ocel_info: OCELInfo = (&locel).into();
-            *x = Some(locel);
-            drop(x);
-            clear_eval_res(&state);
-            Ok(Json(ocel_info))
-        }
-        Err(e) => Err(e.to_string().into()),
-    }
-}
-
-async fn upload_ocel_sqlite<'a>(
-    State(state): State<AppState>,
-    ocel_bytes: Bytes,
-) -> (StatusCode, Json<OCELInfo>) {
-    let ocel = import_ocel_sqlite_from_slice(&ocel_bytes).unwrap();
-    let mut x = state.ocel.write().unwrap();
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
+) -> Result<Json<OCELInfo>, (StatusCode, String)> {
+    let locel = SlimLinkedOCEL::import_from_bytes(&ocel_bytes, &format)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let ocel_info: OCELInfo = (&locel).into();
-    *x = Some(locel);
-    drop(x);
+    *state.ocel.write().unwrap() = Some(locel);
     clear_eval_res(&state);
-
-    (StatusCode::OK, Json(ocel_info))
-}
-
-async fn upload_ocel_json<'a>(
-    State(state): State<AppState>,
-    ocel_bytes: Bytes,
-) -> (StatusCode, Json<OCELInfo>) {
-    let ocel: OCEL = serde_json::from_slice(&ocel_bytes).unwrap();
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
-    let ocel_info: OCELInfo = (&locel).into();
-    let mut x = state.ocel.write().unwrap();
-    *x = Some(locel);
-    drop(x);
-    clear_eval_res(&state);
-    (StatusCode::OK, Json(ocel_info))
+    Ok(Json(ocel_info))
 }
 
 async fn upload_ocel_xes_conversion<'a>(
@@ -299,6 +256,49 @@ pub async fn ocel_graph_req<'a>(
 ) -> (StatusCode, Json<Option<OCELGraph>>) {
     let graph = with_ocel_from_state(&State(state), |ocel| get_ocel_graph(ocel, options));
     match graph.flatten() {
+        Some(x) => (StatusCode::OK, Json(Some(x))),
+        None => (StatusCode::BAD_REQUEST, Json(None)),
+    }
+}
+
+pub async fn path_type_graph_req(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<Option<PathTypeGraph>>) {
+    match with_ocel_from_state(&State(state), path_type_graph) {
+        Some(x) => (StatusCode::OK, Json(Some(x))),
+        None => (StatusCode::BAD_REQUEST, Json(None)),
+    }
+}
+
+pub async fn discover_path_schemas_req(
+    State(state): State<AppState>,
+    Json(options): Json<PathSchemaOptions>,
+) -> (StatusCode, Json<Option<PathSchemaResult>>) {
+    match with_ocel_from_state(&State(state), move |ocel| {
+        discover_path_schemas(ocel, options)
+    }) {
+        Some(x) => (StatusCode::OK, Json(Some(x))),
+        None => (StatusCode::BAD_REQUEST, Json(None)),
+    }
+}
+
+pub async fn enumerate_path_schemas_req(
+    State(state): State<AppState>,
+    Json(options): Json<PathEnumerateOptions>,
+) -> (StatusCode, Json<Option<Vec<PathSchemaInfo>>>) {
+    match with_ocel_from_state(&State(state), move |ocel| {
+        enumerate_path_schemas(ocel, options)
+    }) {
+        Some(x) => (StatusCode::OK, Json(Some(x))),
+        None => (StatusCode::BAD_REQUEST, Json(None)),
+    }
+}
+
+pub async fn schema_detail_req(
+    State(state): State<AppState>,
+    Json(options): Json<PathSchemaDetailOptions>,
+) -> (StatusCode, Json<Option<PathSchemaDetail>>) {
+    match with_ocel_from_state(&State(state), move |ocel| schema_detail(ocel, options)).flatten() {
         Some(x) => (StatusCode::OK, Json(Some(x))),
         None => (StatusCode::BAD_REQUEST, Json(None)),
     }

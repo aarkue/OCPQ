@@ -18,9 +18,32 @@ import type { EvaluateBoxTreeSummary } from "./types/generated/EvaluateBoxTreeSu
 import type { ExecuteExtractionResponse } from "./types/generated/ExecuteExtractionResponse";
 import type { OCELGraphOptions } from "./types/generated/OCELGraphOptions";
 import type { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
+import type { PathEnumerateOptions } from "./types/generated/PathEnumerateOptions";
+import type { PathSchemaDetail } from "./types/generated/PathSchemaDetail";
+import type { PathSchemaDetailOptions } from "./types/generated/PathSchemaDetailOptions";
+import type { PathSchemaInfo } from "./types/generated/PathSchemaInfo";
+import type { PathSchemaOptions } from "./types/generated/PathSchemaOptions";
+import type { PathSchemaResult } from "./types/generated/PathSchemaResult";
+import type { PathTypeGraph } from "./types/generated/PathTypeGraph";
 import type { TableExportOptions } from "./types/generated/TableExportOptions";
 import type { ConnectionConfig, JobStatus } from "./types/hpc-backend";
 import type { OCELEvent, OCELInfo, OCELObject, SampleIds } from "./types/ocel";
+/**
+ * Derive the OCEL import format token from a file name, e.g. "json", "json.gz",
+ * "xml", "xml.gz", "sqlite". The backend matches this by suffix (after stripping
+ * a trailing ".gz"), so gzipped variants are supported transparently.
+ */
+export function ocelUploadFormat(fileName: string): string {
+	const name = fileName.toLowerCase();
+	if (name.endsWith(".sqlite") || name.endsWith(".sqlite3") || name.endsWith(".db")) {
+		return "sqlite";
+	}
+	const suffix = name.endsWith(".gz")
+		? name.split(".").slice(-2).join(".")
+		: (name.split(".").pop() ?? "");
+	return suffix;
+}
+
 export type BackendProvider = {
 	"ocel/info": () => Promise<OCELInfo | undefined>;
 	"ocel/sample-ids": (limit: number) => Promise<SampleIds | null>;
@@ -51,6 +74,12 @@ export type BackendProvider = {
 		nodes: (OCELEvent | OCELObject)[];
 		links: { source: string; target: string; qualifier: string }[];
 	}>;
+	"ocel/path-schemas/type-graph": () => Promise<PathTypeGraph>;
+	"ocel/path-schemas/enumerate": (options: PathEnumerateOptions) => Promise<PathSchemaInfo[]>;
+	"ocel/path-schemas/discover": (options: PathSchemaOptions) => Promise<PathSchemaResult>;
+	"ocel/path-schemas/schema-detail": (
+		options: PathSchemaDetailOptions,
+	) => Promise<PathSchemaDetail>;
 	"ocel/get-object": (
 		specifier: { id: string } | { index: number },
 	) => Promise<{ index: number; object: OCELObject }>;
@@ -133,6 +162,10 @@ export const ErrorBackendContext: BackendProvider = {
 	"ocel/discover-constraints": warnForNoBackendProvider,
 	"ocel/export-bindings": warnForNoBackendProvider,
 	"ocel/graph": warnForNoBackendProvider,
+	"ocel/path-schemas/type-graph": warnForNoBackendProvider,
+	"ocel/path-schemas/enumerate": warnForNoBackendProvider,
+	"ocel/path-schemas/discover": warnForNoBackendProvider,
+	"ocel/path-schemas/schema-detail": warnForNoBackendProvider,
 	"ocel/get-event": warnForNoBackendProvider,
 	"ocel/get-object": warnForNoBackendProvider,
 	"hpc/login": warnForNoBackendProvider,
@@ -178,18 +211,16 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 			).json();
 		},
 		"ocel/upload": async (ocelFile) => {
-			const type = ocelFile.name.endsWith(".json")
-				? "json"
-				: ocelFile.name.endsWith(".xml")
-					? "xml"
-					: "sqlite";
-			return await (
-				await fetch(`${localBackendURL}/ocel/upload-${type}`, {
-					method: "post",
-					body: ocelFile,
-					headers: {},
-				})
-			).json();
+			const format = ocelUploadFormat(ocelFile.name);
+			const res = await fetch(`${localBackendURL}/ocel/upload/${format}`, {
+				method: "post",
+				body: ocelFile,
+				headers: {},
+			});
+			if (!res.ok) {
+				throw new Error(await res.text());
+			}
+			return await res.json();
 		},
 		"ocel/upload-from-xes": async (xesFile) => {
 			const format = xesFile.name.endsWith(".gz") ? ".xes.gz" : ".xes";
@@ -305,6 +336,46 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 		},
 		"ocel/graph": async (options) => {
 			const res = await fetch(`${localBackendURL}/ocel/graph`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(options),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw new Error(res.statusText);
+		},
+		"ocel/path-schemas/type-graph": async () => {
+			const res = await fetch(`${localBackendURL}/ocel/path-schemas/type-graph`);
+			if (res.ok) {
+				return await res.json();
+			}
+			throw new Error(res.statusText);
+		},
+		"ocel/path-schemas/enumerate": async (options) => {
+			const res = await fetch(`${localBackendURL}/ocel/path-schemas/enumerate`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(options),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw new Error(res.statusText);
+		},
+		"ocel/path-schemas/discover": async (options) => {
+			const res = await fetch(`${localBackendURL}/ocel/path-schemas/discover`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(options),
+			});
+			if (res.ok) {
+				return await res.json();
+			}
+			throw new Error(res.statusText);
+		},
+		"ocel/path-schemas/schema-detail": async (options) => {
+			const res = await fetch(`${localBackendURL}/ocel/path-schemas/schema-detail`, {
 				method: "post",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(options),

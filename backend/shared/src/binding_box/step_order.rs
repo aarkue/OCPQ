@@ -1,7 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+};
 
 use itertools::Itertools;
-use process_mining::core::event_data::object_centric::linked_ocel::SlimLinkedOCEL;
+use process_mining::core::event_data::object_centric::linked_ocel::{
+    LinkedOCELAccess, SlimLinkedOCEL,
+};
 
 use super::{
     structs::{BindingBox, BindingStep, Filter, Qualifier, Variable},
@@ -20,11 +25,41 @@ impl BindingStep {
     pub fn get_binding_order(
         bbox: &BindingBox,
         _parent_binding_opt: Option<&Binding>,
-        _ocel: &SlimLinkedOCEL,
+        ocel: &SlimLinkedOCEL,
     ) -> Vec<Self> {
         let mut ret = Vec::new();
+        let card_cache: RefCell<HashMap<Variable, usize>> = RefCell::new(HashMap::new());
+        let card_for_var = |v: &Variable| -> usize {
+            if let Some(&c) = card_cache.borrow().get(v) {
+                return c;
+            }
+            let c = match v {
+                Variable::Event(ev) => bbox
+                    .new_event_vars
+                    .get(ev)
+                    .map(|types| {
+                        types
+                            .iter()
+                            .map(|t| ocel.get_evs_of_type(t).count())
+                            .sum::<usize>()
+                    })
+                    .unwrap_or(0),
+                Variable::Object(ob) => bbox
+                    .new_object_vars
+                    .get(ob)
+                    .map(|types| {
+                        types
+                            .iter()
+                            .map(|t| ocel.get_obs_of_type(t).count())
+                            .sum::<usize>()
+                    })
+                    .unwrap_or(0),
+            };
+            card_cache.borrow_mut().insert(v.clone(), c);
+            c
+        };
 
-        let mut var_requiring_bindings: HashSet<Variable> = bbox
+        let mut var_requiring_bindings: BTreeSet<Variable> = bbox
             .new_event_vars
             .keys()
             .map(|v| Variable::Event(*v))
@@ -32,54 +67,57 @@ impl BindingStep {
             .collect();
 
         let new_vars = var_requiring_bindings.clone();
-        let mut bound_vars: HashSet<_> = bbox
+        let mut bound_vars: BTreeSet<Variable> = bbox
             .filters
             .iter()
             .flat_map(|f| f.get_involved_variables())
             .filter(|var| !new_vars.contains(var))
             .collect();
         // Maps a variable A to the set of variable that can be bound based on A
-        let mut var_can_bind: HashMap<Variable, HashSet<Variable>> = bound_vars
+        let mut var_can_bind: BTreeMap<Variable, BTreeSet<Variable>> = bound_vars
             .iter()
-            .map(|v| (v.clone(), HashSet::new()))
+            .map(|v| (v.clone(), BTreeSet::new()))
             .collect();
         // Additional info, with a qualifier and the index of a filter constraint
-        let mut var_can_bind_with_qualifier: HashMap<
+        let mut var_can_bind_with_qualifier: BTreeMap<
             Variable,
-            HashSet<(Variable, Qualifier, usize, bool)>,
+            BTreeSet<(Variable, Qualifier, usize, bool)>,
         > = bound_vars
             .iter()
-            .map(|v| (v.clone(), HashSet::new()))
+            .map(|v| (v.clone(), BTreeSet::new()))
             .collect();
         for ev_var in bbox.new_event_vars.keys() {
-            var_can_bind.insert(Variable::Event(*ev_var), HashSet::new());
-            var_can_bind_with_qualifier.insert(Variable::Event(*ev_var), HashSet::new());
+            var_can_bind.insert(Variable::Event(*ev_var), BTreeSet::new());
+            var_can_bind_with_qualifier.insert(Variable::Event(*ev_var), BTreeSet::new());
         }
         for ob_var in bbox.new_object_vars.keys() {
-            var_can_bind.insert(Variable::Object(*ob_var), HashSet::new());
-            var_can_bind_with_qualifier.insert(Variable::Object(*ob_var), HashSet::new());
+            var_can_bind.insert(Variable::Object(*ob_var), BTreeSet::new());
+            var_can_bind_with_qualifier.insert(Variable::Object(*ob_var), BTreeSet::new());
         }
-        // Event (corresponding to map key) can be bound based on time restriction regarding reference event (first tuple element in value)
-        let time_between_evs: HashMap<_, _> = bbox
-            .filters
-            .iter()
-            .filter_map(|f| match f {
-                Filter::TimeBetweenEvents {
-                    from_event,
-                    to_event,
-                    min_seconds,
-                    max_seconds,
-                } => Some(vec![
-                    (to_event, (from_event, *min_seconds, *max_seconds)),
-                    (
-                        from_event,
-                        (to_event, max_seconds.map(|s| -s), min_seconds.map(|s| -s)),
-                    ),
-                ]),
-                _ => None,
-            })
-            .flatten()
-            .collect();
+        let mut time_between_evs: HashMap<
+            super::structs::EventVariable,
+            Vec<(super::structs::EventVariable, Option<f64>, Option<f64>)>,
+        > = HashMap::new();
+        for f in &bbox.filters {
+            if let Filter::TimeBetweenEvents {
+                from_event,
+                to_event,
+                min_seconds,
+                max_seconds,
+            } = f
+            {
+                time_between_evs.entry(*to_event).or_default().push((
+                    *from_event,
+                    *min_seconds,
+                    *max_seconds,
+                ));
+                time_between_evs.entry(*from_event).or_default().push((
+                    *to_event,
+                    max_seconds.map(|s| -s),
+                    min_seconds.map(|s| -s),
+                ));
+            }
+        }
 
         // First count how many other variables depend on a variable (gather them in a set)
         for (i, f) in bbox.filters.iter().enumerate() {
@@ -140,7 +178,7 @@ impl BindingStep {
         fn add_supported_filters(
             bbox: &BindingBox,
             filter_indices_incoporated: &mut HashSet<usize>,
-            var_requiring_bindings: &mut HashSet<Variable>,
+            var_requiring_bindings: &mut BTreeSet<Variable>,
             ret: &mut Vec<BindingStep>,
         ) {
             bbox.filters
@@ -148,10 +186,10 @@ impl BindingStep {
                 .enumerate()
                 .filter(|(index, filter_constraint)| {
                     if !filter_indices_incoporated.contains(index) {
-                        var_requiring_bindings
-                            .intersection(&filter_constraint.get_involved_variables())
-                            .count()
-                            == 0
+                        !filter_constraint
+                            .get_involved_variables()
+                            .iter()
+                            .any(|v| var_requiring_bindings.contains(v))
                     } else {
                         false
                     }
@@ -172,9 +210,13 @@ impl BindingStep {
                 let can_be_bound = bound_vars
                     .iter()
                     .any(|bv| var_can_bind.get(bv).unwrap().contains(v));
-                (vs.len() as i32) * 10
-                    + if can_be_bound { 100 } else { 0 }
-                    + if let Variable::Object(_) = v { 0 } else { 1 }
+                (
+                    (vs.len() as i32) * 10
+                        + if can_be_bound { 100 } else { 0 }
+                        + if let Variable::Object(_) = v { 0 } else { 1 },
+                    std::cmp::Reverse(card_for_var(v)),
+                    std::cmp::Reverse(v.to_inner()),
+                )
             })
             .map(|(k, _)| k)
             .collect_vec();
@@ -193,10 +235,6 @@ impl BindingStep {
                             .find(|(x, _q, _filter_index, _reversed)| x == var)
                             .map(|t| (v, t))
                     })
-                    // .sorted_by_cached_key(|(bound_by_var, (_v, _q, _filter_index, _reversed))| {
-                    //     get_expected_relation_count(bound_by_var, bbox, parent_binding_opt, ocel)
-                    //         .unwrap_or(10)
-                    // })
                     .next()
                 {
                     // `var` can be bound based on `v`!
@@ -229,15 +267,12 @@ impl BindingStep {
                 } else {
                     match var {
                         Variable::Event(var_ev) => {
-                            if let Some((ref_ev, min_sec, max_sec)) = time_between_evs.get(&var_ev)
-                            {
-                                ret.push(BindingStep::BindEv(
-                                    *var_ev,
-                                    Some(vec![(**ref_ev, (*min_sec, *max_sec))]),
-                                ));
-                            } else {
-                                ret.push(BindingStep::BindEv(*var_ev, None));
-                            }
+                            let constraints = time_between_evs.get(var_ev).map(|cs| {
+                                cs.iter()
+                                    .map(|(ref_ev, mn, mx)| (*ref_ev, (*mn, *mx)))
+                                    .collect::<Vec<_>>()
+                            });
+                            ret.push(BindingStep::BindEv(*var_ev, constraints));
                         }
                         Variable::Object(var_ob) => ret.push(BindingStep::BindOb(*var_ob)),
                     }
@@ -255,11 +290,11 @@ impl BindingStep {
                 let can_be_bound = bound_vars
                     .iter()
                     .any(|bv| var_can_bind.get(bv).unwrap().contains(var));
-                if can_be_bound {
-                    100
-                } else {
-                    0
-                }
+                (
+                    if can_be_bound { 100 } else { 0 },
+                    std::cmp::Reverse(card_for_var(var)),
+                    std::cmp::Reverse(var.to_inner()),
+                )
             })
         }
 
@@ -270,7 +305,6 @@ impl BindingStep {
                 .filter(|(i, _)| !filter_indices_incoporated.contains(i))
                 .map(|(_, f)| BindingStep::Filter(f.clone())),
         );
-        // println!("Steps: {ret:?}");
         ret
     }
 }

@@ -1,8 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+ocpq_shared::use_mimalloc!();
 
 use itertools::Itertools;
 use ocpq_shared::{
@@ -30,11 +29,16 @@ use ocpq_shared::{
         get_activity_statistics, get_edge_stats, ActivityStatistics, BinnedEdgeDurationStats,
     },
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
+    path_schemas::{
+        discover_path_schemas, enumerate_path_schemas, path_type_graph, schema_detail,
+        PathEnumerateOptions, PathSchemaDetail, PathSchemaDetailOptions, PathSchemaInfo,
+        PathSchemaOptions, PathSchemaResult, PathTypeGraph,
+    },
     process_mining::{
         core::{
             event_data::{
                 case_centric::xes::{import_xes_path, import_xes_slice, XESImportOptions},
-                object_centric::linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
+                object_centric::linked_ocel::SlimLinkedOCEL,
             },
             process_models::oc_declare::OCDeclareArc,
         },
@@ -73,8 +77,8 @@ pub struct AppState {
     initial_files: Arc<Mutex<Option<Vec<String>>>>,
 }
 
-fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<OCEL, String> {
-    let ocel = OCEL::import_from_path(path).map_err(|e| e.to_string())?;
+fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<SlimLinkedOCEL, String> {
+    let ocel = SlimLinkedOCEL::import_from_path(path).map_err(|e| e.to_string())?;
     Ok(ocel)
 }
 
@@ -83,8 +87,7 @@ async fn clear_eval_res(state: &AppState) {
 }
 #[tauri::command(async)]
 async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
-    let ocel = import_ocel_from_path(path)?;
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
+    let locel = import_ocel_from_path(path)?;
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
@@ -99,8 +102,7 @@ async fn import_ocel_slice(
     format: &str,
     state: tauri::State<'_, AppState>,
 ) -> Result<OCELInfo, String> {
-    let ocel = OCEL::import_from_bytes(&data, format).map_err(|e| e.to_string())?;
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
+    let locel = SlimLinkedOCEL::import_from_bytes(&data, format).map_err(|e| e.to_string())?;
     let ocel_info: OCELInfo = (&locel).into();
     let mut state_guard = state.ocel.write().await;
     *state_guard = Some(locel);
@@ -202,26 +204,26 @@ async fn export_ocel(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let ocel = match state.ocel.read().await.as_ref() {
-        Some(locel) => locel.construct_ocel(),
-        None => return Err("No OCEL loaded".to_string()),
-    };
-
     let ext = format.to_extension();
-    app.dialog()
+    if let Some(path) = app
+        .dialog()
         .file()
         .set_title("Export OCEL")
         .add_filter(format!("OCEL {:?} Files", format), &[ext])
         .set_file_name(format!("ocel-export.{}", ext).as_str())
-        .save_file(move |f| {
-            if let Some(path) = f {
-                if let Some(path) = path.as_path() {
-                    let _ = std::fs::remove_file(path);
-                    OCEL::export_to_path(&ocel, path).unwrap();
-                }
-            }
-        });
-    Ok(())
+        .blocking_save_file()
+    {
+        if let Some(path) = path.as_path() {
+            let guard = state.ocel.read().await;
+            let ocel = match guard.as_ref() {
+                Some(locel) => locel,
+                None => return Err("No OCEL loaded".to_string()),
+            };
+            let _ = std::fs::remove_file(path);
+            return SlimLinkedOCEL::export_to_path(ocel, path).map_err(|e| e.to_string());
+        }
+    }
+    Err("No path selected".to_string())
 }
 
 #[tauri::command(async)]
@@ -239,7 +241,8 @@ async fn export_filter_box(
     }
     .unwrap();
 
-    app.dialog()
+    if let Some(path) = app
+        .dialog()
         .file()
         .set_title("Save Filtered OCEL")
         .add_filter(
@@ -247,19 +250,16 @@ async fn export_filter_box(
             &[req.export_format.to_extension()],
         )
         .set_file_name(format!("filtered-export.{}", req.export_format.to_extension()).as_str())
-        .save_file(move |f| {
-            if let Some(path) = f {
-                if let Some(path) = path.as_path() {
-                    if let Ok(_file) = File::open(path) {
-                        let _ = std::fs::remove_file(path);
-                    }
-                    // TODO: Handle error correctly
-                    // Maybe even change to blocking dialog
-                    OCEL::export_to_path(&res, path).unwrap();
-                }
+        .blocking_save_file()
+    {
+        if let Some(path) = path.as_path() {
+            if let Ok(_file) = File::open(path) {
+                let _ = std::fs::remove_file(path);
             }
-        });
-    Ok(())
+            return OCEL::export_to_path(&res, path).map_err(|er| er.to_string());
+        }
+    }
+    Err("No path selected".to_string())
 }
 
 #[tauri::command(async)]
@@ -388,6 +388,47 @@ async fn ocel_graph(
             Some(graph) => Ok(graph),
             None => Err("Could not construct OCEL Graph".to_string()),
         },
+        None => Err("No OCEL loaded".to_string()),
+    }
+}
+
+#[tauri::command(async)]
+async fn path_type_graph_cmd(state: State<'_, AppState>) -> Result<PathTypeGraph, String> {
+    match state.ocel.read().await.as_ref() {
+        Some(ocel) => Ok(path_type_graph(ocel)),
+        None => Err("No OCEL loaded".to_string()),
+    }
+}
+
+#[tauri::command(async)]
+async fn discover_path_schemas_cmd(
+    options: PathSchemaOptions,
+    state: State<'_, AppState>,
+) -> Result<PathSchemaResult, String> {
+    match state.ocel.read().await.as_ref() {
+        Some(ocel) => Ok(discover_path_schemas(ocel, options)),
+        None => Err("No OCEL loaded".to_string()),
+    }
+}
+
+#[tauri::command(async)]
+async fn enumerate_path_schemas_cmd(
+    options: PathEnumerateOptions,
+    state: State<'_, AppState>,
+) -> Result<Vec<PathSchemaInfo>, String> {
+    match state.ocel.read().await.as_ref() {
+        Some(ocel) => Ok(enumerate_path_schemas(ocel, options)),
+        None => Err("No OCEL loaded".to_string()),
+    }
+}
+
+#[tauri::command(async)]
+async fn schema_detail_cmd(
+    options: PathSchemaDetailOptions,
+    state: State<'_, AppState>,
+) -> Result<PathSchemaDetail, String> {
+    match state.ocel.read().await.as_ref() {
+        Some(ocel) => schema_detail(ocel, options).ok_or_else(|| "Schema not found".to_string()),
         None => Err("No OCEL loaded".to_string()),
     }
 }
@@ -575,6 +616,10 @@ fn main() {
             auto_discover_constraints,
             export_bindings_table,
             ocel_graph,
+            path_type_graph_cmd,
+            enumerate_path_schemas_cmd,
+            discover_path_schemas_cmd,
+            schema_detail_cmd,
             get_event,
             get_object,
             login_to_hpc_tauri,

@@ -2,6 +2,8 @@ import json5 from "json5";
 
 export const QUERY_LOCALSTORAGE_SAVE_KEY_DATA = "oced-declare-data";
 export const QUERY_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META = "oced-declare-meta";
+/** Set by another route to make the constraints editor open a specific index on next mount. */
+export const QUERY_LOCALSTORAGE_OPEN_INDEX = "oced-declare-open-index";
 
 export const OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA = "oced-ocdeclare-data";
 export const OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META = "oced-ocdeclare-meta";

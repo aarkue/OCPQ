@@ -1,8 +1,18 @@
 use std::collections::{HashMap, HashSet};
 
+pub use mimalloc;
 pub use process_mining;
+
+/// Install mimalloc as the global allocator. Invoke in the crate root of a binary or cdylib.
+#[macro_export]
+macro_rules! use_mimalloc {
+    () => {
+        #[global_allocator]
+        static __OCPQ_MIMALLOC: $crate::mimalloc::MiMalloc = $crate::mimalloc::MiMalloc;
+    };
+}
 use process_mining::core::event_data::object_centric::{
-    linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
+    linked_ocel::{slim_linked_ocel::InnerIndex, LinkedOCELAccess, SlimLinkedOCEL},
     OCELEvent, OCELObject, OCELType,
 };
 use serde::{Deserialize, Serialize};
@@ -14,6 +24,7 @@ pub mod binding_box;
 pub mod db_translation;
 pub mod discovery;
 pub mod ocel_graph;
+pub mod path_schemas;
 pub mod trad_event_log;
 pub mod preprocessing {
     pub mod linked_ocel;
@@ -113,21 +124,21 @@ pub enum IndexOrID {
     #[serde(rename = "id")]
     ID(String),
     #[serde(rename = "index")]
-    Index(usize),
+    Index(InnerIndex),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObjectWithIndex {
     pub object: OCELObject,
-    pub index: usize,
+    pub index: InnerIndex,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EventWithIndex {
     pub event: OCELEvent,
-    pub index: usize,
+    pub index: InnerIndex,
 }
 
 pub fn get_event_info(ocel: &SlimLinkedOCEL, req: IndexOrID) -> Option<EventWithIndex> {

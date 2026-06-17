@@ -25,7 +25,6 @@ url = "2.5.2"
 tauri-plugin-process = "2"
 tauri-plugin-log = "2"
 log = "0.4.27"
-mimalloc = { version = "0.1.47", default-features = false }
 itertools = "0.11.0"
 
 [features]

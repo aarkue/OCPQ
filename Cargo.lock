@@ -2919,8 +2919,8 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
 name = "macros_process_mining"
-version = "0.5.4"
-source = "git+https://github.com/aarkue/rust4pm#53578f10040f23063b17e7e0abda8c09e1d79b32"
+version = "0.5.5"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat/oced-paths#15fa19ef440cfb2b0a040cef0e0f3a657d640010"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3473,6 +3473,7 @@ dependencies = [
  "dirs-next",
  "futures",
  "itertools 0.11.0",
+ "mimalloc",
  "once_cell",
  "ordered-float 4.6.0",
  "process_mining",
@@ -3496,7 +3497,6 @@ version = "0.0.3"
 dependencies = [
  "itertools 0.11.0",
  "log",
- "mimalloc",
  "ocpq-shared",
  "serde",
  "serde_json",
@@ -3518,7 +3518,6 @@ dependencies = [
  "cel-interpreter",
  "chrono",
  "itertools 0.11.0",
- "mimalloc",
  "ocpq-shared",
  "rayon",
  "serde",
@@ -4176,12 +4175,13 @@ dependencies = [
 
 [[package]]
 name = "process_mining"
-version = "0.5.4"
-source = "git+https://github.com/aarkue/rust4pm#53578f10040f23063b17e7e0abda8c09e1d79b32"
+version = "0.5.6"
+source = "git+https://github.com/aarkue/rust4pm?branch=feat/oced-paths#15fa19ef440cfb2b0a040cef0e0f3a657d640010"
 dependencies = [
  "chrono",
  "csv",
  "flate2",
+ "hashbrown 0.15.5",
  "itertools 0.14.0",
  "macros_process_mining",
  "ordered-float 5.1.0",
