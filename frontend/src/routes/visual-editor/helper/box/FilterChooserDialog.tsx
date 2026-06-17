@@ -52,6 +52,7 @@ const ALL_FILTER_TYPES: AllFilterTypes[] = [
 	"TimeBetweenEvents",
 	"EventAttributeValueFilter",
 	"ObjectAttributeValueFilter",
+	"NotEqual",
 	"BasicFilterCEL",
 	"AdvancedCEL",
 	"NumChilds",
