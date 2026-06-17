@@ -1,3 +1,4 @@
  
 target/
 bench-results*.jsonl
+.superpowers/

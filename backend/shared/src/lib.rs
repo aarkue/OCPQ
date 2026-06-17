@@ -24,6 +24,7 @@ pub mod binding_box;
 pub mod db_translation;
 pub mod discovery;
 pub mod ocel_graph;
+pub mod path_schemas;
 pub mod trad_event_log;
 pub mod preprocessing {
     pub mod linked_ocel;

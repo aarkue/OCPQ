@@ -4,7 +4,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use ocpq_shared::{
     process_mining::{
         core::event_data::object_centric::{io::OCELIOError, linked_ocel::SlimLinkedOCEL},
-        Importable, OCEL,
+        Importable,
     },
     OCELInfo,
 };
@@ -56,8 +56,7 @@ pub fn load_ocel_file_to_state(
     ignore_errors: bool,
 ) -> Option<OCELInfo> {
     match load_ocel_file(name) {
-        Ok(ocel) => {
-            let locel = SlimLinkedOCEL::from_ocel(ocel);
+        Ok(locel) => {
             let ocel_info: OCELInfo = (&locel).into();
             let mut x = state.ocel.write().unwrap();
             *x = Some(locel);
@@ -74,8 +73,8 @@ pub fn load_ocel_file_to_state(
     }
 }
 
-pub fn load_ocel_file(name: &str) -> Result<OCEL, OCELIOError> {
+pub fn load_ocel_file(name: &str) -> Result<SlimLinkedOCEL, OCELIOError> {
     let path = format!("{DATA_PATH}{name}");
-    let ocel = OCEL::import_from_path(path)?;
+    let ocel = SlimLinkedOCEL::import_from_path(path)?;
     Ok(ocel)
 }

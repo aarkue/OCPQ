@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { BsDatabase } from "react-icons/bs";
 import { CgArrowsExpandUpRight } from "react-icons/cg";
 import { PiGraphFill } from "react-icons/pi";
-import { TbBinaryTree, TbTable } from "react-icons/tb";
+import { TbBinaryTree, TbRoute, TbTable } from "react-icons/tb";
 import { useLocation } from "react-router-dom";
 import MenuLink from "@/components/MenuLink";
 import { UpdateButton } from "@/components/UpdateButton";
@@ -86,6 +86,13 @@ function NavigationLinks({ ocelInfo }: { ocelInfo: OCELInfo | undefined }) {
 					>
 						Relationship Graph
 						<PiGraphFill className="ml-2" />
+					</MenuLink>
+					<MenuLink
+						to="/path-schemas"
+						classNames="bg-amber-300/10 border-amber-300/20 hover:bg-amber-300/50 [.active]:border-amber-400 [.active]:bg-amber-300/70"
+					>
+						Path Schemas
+						<TbRoute className="ml-2" />
 					</MenuLink>
 					<br className="my-1" />
 					<MenuLink

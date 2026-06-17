@@ -9,6 +9,7 @@ import OcelGraphViewer from "./routes/OcelGraphViewer.tsx";
 import OCDeclareListPage from "./routes/oc-declare/OCDeclareListPage.tsx";
 import OCDeclareViewer from "./routes/oc-declare/OCDeclareViewer.tsx";
 import OcelInfoViewer from "./routes/ocel-info/OcelInfoViewer.tsx";
+import PathSchemasViewer from "./routes/path-schemas/PathSchemasViewer.tsx";
 import OuterVisualEditor from "./routes/visual-editor/outer-visual-editor/OuterVisualEditor.tsx";
 
 const router = createBrowserRouter([
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
 			{ path: "/constraints", element: <OuterVisualEditor /> },
 			{ path: "/ocel-info", element: <OcelInfoViewer /> },
 			{ path: "/graph", element: <OcelGraphViewer /> },
+			{ path: "/path-schemas", element: <PathSchemasViewer /> },
 			{ path: "/ocel-element", element: <OcelElementViewer /> },
 			{ path: "/oc-declare", element: <OCDeclareListPage /> },
 			{ path: "/oc-declare/:id", element: <OCDeclareViewer /> },

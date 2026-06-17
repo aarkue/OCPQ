@@ -18,7 +18,7 @@ use ocpq_shared::{
         TableMappings,
     },
     process_mining::{
-        core::event_data::object_centric::linked_ocel::SlimLinkedOCEL, Importable, OCEL,
+        core::event_data::object_centric::linked_ocel::SlimLinkedOCEL, Importable,
     },
 };
 
@@ -150,11 +150,9 @@ fn run_evaluate(args: EvaluateArgs) {
     let bbox_tree: BindingBoxTree =
         serde_json::from_reader(bbox_reader).expect("Could not parse bbox_tree JSON");
     let now = Instant::now();
-    let ocel = OCEL::import_from_path(args.ocel).expect("Could not import OCEL 2.0 file");
+    let index_linked_ocel =
+        SlimLinkedOCEL::import_from_path(args.ocel).expect("Could not import OCEL 2.0 file");
     println!("Imported OCEL 2.0 in {:?}", now.elapsed());
-    let now = Instant::now();
-    let index_linked_ocel = SlimLinkedOCEL::from_ocel(ocel);
-    println!("Linked OCEL 2.0 in {:?}", now.elapsed());
     let res = evaluate_box_tree(bbox_tree, &index_linked_ocel, true);
 
     let now = Instant::now();
@@ -268,11 +266,8 @@ fn run_bench_inner(args: BenchArgs, root_only: bool) -> Result<(), String> {
 
     println!("Loading OCEL from {:?}", args.ocel);
     let load_start = Instant::now();
-    let ocel = OCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
-    println!("  imported in {:.2?}", load_start.elapsed());
-    let link_start = Instant::now();
-    let linked = SlimLinkedOCEL::from_ocel(ocel);
-    println!("  linked in {:.2?}", link_start.elapsed());
+    let linked = SlimLinkedOCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
+    println!("imported & linked in {:.2?}", load_start.elapsed());
 
     let mut results_file = OpenOptions::new()
         .create(true)
@@ -523,12 +518,8 @@ fn run_plan_profile(args: PlanProfileArgs) -> Result<(), String> {
 
     println!("Loading OCEL from {:?}", args.ocel);
     let load_start = Instant::now();
-    let ocel = OCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
-    println!("  imported in {:.2?}", load_start.elapsed());
-
-    let link_start = Instant::now();
-    let linked = SlimLinkedOCEL::from_ocel(ocel);
-    println!("  linked in {:.2?}", link_start.elapsed());
+    let linked = SlimLinkedOCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
+    println!("Loaded and linked in {:.2?}", load_start.elapsed());
 
     for (qname, qdir) in &queries {
         let tree_path = qdir.join("ocpq-tree.json");

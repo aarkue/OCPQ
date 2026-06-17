@@ -13,6 +13,7 @@ import ReactDOM from "react-dom/client";
 import {
 	type BackendProvider,
 	BackendProviderContext,
+	ocelUploadFormat,
 } from "$/BackendProviderContext";
 import { MainRouterProvider } from "$/router";
 import type { DiscoverConstraintsResponse } from "$/routes/visual-editor/helper/types";
@@ -49,6 +50,8 @@ const tauriBackend: BackendProvider = {
 							"sqlite",
 							"sqlite3",
 							"db",
+							"json.gz",
+							"xml.gz",
 						],
 					},
 					{ name: "XES", extensions: ["xes", "xes.gz"] },
@@ -82,11 +85,7 @@ const tauriBackend: BackendProvider = {
 			);
 			return ocelInfo;
 		} else {
-			const format = ocelFile.name.endsWith(".json")
-				? "json"
-				: ocelFile.name.endsWith(".xml")
-					? "xml"
-					: "sqlite";
+			const format = ocelUploadFormat(ocelFile.name);
 			const bytes = await ocelFile.arrayBuffer();
 			const ocelInfo: OCELInfo = await new Promise((res, _rej) =>
 				setTimeout(async () => {
@@ -146,6 +145,18 @@ const tauriBackend: BackendProvider = {
 	},
 	"ocel/graph": async (options) => {
 		return await invoke("ocel_graph", { options });
+	},
+	"ocel/path-schemas/type-graph": async () => {
+		return await invoke("path_type_graph_cmd");
+	},
+	"ocel/path-schemas/enumerate": async (options) => {
+		return await invoke("enumerate_path_schemas_cmd", { options });
+	},
+	"ocel/path-schemas/discover": async (options) => {
+		return await invoke("discover_path_schemas_cmd", { options });
+	},
+	"ocel/path-schemas/schema-detail": async (options) => {
+		return await invoke("schema_detail_cmd", { options });
 	},
 	"ocel/sample-ids": async (limit: number) => {
 		return await invoke("get_sample_ids", { limit });
