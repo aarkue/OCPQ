@@ -2,8 +2,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use itertools::Itertools;
 use process_mining::core::event_data::object_centric::linked_ocel::{
-    slim_linked_ocel::ObjectIndex,
-    LinkedOCELAccess, SlimLinkedOCEL,
+    slim_linked_ocel::ObjectIndex, LinkedOCELAccess, SlimLinkedOCEL,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -78,7 +77,8 @@ impl BindingBox {
             &mut bootstrap,
             &bootstrap_counter,
             ocel,
-            &steps[0..1],
+            &steps,
+            1,
             0,
         )?;
 
@@ -102,6 +102,7 @@ impl BindingBox {
                         &pipeline_counter,
                         ocel,
                         steps,
+                        steps.len(),
                         1,
                     )?;
                     Ok(local_out)
@@ -139,6 +140,7 @@ impl BindingBox {
             ocel,
             steps,
             0,
+            steps.len(),
             max_bindings,
             &mut emit,
         )?;
@@ -153,13 +155,14 @@ impl BindingBox {
         counter: &AtomicUsize,
         ocel: &SlimLinkedOCEL,
         steps: &[BindingStep],
+        max_depth: usize,
         idx: usize,
     ) -> Result<(), String> {
         let mut emit = |b: &Binding| {
             out.push(b.clone());
             Ok(())
         };
-        self.apply_step_recursive_emit(b, counter, ocel, steps, idx, MAX_NUM_BINDINGS, &mut emit)
+        self.apply_step_recursive_emit(b, counter, ocel, steps, idx, max_depth, MAX_NUM_BINDINGS, &mut emit)
     }
 
     fn apply_step_recursive_emit<F>(
@@ -169,6 +172,7 @@ impl BindingBox {
         ocel: &SlimLinkedOCEL,
         steps: &[BindingStep],
         idx: usize,
+        max_depth: usize,
         max_bindings: usize,
         emit: &mut F,
     ) -> Result<(), String>
@@ -178,7 +182,7 @@ impl BindingBox {
         if counter.load(Ordering::Relaxed) >= max_bindings {
             return Ok(());
         }
-        if idx >= steps.len() {
+        if idx >= max_depth {
             let prev = counter.fetch_add(1, Ordering::Relaxed);
             if prev < max_bindings {
                 emit(b)?;
@@ -186,13 +190,19 @@ impl BindingBox {
             return Ok(());
         }
         let step = &steps[idx];
-        if idx > 0 && matches!(step, BindingStep::Filter(_)) {
+        // Skip a filter here only if a preceding bind step already evaluated it via `passes_next_filters`.
+        if matches!(step, BindingStep::Filter(_))
+            && steps[..idx]
+                .iter()
+                .any(|s| !matches!(s, BindingStep::Filter(_)))
+        {
             return self.apply_step_recursive_emit(
                 b,
                 counter,
                 ocel,
                 steps,
                 idx + 1,
+                max_depth,
                 max_bindings,
                 emit,
             );
@@ -237,6 +247,7 @@ impl BindingBox {
                             ocel,
                             steps,
                             idx + 1,
+                            max_depth,
                             max_bindings,
                             emit,
                         )?;
@@ -264,6 +275,7 @@ impl BindingBox {
                             ocel,
                             steps,
                             idx + 1,
+                            max_depth,
                             max_bindings,
                             emit,
                         )?;
@@ -300,6 +312,7 @@ impl BindingBox {
                             ocel,
                             steps,
                             idx + 1,
+                            max_depth,
                             max_bindings,
                             emit,
                         )?;
@@ -319,11 +332,9 @@ impl BindingBox {
                     .get(ob_var_name)
                     .ok_or_else(|| format!("Could not get {ob_var_name}"))?;
                 let o2os: Box<dyn Iterator<Item = &ObjectIndex>> = if *reversed {
-                    Box::new(
-                        obj_types
-                            .iter()
-                            .flat_map(|ot| ob_index.get_o2o_rev_obs_of_obtype(ocel, ot, qualifier.as_deref())),
-                    )
+                    Box::new(obj_types.iter().flat_map(|ot| {
+                        ob_index.get_o2o_rev_obs_of_obtype(ocel, ot, qualifier.as_deref())
+                    }))
                 } else {
                     Box::new(
                         obj_types
@@ -348,6 +359,7 @@ impl BindingBox {
                             ocel,
                             steps,
                             idx + 1,
+                            max_depth,
                             max_bindings,
                             emit,
                         )?;
@@ -366,10 +378,9 @@ impl BindingBox {
                     .new_event_vars
                     .get(ev_var_name)
                     .ok_or_else(|| format!("Could not get {ev_var_name}"))?;
-                for to_ev_index in ev_types
-                    .iter()
-                    .flat_map(|ev_type| ob_index.get_e2o_rev_evs_of_evtype(ocel, ev_type, qualifier.as_deref()))
-                {
+                for to_ev_index in ev_types.iter().flat_map(|ev_type| {
+                    ob_index.get_e2o_rev_evs_of_evtype(ocel, ev_type, qualifier.as_deref())
+                }) {
                     let ins = b.extend_with_ev_in_place(*ev_var_name, *to_ev_index);
                     if passes_next_filters(b, idx, steps, ocel) {
                         self.apply_step_recursive_emit(
@@ -378,6 +389,7 @@ impl BindingBox {
                             ocel,
                             steps,
                             idx + 1,
+                            max_depth,
                             max_bindings,
                             emit,
                         )?;
@@ -396,6 +408,7 @@ impl BindingBox {
                         ocel,
                         steps,
                         idx + 1,
+                        max_depth,
                         max_bindings,
                         emit,
                     )?;

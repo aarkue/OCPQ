@@ -1299,9 +1299,6 @@ impl Filter {
                 }
             }
             Filter::BasicFilterCEL { cel } => {
-                // let now = Instant::now();
-
-                // println!("Took {:?}",now.elapsed());
                 Ok(check_cel_predicate(cel, b, None, ocel)?)
             }
         }
