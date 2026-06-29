@@ -17,9 +17,7 @@ use ocpq_shared::{
         translate_to_cypher_shared, translate_to_sql_shared, DBTranslationInput, DatabaseType,
         TableMappings,
     },
-    process_mining::{
-        core::event_data::object_centric::linked_ocel::SlimLinkedOCEL, Importable,
-    },
+    process_mining::{core::event_data::object_centric::linked_ocel::SlimLinkedOCEL, Importable},
 };
 
 #[derive(Parser, Debug)]
@@ -216,7 +214,7 @@ fn stats(xs: &[f64]) -> Stats {
     let mean = xs.iter().sum::<f64>() / n;
     let mut sorted: Vec<f64> = xs.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let median = if sorted.len() % 2 == 0 {
+    let median = if sorted.len().is_multiple_of(2) {
         (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2.0
     } else {
         sorted[sorted.len() / 2]
@@ -266,7 +264,8 @@ fn run_bench_inner(args: BenchArgs, root_only: bool) -> Result<(), String> {
 
     println!("Loading OCEL from {:?}", args.ocel);
     let load_start = Instant::now();
-    let linked = SlimLinkedOCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
+    let linked =
+        SlimLinkedOCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
     println!("imported & linked in {:.2?}", load_start.elapsed());
 
     let mut results_file = OpenOptions::new()
@@ -302,15 +301,18 @@ fn run_bench_inner(args: BenchArgs, root_only: bool) -> Result<(), String> {
         let run_eval = |row_count: &mut usize| -> Result<(), String> {
             if let Some(sc) = &step_cache {
                 let mut c = 0usize;
-                let mut sink =
-                    |_: std::sync::Arc<Binding>, _| -> Result<(), String> { c += 1; Ok(()) };
+                let mut sink = |_: std::sync::Arc<Binding>, _| -> Result<(), String> {
+                    c += 1;
+                    Ok(())
+                };
                 tree.nodes[0]
                     .evaluate_no_descendants(0, Binding::default(), &tree, &linked, sc, &mut sink)
                     .map_err(|e| format!("evaluate root {qname}: {e}"))?;
                 *row_count = c;
             } else {
-                let (results, _) =
-                    tree.evaluate(&linked).map_err(|e| format!("evaluate {qname}: {e}"))?;
+                let (results, _) = tree
+                    .evaluate(&linked)
+                    .map_err(|e| format!("evaluate {qname}: {e}"))?;
                 *row_count = results.len();
             }
             Ok(())
@@ -368,10 +370,7 @@ fn run_bench_summary(args: BenchSummaryArgs) -> Result<(), String> {
         let label = v["label"].as_str().ok_or("missing label")?.to_string();
         let query = v["query"].as_str().ok_or("missing query")?.to_string();
         let dur = v["duration_ms"].as_f64().ok_or("missing duration_ms")?;
-        grouped
-            .entry((label, query))
-            .or_default()
-            .push(dur);
+        grouped.entry((label, query)).or_default().push(dur);
     }
 
     if grouped.is_empty() {
@@ -454,7 +453,7 @@ fn run_bench_summary(args: BenchSummaryArgs) -> Result<(), String> {
 fn parent_by_child(tree: &BindingBoxTree) -> Vec<Option<usize>> {
     let mut parent = vec![None; tree.nodes.len()];
     for (idx, node) in tree.nodes.iter().enumerate() {
-        let (_bbox, children) = node.to_box();
+        let (_bbox, children) = node.to_box(idx, tree);
         for &child in children.iter() {
             if child < parent.len() {
                 parent[child] = Some(idx);
@@ -487,7 +486,7 @@ fn node_profile_inputs(
             memo,
             sample_limit,
         )?;
-        let (parent_box, _children) = tree.nodes[parent_idx].to_box();
+        let (parent_box, _children) = tree.nodes[parent_idx].to_box(node_idx, tree);
         let mut out = Vec::new();
         for input in parent_inputs {
             let (mut expanded, _skipped) =
@@ -518,7 +517,8 @@ fn run_plan_profile(args: PlanProfileArgs) -> Result<(), String> {
 
     println!("Loading OCEL from {:?}", args.ocel);
     let load_start = Instant::now();
-    let linked = SlimLinkedOCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
+    let linked =
+        SlimLinkedOCEL::import_from_path(&args.ocel).map_err(|e| format!("import OCEL: {e:?}"))?;
     println!("Loaded and linked in {:.2?}", load_start.elapsed());
 
     for (qname, qdir) in &queries {
@@ -543,7 +543,7 @@ fn run_plan_profile(args: PlanProfileArgs) -> Result<(), String> {
                 args.sample_limit,
             )?;
             let steps = &step_cache[node_idx];
-            let (bbox, _children) = tree.nodes[node_idx].to_box();
+            let (bbox, _children) = tree.nodes[node_idx].to_box(node_idx, &tree);
 
             println!(
                 "node {node_idx}: sampled_inputs={} steps={}",

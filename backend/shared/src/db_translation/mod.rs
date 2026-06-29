@@ -195,7 +195,7 @@ pub enum Relation {
 pub fn bindingbox_to_intermediate(tree: &BindingBoxTree, index: usize) -> InterMediateNode {
     let node = &tree.nodes[index];
 
-    let (binding_box, child_indices) = node.to_box();
+    let (binding_box, child_indices) = node.to_box(index, tree);
 
     let event_vars = binding_box.new_event_vars.clone();
     let object_vars = binding_box.new_object_vars.clone();
@@ -217,12 +217,8 @@ pub fn bindingbox_to_intermediate(tree: &BindingBoxTree, index: usize) -> InterM
     for child_index in child_indices.as_ref() {
         let child_node = bindingbox_to_intermediate(tree, *child_index);
 
-        // Extract label names from edge_names
-        let edge_name = tree
-            .edge_names
-            .get(&(index, *child_index))
-            .cloned()
-            .unwrap_or_else(|| format!("unnamed_edge_{}_{}", index, child_index)); // Edge not there
+        // Must match the gate-constraint child_names produced by `to_box`.
+        let edge_name = tree.edge_name(index, *child_index);
 
         children.push((child_node, edge_name));
     }
@@ -298,7 +294,7 @@ pub fn extract_filters(
     size_filters: Vec<SizeFilter>,
 ) -> (Vec<Filter>, Vec<SizeFilter>) {
     let mut result = Vec::new();
-    let result_size: Vec<SizeFilter> = size_filters.iter().cloned().collect();
+    let result_size: Vec<SizeFilter> = size_filters.to_vec();
 
     for filter in &filters {
         match filter {

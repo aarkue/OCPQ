@@ -332,11 +332,22 @@ pub struct BindingBoxTree {
 }
 
 impl BindingBoxTree {
+    /// Single source of truth for the name of the edge from `parent` to `child`.
+    /// Falls back to a stable synthetic name when the edge is unnamed, so that
+    /// gate constraints and the child-result keys always agree.
+    pub fn edge_name(&self, parent: usize, child: usize) -> String {
+        self.edge_names
+            .get(&(parent, child))
+            .cloned()
+            .unwrap_or_else(|| format!("{UNNAMED}{child}"))
+    }
+
     pub fn compute_step_cache(&self, ocel: &SlimLinkedOCEL) -> Vec<Vec<BindingStep>> {
         self.nodes
             .iter()
-            .map(|n| {
-                let (bbox, _children) = n.to_box();
+            .enumerate()
+            .map(|(idx, n)| {
+                let (bbox, _children) = n.to_box(idx, self);
                 BindingStep::get_binding_order(&bbox, None, ocel)
             })
             .collect()
@@ -422,15 +433,19 @@ pub enum BindingBoxTreeNode {
 }
 const UNNAMED: &str = "UNNAMED - ";
 impl BindingBoxTreeNode {
-    pub fn to_box(&self) -> (Cow<'_, BindingBox>, Cow<'_, Vec<usize>>) {
+    pub fn to_box(
+        &self,
+        self_index: usize,
+        tree: &BindingBoxTree,
+    ) -> (Cow<'_, BindingBox>, Cow<'_, Vec<usize>>) {
         match self {
             BindingBoxTreeNode::Box(b, children) => (Cow::Borrowed(b), Cow::Borrowed(children)),
             BindingBoxTreeNode::OR(c1, c2) => (
                 Cow::Owned(BindingBox {
                     constraints: vec![Constraint::OR {
                         child_names: vec![
-                            format!("{}{}", UNNAMED, c1),
-                            format!("{}{}", UNNAMED, c2),
+                            tree.edge_name(self_index, *c1),
+                            tree.edge_name(self_index, *c2),
                         ],
                     }],
                     ..Default::default()
@@ -441,8 +456,8 @@ impl BindingBoxTreeNode {
                 Cow::Owned(BindingBox {
                     constraints: vec![Constraint::AND {
                         child_names: vec![
-                            format!("{}{}", UNNAMED, c1),
-                            format!("{}{}", UNNAMED, c2),
+                            tree.edge_name(self_index, *c1),
+                            tree.edge_name(self_index, *c2),
                         ],
                     }],
                     ..Default::default()
@@ -452,7 +467,7 @@ impl BindingBoxTreeNode {
             BindingBoxTreeNode::NOT(c1) => (
                 Cow::Owned(BindingBox {
                     constraints: vec![Constraint::NOT {
-                        child_names: vec![format!("{}{}", UNNAMED, c1)],
+                        child_names: vec![tree.edge_name(self_index, *c1)],
                     }],
                     ..Default::default()
                 }),
@@ -665,7 +680,7 @@ impl ChildDemand {
 
 fn check_num_childs_count(count: Option<usize>, min: Option<usize>, max: Option<usize>) -> bool {
     if let Some(count) = count {
-        !min.is_some_and(|min| count < min) && !max.is_some_and(|max| count > max)
+        min.is_none_or(|min| count >= min) && max.is_none_or(|max| count <= max)
     } else {
         false
     }
@@ -745,18 +760,10 @@ impl BindingBoxTreeNode {
         String,
     > {
         use std::sync::Arc;
-        let (bbox, children) = self.to_box();
+        let (bbox, children) = self.to_box(own_index, tree);
         let child_edges: Vec<(usize, String)> = children
             .iter()
-            .map(|c| {
-                (
-                    *c,
-                    tree.edge_names
-                        .get(&(own_index, *c))
-                        .cloned()
-                        .unwrap_or_else(|| format!("{UNNAMED}{c}")),
-                )
-            })
+            .map(|c| (*c, tree.edge_name(own_index, *c)))
             .collect();
         let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
             bbox.expand_with_steps_in_place(parent_binding, ocel, &step_cache[own_index])?;
@@ -942,7 +949,7 @@ impl BindingBoxTreeNode {
             return Ok((0, false));
         }
 
-        let (bbox, children) = self.to_box();
+        let (bbox, children) = self.to_box(own_index, tree);
         if children.is_empty()
             && bbox.labels.is_empty()
             && bbox.size_filters.is_empty()
@@ -958,15 +965,7 @@ impl BindingBoxTreeNode {
 
         let child_edges: Vec<(usize, String)> = children
             .iter()
-            .map(|c| {
-                (
-                    *c,
-                    tree.edge_names
-                        .get(&(own_index, *c))
-                        .cloned()
-                        .unwrap_or_else(|| format!("{UNNAMED}{c}")),
-                )
-            })
+            .map(|c| (*c, tree.edge_name(own_index, *c)))
             .collect();
         let child_demand = ChildDemand::required_for(&bbox);
         let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
@@ -1039,19 +1038,11 @@ impl BindingBoxTreeNode {
         ) -> Result<(), String>,
     ) -> Result<bool, String> {
         use std::sync::Arc;
-        let (bbox, children) = self.to_box();
+        let (bbox, children) = self.to_box(own_index, tree);
         let child_demand = ChildDemand::required_for(&bbox);
         let child_edges: Vec<(usize, String)> = children
             .iter()
-            .map(|c| {
-                (
-                    *c,
-                    tree.edge_names
-                        .get(&(own_index, *c))
-                        .cloned()
-                        .unwrap_or_else(|| format!("{UNNAMED}{c}")),
-                )
-            })
+            .map(|c| (*c, tree.edge_name(own_index, *c)))
             .collect();
         let (expanded, expanding_skipped_bindings): (Vec<Binding>, bool) =
             bbox.expand_with_steps_in_place(parent_binding, ocel, &step_cache[own_index])?;
