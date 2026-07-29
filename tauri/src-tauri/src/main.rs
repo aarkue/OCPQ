@@ -578,12 +578,22 @@ async fn execute_extraction(
     req: ExecuteExtractionRequest,
     state: State<'_, AppState>,
 ) -> Result<ExecuteExtractionResponse, String> {
-    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
-        .await
-        .map_err(|e| e.to_string())?;
+    let ExecuteExtractionRequest {
+        blueprint,
+        connections,
+    } = req;
+    // The new extractor is synchronous and its dbcon provider owns its own runtime; calling it
+    // directly from this async command would panic ("Cannot start a runtime from within a
+    // runtime"), so it runs on a blocking-pool thread instead.
+    let (locel, report) = tauri::async_runtime::spawn_blocking(move || {
+        execute_extraction_slim_with_dbcon(&blueprint, &connections)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
     *state.ocel.write().await = Some(locel);
     clear_eval_res(&state).await;
-    Ok(response)
+    Ok(ExecuteExtractionResponse { report })
 }
 
 fn main() {

@@ -607,13 +607,23 @@ async fn execute_extraction_handler(
     State(state): State<AppState>,
     Json(req): Json<ExecuteExtractionRequest>,
 ) -> Result<Json<ExecuteExtractionResponse>, (StatusCode, String)> {
-    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let ExecuteExtractionRequest {
+        blueprint,
+        connections,
+    } = req;
+    // The new extractor is synchronous and its dbcon provider owns its own runtime; calling it
+    // directly from this async handler would panic ("Cannot start a runtime from within a
+    // runtime"), so it runs on a blocking-pool thread instead.
+    let (locel, report) = tokio::task::spawn_blocking(move || {
+        execute_extraction_slim_with_dbcon(&blueprint, &connections)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     *state.ocel.write().unwrap() = Some(locel);
     clear_eval_res(&state);
-    Ok(Json(response))
+    Ok(Json(ExecuteExtractionResponse { report }))
 }
 
 #[cfg(test)]
