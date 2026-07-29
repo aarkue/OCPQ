@@ -1,5 +1,4 @@
-import type { ReactFlowInstance } from "@xyflow/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { IoArrowBack } from "react-icons/io5";
 import { LuPencil } from "react-icons/lu";
 import { Link, useParams } from "react-router-dom";
@@ -11,11 +10,10 @@ import {
 	OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA,
 	parseLocalStorageValue,
 } from "@/lib/local-storage";
-import OCDeclareDiscoveryButton from "./flow/OCDeclareDiscoveryButton";
-import OCDeclareFlowEditor from "./flow/OCDeclareFlowEditor";
-import type { OCDeclareFlowData, OCDeclareMetaData } from "./flow/oc-declare-flow-data";
-import { addArcsToFlow } from "./flow/oc-declare-flow-type-conversions";
-import type { ActivityNodeType, CustomEdgeType } from "./flow/oc-declare-flow-types";
+import OCDeclareEditor, { type PersistedFlow } from "./OCDeclareEditor";
+import type { OCDeclareMetaData } from "./flow/oc-declare-flow-data";
+
+type OCDeclareFlowData = { flowJson: PersistedFlow };
 
 export default function OCDeclareViewer() {
 	const { id } = useParams();
@@ -28,7 +26,6 @@ export default function OCDeclareViewer() {
 	);
 	const metaIndex = meta.findIndex((x) => x.id === id);
 	const [metaInfo, setMetaInfo] = useState(metaIndex !== undefined ? meta[metaIndex] : undefined);
-	const flowRef = useRef<ReactFlowInstance<ActivityNodeType, CustomEdgeType>>();
 
 	if (id == null || metaInfo === undefined) {
 		return (
@@ -93,27 +90,16 @@ export default function OCDeclareViewer() {
 						/>
 					</div>
 				</div>
-				<div className="ml-auto">
-					<OCDeclareDiscoveryButton
-						onConstraintsDiscovered={(constraints) => {
-							if (flowRef.current) {
-								addArcsToFlow(constraints, flowRef.current);
-							}
-						}}
-					/>
-				</div>
 			</div>
 			<div className="w-full h-full border">
-				<OCDeclareFlowEditor
+				<OCDeclareEditor
 					initialFlowJson={data.flowJson}
-					name={metaInfo.name}
 					onChange={(value) => {
 						localStorage.setItem(
 							OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + id,
 							JSON.stringify({ flowJson: value } satisfies OCDeclareFlowData),
 						);
 					}}
-					onInit={(ref) => (flowRef.current = ref)}
 				/>
 			</div>
 		</div>

@@ -1,5 +1,6 @@
 import "$/globals.css";
 import "$/index.css";
+import "@r4pm/components/ui/styles.css";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -20,6 +21,8 @@ import type { DiscoverConstraintsResponse } from "$/routes/visual-editor/helper/
 import type { DBTranslationInput } from "$/types/DBTranslationInput";
 import type { BindingBoxTree } from "$/types/generated/BindingBoxTree";
 import type { OCPQJobOptions } from "$/types/generated/OCPQJobOptions";
+import type { OCELTypeStats } from "$/types/generated/OCELTypeStats";
+import type { OcelAttributeStats } from "$/types/generated/OcelAttributeStats";
 import type { ConnectionConfig, JobStatus } from "$/types/hpc-backend";
 import type {
 	EventTypeQualifiers,
@@ -34,6 +37,13 @@ const tauriBackend: BackendProvider = {
 		);
 		return ocelInfo;
 	},
+	"ocel/stats": async () =>
+		await invoke<OCELTypeStats | undefined>("get_current_ocel_stats"),
+	"ocel/attribute-stats": async (scope, type, attribute) =>
+		await invoke<OcelAttributeStats | undefined>(
+			"get_current_ocel_attribute_stats",
+			{ scope, typeName: type, attribute },
+		),
 	"ocel/picker": async (givenPath) => {
 		let path: string | undefined | null = givenPath;
 		if (path === undefined) {
@@ -126,6 +136,9 @@ const tauriBackend: BackendProvider = {
 	},
 	"ocel/evaluate-oc-declare-arcs": async (arcs) => {
 		return await invoke("evaluate_oc_declare_arcs", { arcs });
+	},
+	"ocel/project-oc-declare-arcs": async (arcs, activities) => {
+		return await invoke("project_oc_declare_arcs", { arcs, activities });
 	},
 	"ocel/get-oc-declare-edge-statistics": async (arc) => {
 		return await invoke("get_oc_declare_edge_statistics", { arc });

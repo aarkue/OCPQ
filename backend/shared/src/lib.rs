@@ -24,6 +24,7 @@ pub mod binding_box;
 pub mod db_translation;
 pub mod discovery;
 pub mod ocel_graph;
+pub mod ocel_stats;
 pub mod path_schemas;
 pub mod trad_event_log;
 pub mod preprocessing {
@@ -46,6 +47,8 @@ pub struct OCELInfo {
     pub event_types: Vec<OCELType>,
     pub e2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>>,
     pub o2o_types: HashMap<String, HashMap<String, (usize, HashSet<String>)>>,
+    /// Per activity and object type: (min, max) number of objects of that type per event.
+    pub activity_involvements: HashMap<String, HashMap<String, (usize, usize)>>,
 }
 
 impl From<&SlimLinkedOCEL> for OCELInfo {
@@ -102,6 +105,36 @@ impl From<&SlimLinkedOCEL> for OCELInfo {
             }
         }
 
+        let mut activity_involvements: HashMap<String, HashMap<String, (usize, usize)>> =
+            HashMap::new();
+        for ev_type in val.get_ev_types() {
+            // (min, max, number of events the type occurs in)
+            let mut per_ot: HashMap<&str, (usize, usize, usize)> = HashMap::new();
+            let mut num_evs = 0usize;
+            for ev in val.get_evs_of_type(ev_type) {
+                num_evs += 1;
+                let mut counts: HashMap<&str, usize> = HashMap::new();
+                for (_q, ob) in val.get_e2o(ev) {
+                    *counts.entry(val.get_ob_type_of(ob)).or_default() += 1;
+                }
+                for (ot, c) in counts {
+                    let entry = per_ot.entry(ot).or_insert((c, c, 0));
+                    entry.0 = entry.0.min(c);
+                    entry.1 = entry.1.max(c);
+                    entry.2 += 1;
+                }
+            }
+            activity_involvements.insert(
+                ev_type.to_string(),
+                per_ot
+                    .into_iter()
+                    .map(|(ot, (min, max, seen))| {
+                        (ot.to_string(), (if seen < num_evs { 0 } else { min }, max))
+                    })
+                    .collect(),
+            );
+        }
+
         OCELInfo {
             num_objects: val.get_num_obs(),
             num_events: val.get_num_evs(),
@@ -115,6 +148,31 @@ impl From<&SlimLinkedOCEL> for OCELInfo {
                 .collect(),
             e2o_types,
             o2o_types,
+            activity_involvements,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
+pub struct OCELTypeStats {
+    pub event_type_counts: HashMap<String, usize>,
+    pub object_type_counts: HashMap<String, usize>,
+}
+
+impl From<&SlimLinkedOCEL> for OCELTypeStats {
+    fn from(val: &SlimLinkedOCEL) -> Self {
+        let event_type_counts = val
+            .get_ev_types()
+            .map(|t| (t.to_string(), val.get_evs_of_type(t).count()))
+            .collect();
+        let object_type_counts = val
+            .get_ob_types()
+            .map(|t| (t.to_string(), val.get_obs_of_type(t).count()))
+            .collect();
+        OCELTypeStats {
+            event_type_counts,
+            object_type_counts,
         }
     }
 }

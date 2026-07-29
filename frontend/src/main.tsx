@@ -1,5 +1,6 @@
 import "./globals.css";
 import "./index.css";
+import "@r4pm/components/ui/styles.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import {

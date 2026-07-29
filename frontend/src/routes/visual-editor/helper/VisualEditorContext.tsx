@@ -27,6 +27,7 @@ export type VisualEditorContextValue = {
 	) => (ObjectVariable | EventVariable)[];
 	getNodeIDByName: (name: string) => string | undefined;
 	getAvailableChildNames: (nodeID: string) => string[];
+	getNamesInConnectedTree: (nodeID: string) => string[];
 	getVarName: (
 		variable: EventVariable | ObjectVariable,
 		type: "object" | "event",
@@ -45,6 +46,7 @@ export const VisualEditorContext = createContext<VisualEditorContextValue>({
 	getNodeIDByName: () => undefined,
 	getTypesForVariable: () => [],
 	getAvailableChildNames: () => [],
+	getNamesInConnectedTree: () => [],
 	getVarName: (variable, type) => ({
 		name: type.substring(0, 1) + variable,
 		// name: type.substring(0, 2) + "_" + variable,

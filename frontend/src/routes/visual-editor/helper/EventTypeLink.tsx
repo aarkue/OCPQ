@@ -25,6 +25,18 @@ import QuantifiedObjectEdge from "./QuantifiedObjectEdge";
 import type { EventTypeLinkData } from "./types";
 import { VisualEditorContext } from "./VisualEditorContext";
 
+// 0 -> A, 1 -> B, ..., 25 -> Z, 26 -> AA, 27 -> AB, ...
+function nameForIndex(index: number): string {
+	let name = "";
+	let i = index + 1;
+	while (i > 0) {
+		i--;
+		name = String.fromCharCode("A".charCodeAt(0) + (i % 26)) + name;
+		i = Math.floor(i / 26);
+	}
+	return name;
+}
+
 export default function EventTypeLink(props: EdgeProps<Edge<EventTypeLinkData>>) {
 	const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props;
 	// TODO: Fix, currently needs to be calculated twice
@@ -37,24 +49,23 @@ export default function EventTypeLink(props: EdgeProps<Edge<EventTypeLinkData>>)
 		targetPosition,
 	});
 	const initial = useRef(true);
-	const { onEdgeDataChange, getAvailableChildNames } = useContext(VisualEditorContext);
+	const { onEdgeDataChange, getNamesInConnectedTree } = useContext(VisualEditorContext);
 	useEffect(() => {
 		if (initial.current && data === undefined) {
-			const namesUsedAlready = getAvailableChildNames(props.source ?? "");
-			const baseCode = "A".charCodeAt(0);
+			const namesUsedAlready = getNamesInConnectedTree(props.source ?? "");
 			let i = 0;
-			while (namesUsedAlready.includes(String.fromCharCode(baseCode + i)) && i < 25) {
+			while (namesUsedAlready.includes(nameForIndex(i))) {
 				i++;
 			}
 			onEdgeDataChange(id, {
 				color: "#969696",
 				maxCount: null,
 				minCount: null,
-				name: String.fromCharCode(baseCode + i),
+				name: nameForIndex(i),
 			});
 		}
 		initial.current = false;
-	}, [data, getAvailableChildNames, id, onEdgeDataChange, props.source]);
+	}, [data, getNamesInConnectedTree, id, onEdgeDataChange, props.source]);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	return (
 		<>

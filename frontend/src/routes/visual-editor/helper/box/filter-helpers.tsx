@@ -1,12 +1,15 @@
 import { Cross2Icon } from "@radix-ui/react-icons";
+import { AttributeValueStats } from "@r4pm/components";
 import clsx from "clsx";
 import { type ReactNode, useState } from "react";
+import { R4pmIsland } from "@/components/r4pm/R4pmIsland";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox } from "@/components/ui/combobox";
 import { DateTimeRangeInput } from "@/components/ui/date-time-range-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { OcelAttributeStats } from "@/types/generated/OcelAttributeStats";
 import type { ValueFilter } from "@/types/generated/ValueFilter";
 
 // Default Time value filter: "after" the start of the current year (UTC).
@@ -59,9 +62,12 @@ export function AttributeNameSelector({
 export function AttributeValueFilterSelector({
 	value,
 	onChange,
+	stat,
 }: {
 	value: ValueFilter | undefined;
 	onChange: (value: ValueFilter | undefined) => unknown;
+	/** Value distribution for the chosen attribute; renders an interactive histogram/selector. */
+	stat?: OcelAttributeStats;
 }) {
 	const handleTypeChange = (val: string) => {
 		if (val === "") {
@@ -82,8 +88,12 @@ export function AttributeValueFilterSelector({
 		}
 	};
 
+	// When the numeric stats view is shown it already owns the min/max selection (histogram + slider
+	// + inputs), so the standalone NumberRangeInput below would duplicate it.
+	const statNumeric = stat && (stat.kind === "Float" || stat.kind === "Integer");
+
 	return (
-		<div className="flex flex-col items-start gap-2">
+		<div className="flex w-full flex-col items-start gap-2">
 			<Combobox
 				options={["Float", "Integer", "Boolean", "String", "Time"].map((v) => ({
 					label: v,
@@ -94,6 +104,17 @@ export function AttributeValueFilterSelector({
 				title="Attribute Type"
 				value={value?.type ?? "String"}
 			/>
+			{stat && stat.kind !== "Empty" && (
+				<R4pmIsland className="w-full">
+					<div style={{ width: "100%", minWidth: 300 }}>
+						<AttributeValueStats
+							stat={stat}
+							value={value as Parameters<typeof AttributeValueStats>[0]["value"]}
+							onChange={(sel) => onChange(sel as ValueFilter)}
+						/>
+					</div>
+				</R4pmIsland>
+			)}
 			{value?.type === "Boolean" && (
 				<Label className="flex h-9 items-center gap-x-2">
 					<Checkbox
@@ -103,7 +124,7 @@ export function AttributeValueFilterSelector({
 					Should be {value.is_true ? "True" : "False"}
 				</Label>
 			)}
-			{(value?.type === "Float" || value?.type === "Integer") && (
+			{(value?.type === "Float" || value?.type === "Integer") && !statNumeric && (
 				<NumberRangeInput value={value} onChange={onChange} />
 			)}
 			{value?.type === "String" && <StringListInput value={value} onChange={onChange} />}

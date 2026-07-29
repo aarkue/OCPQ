@@ -45,11 +45,14 @@ use ocpq_shared::{
         discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions,
         Exportable, Importable, OCEL,
     },
+    ocel_stats::{get_ocel_attribute_stats, AttrScope, OcelAttributeStats},
     table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
-    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
+    EventWithIndex, IndexOrID, OCELInfo, OCELTypeStats, ObjectWithIndex,
 };
 use ocpq_shared::{
-    process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints,
+    process_mining::discovery::object_centric::oc_declare::{
+        discover_behavior_constraints, project_oc_arcs_smart,
+    },
     trad_event_log::trad_log_to_ocel,
 };
 use std::{
@@ -153,6 +156,31 @@ async fn get_current_ocel_info(
         None => Ok(None),
     };
     res
+}
+
+#[tauri::command(async)]
+async fn get_current_ocel_stats(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<OCELTypeStats>, String> {
+    Ok(match state.ocel.read().await.as_ref() {
+        Some(ocel) => Some(ocel.into()),
+        None => None,
+    })
+}
+
+#[tauri::command(async)]
+async fn get_current_ocel_attribute_stats(
+    state: tauri::State<'_, AppState>,
+    scope: AttrScope,
+    type_name: String,
+    attribute: String,
+) -> Result<Option<OcelAttributeStats>, String> {
+    Ok(state
+        .ocel
+        .read()
+        .await
+        .as_ref()
+        .map(|ocel| get_ocel_attribute_stats(ocel, scope, &type_name, &attribute)))
 }
 
 #[tauri::command(async)]
@@ -299,6 +327,16 @@ async fn evaluate_oc_declare_arcs(
 
         None => Err("No OCEL loaded".to_string()),
     }
+}
+
+/// Lossless projection of OC-DECLARE arcs onto a subset of activities (pure; no OCEL needed).
+#[tauri::command(async)]
+async fn project_oc_declare_arcs(
+    arcs: Vec<OCDeclareArc>,
+    activities: Vec<String>,
+) -> Result<Vec<OCDeclareArc>, String> {
+    let activities: std::collections::HashSet<String> = activities.into_iter().collect();
+    Ok(project_oc_arcs_smart(arcs, &activities, true))
 }
 
 #[tauri::command(async)]
@@ -608,6 +646,8 @@ fn main() {
             import_xes_path_as_ocel,
             import_xes_slice_as_ocel,
             get_current_ocel_info,
+            get_current_ocel_stats,
+            get_current_ocel_attribute_stats,
             get_sample_ids,
             export_ocel,
             export_filter_box,
@@ -628,6 +668,7 @@ fn main() {
             get_initial_files,
             auto_discover_oc_declare,
             evaluate_oc_declare_arcs,
+            project_oc_declare_arcs,
             get_oc_declare_edge_statistics,
             get_oc_declare_activity_statistics,
             get_oc_declare_template_string,

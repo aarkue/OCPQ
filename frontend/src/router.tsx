@@ -9,6 +9,7 @@ import OcelGraphViewer from "./routes/OcelGraphViewer.tsx";
 import OCDeclareListPage from "./routes/oc-declare/OCDeclareListPage.tsx";
 import OCDeclareViewer from "./routes/oc-declare/OCDeclareViewer.tsx";
 import OcelInfoViewer from "./routes/ocel-info/OcelInfoViewer.tsx";
+import ComponentsSmoke from "./routes/_smoke/ComponentsSmoke.tsx";
 import PathSchemasViewer from "./routes/path-schemas/PathSchemasViewer.tsx";
 import OuterVisualEditor from "./routes/visual-editor/outer-visual-editor/OuterVisualEditor.tsx";
 
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
 		children: [
 			{ path: "/constraints", element: <OuterVisualEditor /> },
 			{ path: "/ocel-info", element: <OcelInfoViewer /> },
+			{ path: "/_smoke", element: <ComponentsSmoke /> },
 			{ path: "/graph", element: <OcelGraphViewer /> },
 			{ path: "/path-schemas", element: <PathSchemasViewer /> },
 			{ path: "/ocel-element", element: <OcelElementViewer /> },

@@ -65,9 +65,10 @@ use ocpq_shared::{
         discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions,
         Importable,
     },
+    ocel_stats::{get_ocel_attribute_stats, AttrScope, OcelAttributeStats},
     table_export::{export_bindings_to_writer, TableExportOptions},
     trad_event_log::trad_log_to_ocel,
-    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
+    EventWithIndex, IndexOrID, OCELInfo, OCELTypeStats, ObjectWithIndex,
 };
 
 use tower_http::cors::CorsLayer;
@@ -100,6 +101,8 @@ async fn main() {
         .route("/ocel/load", post(load_ocel_file_req))
         .route("/ocel/unload", post(unload_ocel))
         .route("/ocel/info", get(get_loaded_ocel_info))
+        .route("/ocel/stats", get(get_loaded_ocel_stats))
+        .route("/ocel/attribute-stats", post(get_loaded_ocel_attribute_stats))
         .route("/ocel/sample-ids", post(get_sample_ids_handler))
         .route(
             "/ocel/upload/:format",
@@ -140,6 +143,10 @@ async fn main() {
         .route(
             "/ocel/evaluate-oc-declare-arcs",
             post(evaluate_oc_declare_arcs_handler),
+        )
+        .route(
+            "/ocel/project-oc-declare-arcs",
+            post(project_oc_declare_arcs_handler),
         )
         .route(
             "/ocel/get-activity-statistics",
@@ -185,6 +192,31 @@ async fn get_loaded_ocel_info(
         Some(ocel_info) => (StatusCode::OK, Json(Some(ocel_info))),
         None => (StatusCode::NOT_FOUND, Json(None)),
     }
+}
+
+async fn get_loaded_ocel_stats(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<Option<OCELTypeStats>>) {
+    match with_ocel_from_state(&State(state), |ocel| ocel.into()) {
+        Some(stats) => (StatusCode::OK, Json(Some(stats))),
+        None => (StatusCode::NOT_FOUND, Json(None)),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct AttributeStatsReq {
+    scope: AttrScope,
+    type_name: String,
+    attribute: String,
+}
+
+async fn get_loaded_ocel_attribute_stats(
+    state: State<AppState>,
+    Json(req): Json<AttributeStatsReq>,
+) -> Json<Option<OcelAttributeStats>> {
+    Json(with_ocel_from_state(&state, |ocel| {
+        get_ocel_attribute_stats(ocel, req.scope, &req.type_name, &req.attribute)
+    }))
 }
 
 async fn get_sample_ids_handler(
@@ -415,6 +447,20 @@ pub async fn evaluate_oc_declare_arcs_handler(
             .map(|arc| arc.get_for_all_evs_perf(locel))
             .collect()
     }))
+}
+/// Lossless projection of OC-DECLARE arcs onto a subset of activities: constraints reaching a kept
+/// activity through eliminated ones are folded into the survivors. Pure (no OCEL needed).
+pub async fn project_oc_declare_arcs_handler(
+    Json((arcs, activities)): Json<(Vec<OCDeclareArc>, Vec<String>)>,
+) -> Json<Vec<OCDeclareArc>> {
+    let activities: std::collections::HashSet<String> = activities.into_iter().collect();
+    Json(
+        ocpq_shared::process_mining::discovery::object_centric::oc_declare::project_oc_arcs_smart(
+            arcs,
+            &activities,
+            true,
+        ),
+    )
 }
 pub async fn get_activity_statistics_handler(
     state: State<AppState>,

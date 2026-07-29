@@ -7,6 +7,7 @@ import type {
 } from "./routes/visual-editor/helper/types";
 import type { DBTranslationInput } from "./types/DBTranslationInput";
 import type { ActivityStatistics } from "./types/generated/ActivityStatistics";
+import type { AttrScope } from "./types/generated/AttrScope";
 import type { BindingBoxTree } from "./types/generated/BindingBoxTree";
 import type { BinnedEdgeDurationStats } from "./types/generated/BinnedEdgeDurationStats";
 import type { ConnectDataSourceRequest } from "./types/generated/ConnectDataSourceRequest";
@@ -17,7 +18,9 @@ import type { EvalPageResponse } from "./types/generated/EvalPageResponse";
 import type { EvaluateBoxTreeSummary } from "./types/generated/EvaluateBoxTreeSummary";
 import type { ExecuteExtractionResponse } from "./types/generated/ExecuteExtractionResponse";
 import type { OCELGraphOptions } from "./types/generated/OCELGraphOptions";
+import type { OCELTypeStats } from "./types/generated/OCELTypeStats";
 import type { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
+import type { OcelAttributeStats } from "./types/generated/OcelAttributeStats";
 import type { PathEnumerateOptions } from "./types/generated/PathEnumerateOptions";
 import type { PathSchemaDetail } from "./types/generated/PathSchemaDetail";
 import type { PathSchemaDetailOptions } from "./types/generated/PathSchemaDetailOptions";
@@ -46,6 +49,12 @@ export function ocelUploadFormat(fileName: string): string {
 
 export type BackendProvider = {
 	"ocel/info": () => Promise<OCELInfo | undefined>;
+	"ocel/stats": () => Promise<OCELTypeStats | undefined>;
+	"ocel/attribute-stats": (
+		scope: AttrScope,
+		type: string,
+		attribute: string,
+	) => Promise<OcelAttributeStats | undefined>;
 	"ocel/sample-ids": (limit: number) => Promise<SampleIds | null>;
 	"ocel/upload"?: (file: File) => Promise<OCELInfo>;
 	"ocel/upload-from-xes"?: (file: File) => Promise<OCELInfo>;
@@ -106,6 +115,12 @@ export type BackendProvider = {
 	"get-version"?: () => Promise<string>;
 	"ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>;
 	"ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>;
+	/** Lossless projection of arcs onto a subset of activities (folds removed activities' constraints
+	 *  into the survivors). */
+	"ocel/project-oc-declare-arcs": (
+		arcs: OCDeclareArc[],
+		activities: string[],
+	) => Promise<OCDeclareArc[]>;
 	"ocel/get-activity-statistics": (activity: string) => Promise<ActivityStatistics>;
 	"ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<BinnedEdgeDurationStats>;
 	"data-source/connect": (request: ConnectDataSourceRequest) => Promise<DataSourceMetadata>;
@@ -152,6 +167,8 @@ export async function warnForNoBackendProvider<T>(): Promise<T> {
 
 export const ErrorBackendContext: BackendProvider = {
 	"ocel/info": warnForNoBackendProvider,
+	"ocel/stats": warnForNoBackendProvider,
+	"ocel/attribute-stats": warnForNoBackendProvider,
 	"ocel/sample-ids": warnForNoBackendProvider,
 	"ocel/check-constraints-box": warnForNoBackendProvider,
 	"ocel/eval-results/page": warnForNoBackendProvider,
@@ -174,6 +191,7 @@ export const ErrorBackendContext: BackendProvider = {
 	"download-blob": warnForNoBackendProvider,
 	"ocel/discover-oc-declare": warnForNoBackendProvider,
 	"ocel/evaluate-oc-declare-arcs": warnForNoBackendProvider,
+	"ocel/project-oc-declare-arcs": warnForNoBackendProvider,
 	"ocel/get-activity-statistics": warnForNoBackendProvider,
 	"ocel/get-oc-declare-edge-statistics": warnForNoBackendProvider,
 	"data-source/connect": warnForNoBackendProvider,
@@ -190,6 +208,21 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 			const res = await fetch(`${localBackendURL}/ocel/info`, {
 				method: "get",
 				headers: {},
+			});
+			return await res.json();
+		},
+		"ocel/stats": async () => {
+			const res = await fetch(`${localBackendURL}/ocel/stats`, {
+				method: "get",
+				headers: {},
+			});
+			return await res.json();
+		},
+		"ocel/attribute-stats": async (scope, type, attribute) => {
+			const res = await fetch(`${localBackendURL}/ocel/attribute-stats`, {
+				method: "post",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ scope, type_name: type, attribute }),
 			});
 			return await res.json();
 		},
@@ -331,6 +364,15 @@ export function getAPIServerBackendProvider(localBackendURL: string): BackendPro
 					method: "post",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify(arcs),
+				})
+			).json();
+		},
+		"ocel/project-oc-declare-arcs": async (arcs, activities) => {
+			return await (
+				await fetch(`${localBackendURL}/ocel/project-oc-declare-arcs`, {
+					method: "post",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify([arcs, activities]),
 				})
 			).json();
 		},
