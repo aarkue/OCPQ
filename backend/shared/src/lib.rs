@@ -36,8 +36,8 @@ pub mod oc_declare {
     pub mod statistics;
 }
 
-pub mod data_extraction;
 pub mod data_source;
+pub mod extraction;
 pub mod hpc_backend;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OCELInfo {

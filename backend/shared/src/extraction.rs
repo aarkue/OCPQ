@@ -1,10 +1,16 @@
 //! Relational-to-OCEL extraction.
 //!
 //! The blueprint model, validation, SQL compiler and row-by-row extractor all live in
-//! `process_mining::core::event_data::object_centric::extraction`; this module only adds the
+//! `process_mining::core::event_data::object_centric::extraction`; this module adds the
 //! `dbcon`-connection glue a caller running against real sources needs -- resolving a
 //! `HashMap<source_id, connection_string>` into a discovered [`ExtractionCatalog`] and a set of
-//! open [`DbconRowProvider`]s, then handing both to [`extract`].
+//! open [`DbconRowProvider`]s, then handing both to [`extract`] -- plus the request/response
+//! shapes the web-server and tauri call sites carry over their own API boundary.
+//!
+//! [`ExecuteExtractionRequest`]/[`ExecuteExtractionResponse`] stay here by design: they are API
+//! shapes, not library types. A request needs the connections a blueprint's `source_id`s resolve
+//! to in addition to the blueprint itself, since [`Blueprint`] deliberately carries no connection
+//! details of its own.
 
 use std::collections::HashMap;
 
@@ -13,11 +19,27 @@ use process_mining::core::event_data::object_centric::extraction::{
     ExtractionError, ExtractionReport, RowProvider, SlimOcelSink,
 };
 use process_mining::core::event_data::object_centric::linked_ocel::SlimLinkedOCEL;
+use serde::{Deserialize, Serialize};
 
-pub mod blueprint;
-
-pub use blueprint::{ExecuteExtractionRequest, ExecuteExtractionResponse};
 pub use process_mining::core::event_data::object_centric::extraction::Blueprint;
+
+/// A blueprint plus the connections its `source_id`s resolve to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecuteExtractionRequest {
+    pub blueprint: Blueprint,
+    /// Maps each source id the blueprint's nodes name to a `dbcon` connection string
+    /// (`postgres://...`, `sqlite:...`, or a bare path ending in `.csv`).
+    pub connections: HashMap<String, String>,
+}
+
+/// What running a blueprint produced.
+///
+/// `ExtractionReport` derives `Serialize` but not `Deserialize` (some `ExtractionError`
+/// variants carry `&'static str` fields), so this response only ever crosses the wire outbound.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExecuteExtractionResponse {
+    pub report: ExtractionReport,
+}
 
 /// Failure discovering a catalog, connecting to a source, or running an extraction against one.
 #[derive(Debug)]
@@ -87,8 +109,9 @@ fn open_providers(
 ///
 /// This is synchronous, not `async`: it blocks the calling thread for as long as discovery and
 /// extraction take. A caller running inside an async runtime (an axum handler, a tauri command)
-/// **must** wrap the call in `tokio::task::spawn_blocking` -- see the module docs on
-/// `process_mining`'s `dbcon_provider` for why calling it directly from an async context panics.
+/// **must** wrap the call in `tokio::task::spawn_blocking` (or `tauri::async_runtime::spawn_blocking`)
+/// -- see the module docs on `process_mining`'s `dbcon_provider` for why calling it directly from
+/// an async context panics.
 ///
 /// # Errors
 /// Returns [`ExtractionRunError`] if connecting to or discovering a source fails, or if the
