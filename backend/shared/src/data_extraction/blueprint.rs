@@ -27,6 +27,15 @@ impl<'a> IndexedRow<'a> {
         self.get(column).map(|v| v.to_string())
     }
 
+    /// Canonical identity rendering for id/type/endpoint/template positions. Unlike
+    /// `get_string` (Rust `Display`, where NULL renders as the literal string "NULL"),
+    /// this yields None for anything without a stable, dialect-agnostic string form, so
+    /// the caller can drop the row instead of synthesizing an identity.
+    #[inline]
+    pub fn get_id_string(&self, column: &str) -> Option<String> {
+        self.get(column).and_then(id_string)
+    }
+
     /// Get a string reference without cloning (only works for Text/Unknown variants)
     #[inline]
     pub fn get_str(&self, column: &str) -> Option<&str> {
@@ -37,6 +46,24 @@ impl<'a> IndexedRow<'a> {
     #[inline]
     pub fn get_timestamp(&self, column: &str) -> Option<&DateTime<FixedOffset>> {
         self.get(column).and_then(|v| v.as_timestamp())
+    }
+}
+
+/// Canonical identity rendering of a driver value: Text is verbatim, Integer is decimal,
+/// Boolean is "true"/"false". Everything else -- Null, Float (rounding/formatting is not
+/// dialect-stable), Timestamp (offset formatting varies), Json, Unknown -- has no
+/// canonical identity and renders as None. Used for id/type/endpoint/template positions
+/// and for virtual-table join keys; never for qualifiers or `ChangeTableCondition`.
+pub fn id_string(value: &NormalizedValue) -> Option<String> {
+    match value {
+        NormalizedValue::Text(s) => Some(s.clone()),
+        NormalizedValue::Integer(i) => Some(i.to_string()),
+        NormalizedValue::Boolean(b) => Some(if *b { "true" } else { "false" }.to_string()),
+        NormalizedValue::Float(_)
+        | NormalizedValue::Timestamp(_)
+        | NormalizedValue::Json(_)
+        | NormalizedValue::Unknown(_)
+        | NormalizedValue::Null => None,
     }
 }
 
@@ -66,11 +93,14 @@ impl ValueExpression {
     ///
     /// Returns either a constant value, a column value, or an evaluated template string
     ///
-    /// Returns None if the value references a column that is missing or null.
+    /// Column and Template positions go through `get_id_string`'s canonical identity
+    /// rendering: returns None if the referenced column is missing, null, or has no
+    /// canonical identity rendering (Float/Timestamp/Json/Unknown). A None placeholder
+    /// inside a Template makes the whole template None.
     pub fn evaluate(&self, row: &IndexedRow<'_>) -> Option<String> {
         match self {
             ValueExpression::Constant { value } => Some(value.clone()),
-            ValueExpression::Column { column } => row.get_string(column),
+            ValueExpression::Column { column } => row.get_id_string(column),
             ValueExpression::Template { template } => {
                 let mut result = template.clone();
                 let mut start = 0;
@@ -79,7 +109,7 @@ impl ValueExpression {
                     if let Some(close) = result[open_idx..].find('}') {
                         let close_idx = open_idx + close;
                         let col_name = &result[open_idx + 1..close_idx];
-                        if let Some(val) = row.get_string(col_name) {
+                        if let Some(val) = row.get_id_string(col_name) {
                             result.replace_range(open_idx..=close_idx, &val);
                             start = open_idx + val.len();
                         } else {
@@ -822,13 +852,21 @@ impl TableUsageData {
 
     /// Whether this usage mode can be processed row-by-row via `process_single_row`
     pub fn is_streaming_eligible(&self) -> bool {
-        matches!(
-            self,
+        match self {
+            // Object change tracking needs a pre-pass over all rows: a Dynamic attribute
+            // config only learns its attribute names from the data, and the object type
+            // must be declared with them before any value can be attached.
+            TableUsageData::Object {
+                attribute_config: Some(_),
+                timestamp: Some(_),
+                ..
+            } => false,
             TableUsageData::Event { .. }
-                | TableUsageData::Object { .. }
-                | TableUsageData::E2ORelation { .. }
-                | TableUsageData::O2ORelation { .. }
-        )
+            | TableUsageData::Object { .. }
+            | TableUsageData::E2ORelation { .. }
+            | TableUsageData::O2ORelation { .. } => true,
+            _ => false,
+        }
     }
 
     /// Processing order: objects (0) < events (1) < relations (2).

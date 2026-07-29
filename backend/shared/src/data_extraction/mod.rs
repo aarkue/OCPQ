@@ -4,7 +4,7 @@
 //! using a declarative blueprint that maps tables to objects, events, and relations.
 //!
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Instant;
 
 use chrono::{DateTime, FixedOffset};
@@ -20,7 +20,9 @@ use crate::data_extraction::blueprint::{
     InlineObjectReference, JoinType, TableExtractionConfig, TableUsageData, TimestampSource,
     TransformOperation, TransformSource, ValueExpression, VirtualTableConfig,
 };
+use crate::data_source::DataSourceTableInfo;
 pub mod blueprint;
+pub mod compile;
 
 pub use blueprint::{ExecuteExtractionRequest, ExecuteExtractionResponse};
 
@@ -110,6 +112,20 @@ fn maybe_prefix_id(ctx: &ExtractionContext, obj_type: &str, raw_id: String) -> S
 /// Cached result of a virtual table: column names + rows
 type VirtualTableCache = HashMap<String, (Vec<String>, Vec<Vec<NormalizedValue>>)>;
 
+/// (source_id, table_name) -> discovered schema, so `fetch_source_rows` can tell which of
+/// its `needed` columns a real table actually has. Built off `blueprint.tables`, the same
+/// list `compile.rs`'s `resolve_source` searches for a `TransformSource::Table`'s schema --
+/// the runtime `DataSource` itself (`ds.tables`) is connected via
+/// `new_any_without_discovery` and is always empty, so it can't answer this.
+type TableSchemaLookup<'a> = HashMap<(&'a str, &'a str), &'a DataSourceTableInfo>;
+
+fn build_table_schema_lookup(tables: &[TableExtractionConfig]) -> TableSchemaLookup<'_> {
+    tables
+        .iter()
+        .map(|t| ((t.source_id.as_str(), t.table_name.as_str()), &t.table_info))
+        .collect()
+}
+
 /// Topological sort of virtual tables by dependency. Returns ordered indices or error on cycle.
 fn topological_sort_virtual_tables(
     virtual_tables: &[VirtualTableConfig],
@@ -182,6 +198,7 @@ async fn fetch_source_rows(
     needed: &HashSet<String>,
     data_sources: &HashMap<String, DataSource>,
     cache: &VirtualTableCache,
+    table_schemas: &TableSchemaLookup<'_>,
 ) -> Result<(Vec<String>, Vec<Vec<NormalizedValue>>), String> {
     match source {
         TransformSource::Table {
@@ -191,21 +208,40 @@ async fn fetch_source_rows(
             let ds = data_sources
                 .get(source_id)
                 .ok_or_else(|| format!("No data source for id: {}", source_id))?;
-            // Fetch needed columns (or all if needed is empty)
-            let col_refs: Vec<&str> = needed.iter().map(|s| s.as_str()).collect();
-            let rows = ds
-                .get_all_records(table_name, &col_refs, false)
-                .await
-                .map_err(|e| format!("Failed to fetch '{}': {}", table_name, e))?;
-            // Column names: use needed set if specified, otherwise derive from first row or table metadata
+            let table_info = table_schemas
+                .get(&(source_id.as_str(), table_name.as_str()))
+                .copied();
+            // A requested column the table doesn't actually have isn't an error: SQLite's
+            // double-quoted-string fallback resolves an unknown "col" to the string
+            // literal 'col' instead of failing the query. Intersecting `needed` with the
+            // blueprint's discovered schema before fetching keeps a genuinely-absent
+            // column out of both the SELECT and `col_names`, so `apply_transform`'s Union
+            // arm sees it as absent and NULL-pads it (matching the compiler) instead of
+            // picking up that garbage literal.
             let col_names: Vec<String> = if !needed.is_empty() {
-                col_refs.iter().map(|s| s.to_string()).collect()
+                match table_info {
+                    Some(info) => needed
+                        .iter()
+                        .filter(|c| info.columns.contains_key(c.as_str()))
+                        .cloned()
+                        .collect(),
+                    // No discovered schema for this table in the blueprint -- the same
+                    // case `compile.rs` rejects at compile time (unknown table/column).
+                    // Nothing to intersect against, so fetch as requested (unchanged
+                    // pre-existing behavior).
+                    None => needed.iter().cloned().collect(),
+                }
             } else if let Some(table_info) = ds.tables.get(table_name) {
                 table_info.columns.keys().cloned().collect()
             } else {
                 // Fallback: no metadata available, columns unknown for SELECT *
                 Vec::new()
             };
+            let col_refs: Vec<&str> = col_names.iter().map(|s| s.as_str()).collect();
+            let rows = ds
+                .get_all_records(table_name, &col_refs, false)
+                .await
+                .map_err(|e| format!("Failed to fetch '{}': {}", table_name, e))?;
             Ok((col_names, rows))
         }
         TransformSource::VirtualTable { virtual_table_id } => {
@@ -237,15 +273,26 @@ async fn fetch_source_rows(
     }
 }
 
+/// Every `TransformSource` an operation reads from.
+fn operation_sources(op: &TransformOperation) -> Vec<&TransformSource> {
+    match op {
+        TransformOperation::Filter { source, .. } => vec![source],
+        TransformOperation::Join { left, right, .. } => vec![left, right],
+        TransformOperation::Union { sources } => sources.iter().collect(),
+    }
+}
+
 /// Compute the columns a virtual table needs from its sources.
-/// This is the union of: transform operation columns + downstream extractor columns.
+/// This is the union of: transform operation columns + downstream extractor columns +
+/// (recursively) whatever any other virtual table that uses this one as a source needs.
 fn compute_needed_columns(
     vt: &VirtualTableConfig,
+    virtual_tables: &[VirtualTableConfig],
     downstream_tables: &[TableExtractionConfig],
 ) -> HashSet<String> {
     let mut needed = HashSet::new();
 
-    // Columns needed by downstream extractors that reference this virtual table
+    // Columns needed by downstream extractors that reference this virtual table directly
     for table_cfg in downstream_tables {
         if table_cfg.virtual_table_id.as_deref() == Some(&vt.id) {
             for col in table_cfg.usage.required_columns() {
@@ -270,7 +317,31 @@ fn compute_needed_columns(
             }
         }
         TransformOperation::Union { .. } => {
-            // Union passes through all columns; downstream cols are sufficient
+            // Union passes its sources' columns through unchanged; whatever a consumer
+            // needs from the union, each source needs to supply too (handled below and
+            // by the direct-downstream scan above).
+        }
+    }
+
+    // Columns needed by any OTHER virtual table that uses this one as one of its own
+    // sources -- directly, or (since this recurses) transitively. A VT referenced only
+    // this way, never by a usage's own `virtual_table_id`, would otherwise compute an
+    // empty needed set here, ask `fetch_source_rows` for zero columns from its own
+    // sources, and fail (or silently under-fetch) instead of supplying what the
+    // consuming VT actually reads. `virtual_tables` is acyclic by the time this runs
+    // (`resolve_virtual_tables` checks first), so the recursion terminates.
+    for other in virtual_tables {
+        if other.id == vt.id {
+            continue;
+        }
+        let reaches_vt = operation_sources(&other.operation).into_iter().any(|s| {
+            matches!(
+                s,
+                TransformSource::VirtualTable { virtual_table_id } if virtual_table_id == &vt.id
+            )
+        });
+        if reaches_vt {
+            needed.extend(compute_needed_columns(other, virtual_tables, downstream_tables));
         }
     }
 
@@ -298,10 +369,32 @@ async fn resolve_virtual_tables(
         }
     };
 
+    let table_schemas = build_table_schema_lookup(downstream_tables);
+    // Declared column types, resolved lazily per-VT-id and memoized here across the whole
+    // run -- NOT the eager, all-or-nothing `compile::resolve_vt_schemas` (one broken VT
+    // anywhere would fail that whole batch, and `.unwrap_or_default()`-ing it to an empty
+    // map would silently disable the join-key type check for every *other*, unrelated VT
+    // too). `declared_col_type` instead calls the singular `compile::resolve_vt_schema`
+    // for just the one id it needs, so a broken VT only loses the check for its own
+    // dependents -- mirroring how `compile.rs`'s own `compile_blueprint` stays resilient
+    // per-usage rather than failing the whole compile on one bad VT.
+    let mut vt_type_schemas: BTreeMap<String, compile::VtSchema> = BTreeMap::new();
+
     for idx in order {
         let vt = &virtual_tables[idx];
-        let needed = compute_needed_columns(vt, downstream_tables);
-        match apply_transform(&vt.operation, &needed, data_sources, &cache).await {
+        let needed = compute_needed_columns(vt, virtual_tables, downstream_tables);
+        match apply_transform(
+            &vt.operation,
+            &needed,
+            data_sources,
+            &cache,
+            &table_schemas,
+            downstream_tables,
+            virtual_tables,
+            &mut vt_type_schemas,
+        )
+        .await
+        {
             Ok((cols, rows)) => {
                 let label = if vt.name.is_empty() { &vt.id } else { &vt.name };
                 println!(
@@ -321,17 +414,77 @@ async fn resolve_virtual_tables(
     cache
 }
 
+/// Render a join key from the given column indices, using the same canonical identity
+/// rendering as `ValueExpression::evaluate`. A missing column or a value with no
+/// canonical identity rendering (null, Float, Timestamp, Json, Unknown) makes the whole
+/// key None, so the row is excluded from the hash map / lookup rather than joining on a
+/// stringified sentinel (SQL inner-join null semantics).
+fn join_key(row: &[NormalizedValue], indices: &[usize]) -> Option<Vec<String>> {
+    indices
+        .iter()
+        .map(|&i| row.get(i).and_then(crate::data_extraction::blueprint::id_string))
+        .collect()
+}
+
+/// Declared type of `column` as seen through `source`, if knowable: a base-table column
+/// resolves via the blueprint's discovered schema (`table_schemas`); a virtual-table
+/// column resolves by asking `compile::resolve_vt_schema` for just that one VT id,
+/// memoized in `vt_type_schemas` (owned by `resolve_virtual_tables`, threaded through the
+/// whole run) -- so a join key sourced from a VT chain (not just a base table) is
+/// trackable too, and one unrelated broken VT elsewhere in the blueprint doesn't disable
+/// this lookup: only a failure resolving *this* id (or something it transitively depends
+/// on) does. `None` means "not knowable from declared schema" (an undeclared table/VT, a
+/// VT whose own operation is broken, or the column genuinely isn't there) -- the caller
+/// treats that as "nothing to check", the same posture `fetch_source_rows` already takes
+/// for an undeclared table (mod.rs, `col_names`).
+fn declared_col_type(
+    source: &TransformSource,
+    column: &str,
+    tables: &[TableExtractionConfig],
+    virtual_tables: &[VirtualTableConfig],
+    table_schemas: &TableSchemaLookup<'_>,
+    vt_type_schemas: &mut BTreeMap<String, compile::VtSchema>,
+) -> Option<String> {
+    match source {
+        TransformSource::Table {
+            source_id,
+            table_name,
+        } => table_schemas
+            .get(&(source_id.as_str(), table_name.as_str()))
+            .and_then(|info| info.columns.get(column))
+            .map(|c| c.col_type.clone()),
+        TransformSource::VirtualTable { virtual_table_id } => {
+            let mut in_progress = std::collections::BTreeSet::new();
+            compile::resolve_vt_schema(
+                tables,
+                virtual_tables,
+                virtual_table_id,
+                vt_type_schemas,
+                &mut in_progress,
+            )
+            .ok()
+            .and_then(|schema| schema.facts.get(column).map(|f| f.col_type.clone()))
+        }
+    }
+}
+
 /// Apply a transform operation to produce rows
+#[allow(clippy::too_many_arguments)]
 async fn apply_transform(
     operation: &TransformOperation,
     needed_columns: &HashSet<String>,
     data_sources: &HashMap<String, DataSource>,
     cache: &VirtualTableCache,
+    table_schemas: &TableSchemaLookup<'_>,
+    tables: &[TableExtractionConfig],
+    virtual_tables: &[VirtualTableConfig],
+    vt_type_schemas: &mut BTreeMap<String, compile::VtSchema>,
 ) -> Result<(Vec<String>, Vec<Vec<NormalizedValue>>), String> {
     match operation {
         TransformOperation::Filter { source, condition } => {
             let (col_names, rows) =
-                fetch_source_rows(source, needed_columns, data_sources, cache).await?;
+                fetch_source_rows(source, needed_columns, data_sources, cache, table_schemas)
+                    .await?;
             let col_refs: Vec<&str> = col_names.iter().map(|s| s.as_str()).collect();
             let col_index = build_column_index(&col_refs);
             let prepared = condition
@@ -361,64 +514,119 @@ async fn apply_transform(
                     join_type
                 ));
             }
+            // Same-declared-type join keys are a language restriction (compile.rs
+            // `RejectReason::JoinKeyTypeMismatch`), not a SQL-only one: restrict here too,
+            // so the two interpreters agree on what a join key *is* rather than the
+            // extractor silently matching e.g. Integer `1` against Text `'1'` (both
+            // render `"1"` through `id_string`) while the compiler refuses to emit that
+            // join at all. Declarative (no data touched), so this runs before fetching
+            // either side; only fires when both sides' declared types are knowable and
+            // both are of a type that actually has a canonical `id_string` rendering --
+            // an unstable type (Float/Timestamp/Json/Unknown) never renders a key at all
+            // (`join_key` returns `None` for it unconditionally), so it never observably
+            // matches regardless of the other side's type, and comparing declared types
+            // there would reject pairs the extractor's own behavior doesn't distinguish.
+            for (l, r) in on {
+                // Sequential, not a tuple literal: both calls need `&mut vt_type_schemas`,
+                // which can't be borrowed twice at once in the same expression.
+                let lt = declared_col_type(left, l, tables, virtual_tables, table_schemas, vt_type_schemas);
+                let rt = declared_col_type(right, r, tables, virtual_tables, table_schemas, vt_type_schemas);
+                if let (Some(lt), Some(rt)) = (lt, rt) {
+                    if compile::rendering_of(&lt) == compile::Rendering::Stable
+                        && compile::rendering_of(&rt) == compile::Rendering::Stable
+                        && lt != rt
+                    {
+                        return Err(format!(
+                            "Join key '{}' (declared {}) and '{}' (declared {}) have \
+                             different declared types; same-declared-type join keys are \
+                             a language restriction",
+                            l, lt, r, rt
+                        ));
+                    }
+                }
+            }
+
             let (left_cols, left_rows) =
-                fetch_source_rows(left, needed_columns, data_sources, cache).await?;
+                fetch_source_rows(left, needed_columns, data_sources, cache, table_schemas)
+                    .await?;
             let (right_cols, right_rows) =
-                fetch_source_rows(right, needed_columns, data_sources, cache).await?;
+                fetch_source_rows(right, needed_columns, data_sources, cache, table_schemas)
+                    .await?;
 
             let left_refs: Vec<&str> = left_cols.iter().map(|s| s.as_str()).collect();
             let right_refs: Vec<&str> = right_cols.iter().map(|s| s.as_str()).collect();
             let left_index = build_column_index(&left_refs);
             let right_index = build_column_index(&right_refs);
 
+            // A missing `on` column used to be silently dropped by the `filter_map`s below
+            // when building the join-key index vectors below, producing an empty join
+            // (single pair) or a positionally-misaligned wrong-column comparison (multiple
+            // pairs) instead of erroring. Validate every pair up front so a bad blueprint
+            // fails loudly, the same way a non-Inner join type already does above.
+            for (l, r) in on {
+                if !left_index.contains_key(l.as_str()) {
+                    return Err(format!(
+                        "Join 'on' column '{}' is not present in the left source",
+                        l
+                    ));
+                }
+                if !right_index.contains_key(r.as_str()) {
+                    return Err(format!(
+                        "Join 'on' column '{}' is not present in the right source",
+                        r
+                    ));
+                }
+            }
+
             let right_join_keys: HashSet<&str> = on.iter().map(|(_, r)| r.as_str()).collect();
 
             let mut out_cols: Vec<String> = left_cols.clone();
-            let mut right_col_map: Vec<String> = Vec::new();
             for rc in &right_cols {
                 let name = if left_index.contains_key(rc.as_str()) {
                     if right_join_keys.contains(rc.as_str()) {
-                        right_col_map.push(rc.clone());
                         continue;
                     }
                     format!("right_{}", rc)
                 } else {
                     rc.clone()
                 };
-                out_cols.push(name.clone());
-                right_col_map.push(name);
+                out_cols.push(name);
             }
 
-            // Build hash map from right rows on join columns
+            // Every pair validated present above, so this can no longer silently drop.
             let right_join_col_indices: Vec<usize> = on
                 .iter()
-                .filter_map(|(_, r)| right_index.get(r.as_str()).copied())
+                .map(|(_, r)| right_index.get(r.as_str()).copied().expect("validated above"))
                 .collect();
             let left_join_col_indices: Vec<usize> = on
                 .iter()
-                .filter_map(|(l, _)| left_index.get(l.as_str()).copied())
+                .map(|(l, _)| left_index.get(l.as_str()).copied().expect("validated above"))
                 .collect();
 
             let mut right_map: HashMap<Vec<String>, Vec<&Vec<NormalizedValue>>> = HashMap::new();
             for row in &right_rows {
-                let key: Vec<String> = right_join_col_indices
-                    .iter()
-                    .map(|&i| row.get(i).map(|v| v.to_string()).unwrap_or_default())
-                    .collect();
-                right_map.entry(key).or_default().push(row);
+                if let Some(key) = join_key(row, &right_join_col_indices) {
+                    right_map.entry(key).or_default().push(row);
+                }
             }
 
             let mut result_rows = Vec::new();
             for left_row in &left_rows {
-                let key: Vec<String> = left_join_col_indices
-                    .iter()
-                    .map(|&i| left_row.get(i).map(|v| v.to_string()).unwrap_or_default())
-                    .collect();
+                let Some(key) = join_key(left_row, &left_join_col_indices) else {
+                    continue;
+                };
                 if let Some(matching) = right_map.get(&key) {
                     for right_row in matching {
                         let mut combined = left_row.clone();
                         for (ri, rc) in right_cols.iter().enumerate() {
-                            if right_join_keys.contains(rc.as_str()) {
+                            // Mirror the out_cols condition exactly: a right join key is
+                            // only dropped when its name collides with a left column (SQL
+                            // JOIN...ON semantics); a differently-named key survives under
+                            // its own name and must keep its value here too, or the two
+                            // loops disagree on length and every later column misaligns.
+                            if right_join_keys.contains(rc.as_str())
+                                && left_index.contains_key(rc.as_str())
+                            {
                                 continue;
                             }
                             combined
@@ -439,8 +647,10 @@ async fn apply_transform(
             // Fetch all sources
             let mut all_sources = Vec::new();
             for src in sources {
-                all_sources
-                    .push(fetch_source_rows(src, needed_columns, data_sources, cache).await?);
+                all_sources.push(
+                    fetch_source_rows(src, needed_columns, data_sources, cache, table_schemas)
+                        .await?,
+                );
             }
 
             // Use first source's columns as base, pad others
@@ -768,7 +978,15 @@ fn process_single_row(
             inline_object_references,
         } => {
             if let (Some(ev_type), Some(ts)) = (event_type.evaluate(row), timestamp.parse(row)) {
-                let event_id = id.as_ref().and_then(|e| e.evaluate(row));
+                // `id: None` (no expression) still lets `add_event` synthesize a uuid;
+                // an expression that evaluates to None drops the row instead.
+                let event_id = match id {
+                    Some(expr) => match expr.evaluate(row) {
+                        Some(v) => Some(v),
+                        None => return,
+                    },
+                    None => None,
+                };
                 ensure_event_type(locel, &ev_type);
                 let rels = collect_inline_relations(locel, row, inline_object_references, ctx);
                 locel.add_event(&ev_type, ts, event_id, Vec::new(), rels);
@@ -1023,21 +1241,26 @@ fn process_rows(
                 for (event_type, cond) in &prepared_rules {
                     if cond.evaluate(&row) {
                         if let Some(ts) = timestamp.parse(&row) {
-                            let event_id = id
-                                .as_ref()
-                                .and_then(|e| e.evaluate(&row))
-                                .unwrap_or_else(|| {
+                            // An id expression present but evaluating to None drops the
+                            // row; only the absence of an expression falls back to the
+                            // row-order counter.
+                            let event_id = match id {
+                                Some(expr) => expr.evaluate(&row),
+                                None => {
                                     id_counter += 1;
-                                    format!("{}_{}_{}", table_name, event_type, id_counter)
-                                });
-                            let rels = collect_inline_relations(
-                                locel,
-                                &row,
-                                inline_object_references,
-                                ctx,
-                            );
-                            locel.add_event(event_type, ts, Some(event_id), Vec::new(), rels);
-                            ctx.track_event(event_type);
+                                    Some(format!("{}_{}_{}", table_name, event_type, id_counter))
+                                }
+                            };
+                            if let Some(event_id) = event_id {
+                                let rels = collect_inline_relations(
+                                    locel,
+                                    &row,
+                                    inline_object_references,
+                                    ctx,
+                                );
+                                locel.add_event(event_type, ts, Some(event_id), Vec::new(), rels);
+                                ctx.track_event(event_type);
+                            }
                         }
                         break;
                     }
@@ -1244,5 +1467,7 @@ pub async fn execute_extraction_slim_with_dbcon(
     execute_extraction(blueprint, &providers).await
 }
 
+#[cfg(test)]
+mod compile_tests;
 #[cfg(test)]
 mod tests;

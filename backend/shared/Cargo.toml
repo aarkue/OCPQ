@@ -29,5 +29,6 @@ tokio = { version = "1.43", features = ["full"] }
 rayon-cancel = "1.0.0"
 dbcon = { git = "https://github.com/aarkue/dbcon.git" }
 regex = "1.10"
+regex-syntax = "0.8"
 futures = "0.3"
 mimalloc = { version = "0.1.47", default-features = false }
