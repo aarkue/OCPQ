@@ -30,7 +30,17 @@ anyhow = "1.0.95"
 slurry = { git = "https://github.com/aarkue/slurry", features = ["ssh"], version = "0.1.7"}
 tokio = { version = "1.43", features = ["full"] }
 rayon-cancel = "1.0.0"
-dbcon = { git = "https://github.com/aarkue/dbcon.git" }
+# MACHINE-LOCAL PATH DEPENDENCY -- not a permanent arrangement. `dbcon`'s
+# `feat/backends-and-discovery` branch is not pushed, so there is no revision to pin; this goes
+# back to a `git = ...` dependency once it is. Features are mandatory now (`default = []`): a
+# featureless `dbcon` compiles but recognises no connection string, so `connect_and_get_metadata`
+# would fail on every input.
+dbcon = { path = "/home/aarkue/doc/projects/dbcon", features = [
+    "postgres",
+    "sqlite",
+    "csv",
+    "parquet",
+] }
 regex = "1.10"
 regex-syntax = "0.8"
 futures = "0.3"

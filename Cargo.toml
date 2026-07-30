@@ -9,8 +9,11 @@ members = [
 ]
 
 
-[patch.crates-io]
-sqlx = { git =  "https://github.com/aarkue/sqlx-fix.git", branch = "sqlite3-fix"}
+# There is deliberately no `[patch.crates-io]` table. It used to redirect crates.io `sqlx` to
+# `aarkue/sqlx-fix` so that the copy `dbcon` pulled in transitively through `sea-schema` agreed
+# with `rusqlite` on `libsqlite3-sys` (two versions of a `links`-declaring crate is a hard
+# resolver error). `dbcon` dropped `sea-schema` and names the fork directly, so the only
+# remaining `sqlx` in the graph is already the fork and the patch was unused.
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [profile.release.package.ocpq-web-server]
