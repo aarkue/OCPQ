@@ -15,9 +15,12 @@
 use std::collections::HashMap;
 
 use process_mining::core::event_data::object_centric::extraction::{
-    discover_catalog, extract, DbconProviderError, DbconRowProvider, ExtractionCatalog,
-    ExtractionError, ExtractionReport, RowProvider, SlimOcelSink,
+    extract, ExtractionCatalog, ExtractionError, ExtractionReport, RowProvider, SlimOcelSink,
 };
+// The `dbcon`-backed provider lives in its own crate so that `process_mining` stays publishable:
+// `dbcon` has no crates.io release, and `cargo publish` rejects any dependency without a version
+// requirement even when it is optional and feature-gated.
+use process_mining_dbcon::{discover_catalog, DbconProviderError, DbconRowProvider};
 use process_mining::core::event_data::object_centric::linked_ocel::SlimLinkedOCEL;
 use serde::{Deserialize, Serialize};
 
