@@ -7,7 +7,9 @@ export default defineConfig({
   server: {
     port: 4565,
     fs: {
-      allow: [".","../frontend"]
+      // Allow the sibling propel checkout too, for when @r4pm/components is temporarily link:ed
+      // to it instead of installed from npm.
+      allow: [".", "../frontend", path.resolve(__dirname, "../../propel")]
     }
   },
   // build: {
@@ -19,8 +21,7 @@ export default defineConfig({
       "$": path.resolve(__dirname, "../frontend/src"),
       "@": path.resolve(__dirname, "../frontend/src"),
     },
-  },
-  optimizeDeps: {
-    // exclude: ["monaco-editor","@monaco-editor/react"]
+    // React + xyflow hold React context singletons; a second copy breaks hooks/provider lookup.
+    dedupe: ["react", "react-dom", "@xyflow/react"],
   },
 });

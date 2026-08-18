@@ -75,7 +75,9 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 	const ocelInfoQuery = useOcelInfoQuery();
 	const availableOcelsQuery = useOcelAvailable();
 
-	const ocelInfo = ocelInfoQuery.data;
+	const ocelInfo = ocelInfoQuery.data ?? undefined;
+	// The query resolving at all is the liveness signal: it succeeds with null when the backend is
+	// reachable but no log is loaded yet, and only fails when the backend cannot be reached.
 	const backendAvailable = ocelInfoQuery.isSuccess;
 	const availableOcels = availableOcelsQuery.data ?? [];
 
@@ -245,13 +247,13 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 		<InfoSheetContext.Provider
 			value={{ infoSheetState: infoSheet, setInfoSheetState: setInfoSheet }}
 		>
-			<div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[13rem_auto]">
+			<div className="max-w-full overflow-hidden h-screen grid grid-cols-[13rem_auto]">
 				<Sidebar ocelInfo={ocelInfo} backendAvailable={backendAvailable}>
 					{children}
 				</Sidebar>
 				<div className="px-4 overflow-auto my-4">
 					{isAtRoot && (
-						<>
+						<div className="text-center">
 							<h2 className="text-4xl font-black mb-2">Load a Dataset</h2>
 							<p className="text-xl text-muted-foreground mb-1">
 								OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite)
@@ -260,25 +262,19 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 								XES/XES.GZ files are also supported and are interpreted with the single object type{" "}
 								<span className="font-mono italic">Case</span>.
 							</p>
-						</>
-					)}
-					{isAtRoot && (
-						<OcelFilePicker
-							loading={loading}
-							setLoading={setLoading}
-							onOcelLoaded={setOcelInfoAndNavigate}
-						/>
-					)}
-					{isAtRoot && showAvailableOcels && (
-						<OcelSelector
-							availableOcels={availableOcels}
-							loading={loading}
-							setLoading={setLoading}
-							onOcelLoaded={setOcelInfoAndNavigate}
-						/>
-					)}
-					{isAtRoot && (
-						<>
+							<OcelFilePicker
+								loading={loading}
+								setLoading={setLoading}
+								onOcelLoaded={setOcelInfoAndNavigate}
+							/>
+							{showAvailableOcels && (
+								<OcelSelector
+									availableOcels={availableOcels}
+									loading={loading}
+									setLoading={setLoading}
+									onOcelLoaded={setOcelInfoAndNavigate}
+								/>
+							)}
 							{showAvailableOcels && <div className="w-full">OR</div>}
 							<OcelDropzone
 								loading={loading}
@@ -286,7 +282,7 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 								onFileSelect={handleFileUpload}
 								onOcelLoaded={setOcelInfoAndNavigate}
 							/>
-						</>
+						</div>
 					)}
 					<Outlet />
 				</div>

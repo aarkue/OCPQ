@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ESNext",
     "useDefineForClassFields": true,
     "lib": [
-      "ES2020",
+      "es2021",
       "DOM",
-      "DOM.Iterable"
+      "DOM.Iterable",
+      "ESNext"
     ],
     "module": "ESNext",
     "skipLibCheck": true,
@@ -30,6 +31,16 @@
       "@/*": [
         "../frontend/src/*"
       ],
+      /* @r4pm/components is linked from a sibling checkout, so tsc resolves its imports of
+         "react"/"react-dom" against *that* checkout's @types copies. Two structurally-different
+         React type identities in one program make every ReactFlow/CSSProperties value cross-
+         assignment fail; pin both to this app's copies. */
+      "react": [
+        "./node_modules/@types/react"
+      ],
+      "react-dom": [
+        "./node_modules/@types/react-dom"
+      ]
     }
   },
   "include": [

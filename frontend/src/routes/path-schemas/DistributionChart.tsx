@@ -1,5 +1,5 @@
+import { ThemedPlot as Plot } from "@r4pm/components/charts";
 import { useMemo, useState } from "react";
-import Plot from "react-plotly.js";
 import { binValues, lerpRgba } from "./lib";
 import StatCard from "./StatCard";
 

@@ -8,6 +8,7 @@ import TimeDurationInput, { formatSeconds } from "@/components/TimeDurationInput
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
+import { useAttributeStats } from "@/hooks";
 import { deDupe, getNodeRelationshipSupport } from "@/lib/variable-hints";
 import type { Constraint } from "@/types/generated/Constraint";
 import type { Filter } from "@/types/generated/Filter";
@@ -586,6 +587,16 @@ registerEditor<Filter & { type: "EventAttributeValueFilter" }>(
 	function EventAttributeValueFilterEditor({ value, updateValue, availableEventVars, nodeID }) {
 		const { getTypesForVariable } = useContext(VisualEditorContext);
 		const eventTypes = getTypesForVariable(nodeID, value.event, "event");
+		const eventStatType =
+			eventTypes.find((t) => t.attributes.some((a) => a.name === value.attribute_name)) ??
+			eventTypes[0];
+		const eventAttrStat = useAttributeStats(
+			"event",
+			eventStatType?.name,
+			value.attribute_name && !value.attribute_name.startsWith("ocel:")
+				? value.attribute_name
+				: undefined,
+		).data;
 		return (
 			<div className="flex flex-wrap items-start gap-x-2 gap-y-2 pt-4">
 				<EventVarSelector
@@ -613,6 +624,7 @@ registerEditor<Filter & { type: "EventAttributeValueFilter" }>(
 				<AttributeValueFilterSelector
 					value={value.value_filter}
 					onChange={(vf) => vf !== undefined && updateValue({ ...value, value_filter: vf })}
+					stat={eventAttrStat}
 				/>
 			</div>
 		);
@@ -642,6 +654,16 @@ registerEditor<Filter & { type: "ObjectAttributeValueFilter" }>(
 	}) {
 		const { getTypesForVariable } = useContext(VisualEditorContext);
 		const objectTypes = getTypesForVariable(nodeID, value.object, "object");
+		const objectStatType =
+			objectTypes.find((t) => t.attributes.some((a) => a.name === value.attribute_name)) ??
+			objectTypes[0];
+		const objectAttrStat = useAttributeStats(
+			"object",
+			objectStatType?.name,
+			value.attribute_name && !value.attribute_name.startsWith("ocel:")
+				? value.attribute_name
+				: undefined,
+		).data;
 		return (
 			<div className="flex flex-wrap items-start gap-x-2 gap-y-2 pt-4">
 				<ObjectVarSelector
@@ -707,6 +729,7 @@ registerEditor<Filter & { type: "ObjectAttributeValueFilter" }>(
 				<AttributeValueFilterSelector
 					value={value.value_filter}
 					onChange={(vf) => vf !== undefined && updateValue({ ...value, value_filter: vf })}
+					stat={objectAttrStat}
 				/>
 			</div>
 		);

@@ -19,7 +19,7 @@ export function Sidebar({ ocelInfo, backendAvailable, children }: SidebarProps) 
 	const isAtRoot = location.pathname === "/";
 
 	return (
-		<div className="border-r border-r-slate-300 px-2 overflow-auto">
+		<div className="border-r border-r-slate-300 px-2 overflow-auto text-center">
 			<img src="/favicon.png" className="w-28 h-28 mx-auto mt-4 mb-2" alt="OCPQ Logo" />
 			<h2 className="font-black text-3xl bg-clip-text text-transparent bg-linear-to-r from-slate-800 to-sky-600 tracking-tighter">
 				OCPQ

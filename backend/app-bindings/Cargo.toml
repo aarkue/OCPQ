@@ -1,0 +1,27 @@
+[package]
+name = "app-bindings"
+version = "0.1.0"
+edition = "2021"
+
+# Every OCPQ function the frontend can call, as `#[register_binding]` wrappers over `ocpq-core`.
+# The bindings upstream already ships (extraction, path schemas, slim-OCEL accessors) are not
+# repeated here; they register themselves through `process_mining`.
+
+[dependencies]
+ocpq-core = { path = "../ocpq-core" }
+process_mining = { git = "https://github.com/aarkue/rust4pm.git", branch = "feat/extraction-blueprints", features = [
+    "bindings",
+    "extraction-blueprint",
+] }
+serde = { version = "1.0.192", features = ["derive"] }
+serde_json = "1.0.108"
+schemars = { version = "1.1.0", features = ["chrono04", "uuid1"] }
+chrono = "0.4.33"
+anyhow = "1.0.95"
+
+[features]
+default = ["bindings"]
+bindings = ["process_mining/bindings"]
+ocel-sqlite = ["ocpq-core/ocel-sqlite"]
+extraction-dbcon = ["ocpq-core/extraction-dbcon"]
+extraction-dbcon-postgres = ["ocpq-core/extraction-dbcon-postgres"]

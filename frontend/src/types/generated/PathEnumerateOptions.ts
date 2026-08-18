@@ -6,6 +6,7 @@ import type { PathTypeRef } from "./PathTypeRef";
  */
 export type PathEnumerateOptions = { source: PathTypeRef, target: PathTypeRef | null, max_length: number, 
 /**
- * Optional set of types allowed as hops / endpoints; `None` allows all.
+ * Optional set of types the intermediate steps may pass through; `None` allows all. The
+ * source and target are always permitted, so only the steps in between are constrained.
  */
 allowed_types: Array<PathTypeRef> | null, };

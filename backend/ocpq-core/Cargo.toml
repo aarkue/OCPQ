@@ -1,0 +1,64 @@
+[package]
+name = "ocpq-core"
+version = "0.1.0"
+edition = "2021"
+
+# OCPQ's domain logic: binding boxes, discovery, CEL, path schemas, DB translation, table export,
+# OCEL statistics and the extraction glue. Deliberately free of transport, process and OS state so
+# that it builds for `wasm32-unknown-unknown` as well as native. Anything needing a live SSH
+# session, a tokio runtime or an OS dialog belongs in `ocpq-native` or a transport crate.
+
+[dependencies]
+serde = { version = "1.0.192", features = ["derive", "rc"] }
+serde_json = "1.0.108"
+serde_with = "3.11.0"
+schemars = { version = "1.1.0", features = ["chrono04", "uuid1"] }
+ts-rs = { version = "12.0", features = ["serde-compat", "chrono-impl"] }
+process_mining = { git = "https://github.com/aarkue/rust4pm.git", branch = "feat/extraction-blueprints", features = [
+    "bindings",
+    "extraction-blueprint",
+] }
+rayon = "1.8.0"
+rayon-cancel = "1.0.0"
+itertools = "0.11.0"
+chrono = "0.4.33"
+uuid = "1.7.0"
+# 0.9 for the `getrandom` 0.3 line, which is the one with a `wasm32-unknown-unknown` backend.
+rand = "0.9"
+cel-interpreter = { version = "0.9.0", features = ["chrono"] }
+once_cell = "1.19.0"
+csv = "1.3.0"
+rust_xlsxwriter = { version = "0.80.0", features = ["chrono"] }
+ordered-float = { version = "4.4.0", features = ["default", "serde"] }
+anyhow = "1.0.95"
+regex = "1.10"
+regex-syntax = "0.8"
+
+# Native-only: the benchmark path of `evaluate_box_tree` dumps timings next to the user's
+# downloads, and `use_mimalloc!` is for binaries, neither of which exists on wasm.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dirs-next = "2.0.0"
+mimalloc = { version = "0.1.47", default-features = false }
+
+# `getrandom` needs both the rustflag in `.cargo/config.toml` and this feature to compile its
+# browser backend; `uuid` needs to be told where its randomness comes from. Reached through `rand`.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+uuid = { version = "1.7.0", features = ["js"] }
+
+[features]
+default = []
+# Reading and writing OCEL 2.0 SQLite. `rusqlite` links native sqlite3, so native targets only.
+ocel-sqlite = ["process_mining/ocel-sqlite"]
+# File-backed extraction sources (SQLite, CSV, Parquet). Buildable for wasm32.
+extraction-dbcon = ["process_mining/extraction-dbcon"]
+# DuckDB links a native library and has no wasm32 build, so it is opt-in like PostgreSQL.
+extraction-dbcon-duckdb = [
+    "extraction-dbcon",
+    "process_mining/extraction-dbcon-duckdb",
+]
+# Adds PostgreSQL, which pulls `sqlx`. Native targets only.
+extraction-dbcon-postgres = [
+    "extraction-dbcon",
+    "process_mining/extraction-dbcon-postgres",
+]

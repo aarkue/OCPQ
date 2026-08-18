@@ -5,6 +5,6 @@
  */
 export type PathTypeNode = { name: string, is_event: boolean, 
 /**
- * Number of entities of this type (used for top-k ranking).
+ * Number of entities of this type.
  */
 count: number, };

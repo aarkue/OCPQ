@@ -4,4 +4,11 @@ export { useBackend } from "./useBackend";
 export { useLocalStorageState } from "./useLocalStorageState";
 export { useOcelAvailable } from "./useOcelAvailable";
 export { useOcelEvent, useOcelObject } from "./useOcelElement";
-export { useInvalidateOcel, useOcelInfo, useOcelInfoQuery } from "./useOcelInfo";
+export {
+	useAttributeStats,
+	useInvalidateOcel,
+	useOcelInfo,
+	useOcelInfoQuery,
+	useOcelStats,
+	useOcelStatsQuery,
+} from "./useOcelInfo";

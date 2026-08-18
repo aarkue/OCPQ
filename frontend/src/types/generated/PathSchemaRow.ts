@@ -7,7 +7,7 @@ import type { ThroughputStats } from "./ThroughputStats";
  */
 export type PathSchemaRow = { 
 /**
- * Enumeration index (stable for given source/target/max_length); used for detail lookups.
+ * Enumeration index (stable for given source/target/max_length/allowed_types); used for detail lookups.
  */
 index: number, schema: string, source: PathTypeRef, target: PathTypeRef, length: number, support: number, coverage: number, selectivity: number, reach: number, exclusivity: number, path_count: number, is_dead: boolean, selectivity_pruned: boolean, limit_reached: boolean, 
 /**

@@ -1,587 +1,462 @@
-ocpq_shared::use_mimalloc!();
+//! Webserver target: runs OCPQ in an axum process and serves the frontend over HTTP. The API
+//! mirrors the wasm exports and the tauri commands one-to-one, so `BackendProviderContext` speaks
+//! one protocol to all three.
+
+ocpq_core::use_mimalloc!();
+
+use std::convert::Infallible;
+use std::str::FromStr;
+use std::sync::{Arc, RwLock};
 
 use axum::{
     body::Bytes,
-    extract::{DefaultBodyLimit, Path, State},
-    http::StatusCode,
+    extract::{DefaultBodyLimit, Path, Query, State},
+    http::{header, StatusCode},
+    response::sse::{Event, KeepAlive, Sse},
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use itertools::Itertools;
-use tokio::{net::TcpListener, task::JoinHandle};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::{Stream, StreamExt};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 
-use std::{
-    io::Cursor,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, RwLock,
-    },
+use backend_shared::process_mining::bindings::RegistryItemKind;
+use backend_shared::{Backend, ExtendedAppState};
+use ocpq_native::hpc_backend::{
+    get_job_status, job_is_over, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
+    ConnectionConfig, JobForwards, JobStatus, OCPQJobOptions,
 };
 
-use ocpq_shared::{
-    binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvalPageRequest,
-        EvalPageResponse, EvaluateBoxTreeResult, EvaluateBoxTreeSummary, ExportFormat,
-        FilterExportWithBoxTreeRequest,
-    },
-    data_extraction::{
-        blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
-        ExecuteExtractionResponse,
-    },
-    data_source::{connect_and_get_metadata, ConnectDataSourceRequest, DataSourceMetadata},
-    db_translation::{translate_to_sql_shared, DBTranslationInput},
-    discovery::{
-        auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
-        AutoDiscoverConstraintsResponse,
-    },
-    get_event_info, get_object_info,
-    hpc_backend::{
-        get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
-        ConnectionConfig, JobStatus, OCPQJobOptions,
-    },
-    oc_declare::statistics::{
-        get_activity_statistics, get_edge_stats, ActivityStatistics, BinnedEdgeDurationStats,
-    },
-    ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
-    path_schemas::{
-        discover_path_schemas, enumerate_path_schemas, path_type_graph, schema_detail,
-        PathEnumerateOptions, PathSchemaDetail, PathSchemaDetailOptions, PathSchemaInfo,
-        PathSchemaOptions, PathSchemaResult, PathTypeGraph,
-    },
-    process_mining::{
-        core::{
-            event_data::{
-                case_centric::xes::{import_xes_slice, XESImportOptions},
-                object_centric::{
-                    linked_ocel::{LinkedOCELAccess, SlimLinkedOCEL},
-                    ocel_json::export_ocel_json_to_vec,
-                    ocel_sql::export_ocel_sqlite_to_vec,
-                    ocel_xml::export_ocel_xml,
-                    OCELEvent, OCELObject,
-                },
-            },
-            process_models::oc_declare::OCDeclareArc,
-        },
-        discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions,
-        Importable,
-    },
-    table_export::{export_bindings_to_writer, TableExportOptions},
-    trad_event_log::trad_log_to_ocel,
-    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
-};
+// Force-link the app-bindings crate so its registry entries are included: `extern crate` alone is
+// a side-effect link that an optimising build drops, so the `#[used]` reference to a real symbol
+// pulls it in.
+extern crate app_bindings;
+#[used]
+static _FORCE_LINK_APP_BINDINGS: fn() -> String = app_bindings::app_ping;
 
-use tower_http::cors::CorsLayer;
+/// Where `/ocel/available` looks for logs to offer, and what `/ocel/load-local` loads from. A
+/// development convenience for a checkout with sample logs next to it, not part of the protocol.
+const DATA_PATH: &str = "../data/";
 
-use crate::load_ocel::{
-    get_available_ocels, load_ocel_file_req, load_ocel_file_to_state, DEFAULT_OCEL_FILE,
-};
-pub mod load_ocel;
-
-#[derive(Clone, Default)]
-pub struct AppState {
-    ocel: Arc<RwLock<Option<SlimLinkedOCEL>>>,
-    client: Arc<RwLock<Option<Client>>>,
-    jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
-    eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
-    eval_version_counter: Arc<AtomicU64>,
-}
-
-#[tokio::main]
-async fn main() {
-    let state = AppState::default();
-    let cors = CorsLayer::permissive();
-    // .allow_methods([Method::GET, Method::POST])
-    // .allow_headers([CONTENT_TYPE])
-    // .allow_origin(tower_http::cors::Any);
-
-    load_ocel_file_to_state(DEFAULT_OCEL_FILE, &state, true);
-
-    let app = Router::new()
-        .route("/ocel/load", post(load_ocel_file_req))
-        .route("/ocel/unload", post(unload_ocel))
-        .route("/ocel/info", get(get_loaded_ocel_info))
-        .route("/ocel/sample-ids", post(get_sample_ids_handler))
-        .route(
-            "/ocel/upload/:format",
-            post(upload_ocel).layer(DefaultBodyLimit::disable()),
-        )
-        .route(
-            "/ocel/upload-xes-conversion/:format",
-            post(upload_ocel_xes_conversion).layer(DefaultBodyLimit::disable()),
-        )
-        .route("/ocel/available", get(get_available_ocels))
-        .route("/ocel/graph", post(ocel_graph_req))
-        .route("/ocel/path-schemas/type-graph", get(path_type_graph_req))
-        .route(
-            "/ocel/path-schemas/enumerate",
-            post(enumerate_path_schemas_req),
-        )
-        .route(
-            "/ocel/path-schemas/discover",
-            post(discover_path_schemas_req),
-        )
-        .route("/ocel/path-schemas/schema-detail", post(schema_detail_req))
-        .route("/ocel/check-constraints-box", post(check_with_box_tree_req))
-        .route("/ocel/eval-results/page", post(eval_results_page))
-        .route("/ocel/create-db-query", post(translate_to_db_req))
-        .route(
-            "/ocel/export-filter-box",
-            post(filter_export_with_box_tree_req),
-        )
-        .route("/ocel/export", post(export_ocel_req))
-        .route(
-            "/ocel/discover-constraints",
-            post(auto_discover_constraints_handler),
-        )
-        .route(
-            "/ocel/discover-oc-declare",
-            post(auto_discover_oc_declare_handler),
-        )
-        .route(
-            "/ocel/evaluate-oc-declare-arcs",
-            post(evaluate_oc_declare_arcs_handler),
-        )
-        .route(
-            "/ocel/get-activity-statistics",
-            post(get_activity_statistics_handler),
-        )
-        .route(
-            "/ocel/get-oc-declare-edge-statistics",
-            post(get_oc_declare_edge_statistics_handler),
-        )
-        .route(
-            "/oc-declare/template-string",
-            post(async |arcs: Json<Vec<OCDeclareArc>>| {
-                arcs.0.iter().map(|arc| arc.as_template_string()).join("\n")
-            }),
-        )
-        .route(
-            "/ocel/export-bindings",
-            post(export_bindings_table).layer(DefaultBodyLimit::disable()),
-        )
-        .route("/ocel/event/:event_id", get(get_event_info_req))
-        .route("/ocel/object/:object_id", get(get_object_info_req))
-        .route("/ocel/get-event", post(get_event_req))
-        .route("/ocel/get-object", post(get_object_req))
-        .route("/hpc/login", post(login_to_hpc_web))
-        .route("/hpc/start", post(start_hpc_job_web))
-        .route("/hpc/job-status/:job_id", get(get_hpc_job_status_web))
-        .route("/data-source/connect", post(connect_data_source_handler))
-        .route("/data-extraction/execute", post(execute_extraction_handler))
-        .with_state(state)
-        .route("/", get(|| async { "Hello, Aaron!" }))
-        .layer(cors);
-    // run it with hyper on localhost:3000
-    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
-}
-
-async fn get_loaded_ocel_info(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<Option<OCELInfo>>) {
-    match with_ocel_from_state(&State(state), |ocel| ocel.into()) {
-        Some(ocel_info) => (StatusCode::OK, Json(Some(ocel_info))),
-        None => (StatusCode::NOT_FOUND, Json(None)),
-    }
-}
-
-async fn get_sample_ids_handler(
-    State(state): State<AppState>,
-    Json(req): Json<ocpq_shared::SampleIdsRequest>,
-) -> (StatusCode, Json<Option<ocpq_shared::SampleIds>>) {
-    match with_ocel_from_state(&State(state), |ocel| {
-        ocpq_shared::get_sample_ids(ocel, req.limit)
-    }) {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::NOT_FOUND, Json(None)),
-    }
-}
-
-async fn unload_ocel(State(state): State<AppState>) -> StatusCode {
-    *state.ocel.write().unwrap() = None;
-    clear_eval_res(&state);
-    StatusCode::OK
-}
-
-async fn upload_ocel(
-    State(state): State<AppState>,
-    Path(format): Path<String>,
-    ocel_bytes: Bytes,
-) -> Result<Json<OCELInfo>, (StatusCode, String)> {
-    let locel = SlimLinkedOCEL::import_from_bytes(&ocel_bytes, &format)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let ocel_info: OCELInfo = (&locel).into();
-    *state.ocel.write().unwrap() = Some(locel);
-    clear_eval_res(&state);
-    Ok(Json(ocel_info))
-}
-
-async fn upload_ocel_xes_conversion<'a>(
-    State(state): State<AppState>,
-    Path(format): Path<String>,
-    xes_bytes: Bytes,
-) -> (StatusCode, Json<OCELInfo>) {
-    let is_compressed_gz = format == ".xes.gz";
-    let xes = import_xes_slice(&xes_bytes, is_compressed_gz, XESImportOptions::default()).unwrap();
-    let ocel = trad_log_to_ocel(&xes);
-
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
-    let ocel_info: OCELInfo = (&locel).into();
-    let mut x = state.ocel.write().unwrap();
-    *x = Some(locel);
-    drop(x);
-    clear_eval_res(&state);
-    (StatusCode::OK, Json(ocel_info))
-}
-/// Drop any cached evaluation result. Must be called whenever `state.ocel` is replaced,
-/// because bindings reference indices that are only valid for the OCEL they were produced from.
-pub fn clear_eval_res(state: &AppState) {
-    *state.eval_res.write().unwrap() = None;
-}
-
-pub fn with_ocel_from_state<T, F>(State(state): &State<AppState>, f: F) -> Option<T>
-where
-    F: FnOnce(&SlimLinkedOCEL) -> T,
-{
-    let read_guard = state.ocel.read().ok()?;
-    let ocel_ref = read_guard.as_ref()?;
-    Some(f(ocel_ref))
-}
-
-pub async fn ocel_graph_req<'a>(
-    State(state): State<AppState>,
-    Json(options): Json<OCELGraphOptions>,
-) -> (StatusCode, Json<Option<OCELGraph>>) {
-    let graph = with_ocel_from_state(&State(state), |ocel| get_ocel_graph(ocel, options));
-    match graph.flatten() {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::BAD_REQUEST, Json(None)),
-    }
-}
-
-pub async fn path_type_graph_req(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<Option<PathTypeGraph>>) {
-    match with_ocel_from_state(&State(state), path_type_graph) {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::BAD_REQUEST, Json(None)),
-    }
-}
-
-pub async fn discover_path_schemas_req(
-    State(state): State<AppState>,
-    Json(options): Json<PathSchemaOptions>,
-) -> (StatusCode, Json<Option<PathSchemaResult>>) {
-    match with_ocel_from_state(&State(state), move |ocel| {
-        discover_path_schemas(ocel, options)
-    }) {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::BAD_REQUEST, Json(None)),
-    }
-}
-
-pub async fn enumerate_path_schemas_req(
-    State(state): State<AppState>,
-    Json(options): Json<PathEnumerateOptions>,
-) -> (StatusCode, Json<Option<Vec<PathSchemaInfo>>>) {
-    match with_ocel_from_state(&State(state), move |ocel| {
-        enumerate_path_schemas(ocel, options)
-    }) {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::BAD_REQUEST, Json(None)),
-    }
-}
-
-pub async fn schema_detail_req(
-    State(state): State<AppState>,
-    Json(options): Json<PathSchemaDetailOptions>,
-) -> (StatusCode, Json<Option<PathSchemaDetail>>) {
-    match with_ocel_from_state(&State(state), move |ocel| schema_detail(ocel, options)).flatten() {
-        Some(x) => (StatusCode::OK, Json(Some(x))),
-        None => (StatusCode::BAD_REQUEST, Json(None)),
-    }
-}
-
-pub async fn check_with_box_tree_req<'a>(
-    state: State<AppState>,
-    Json(req): Json<CheckWithBoxTreeRequest>,
-) -> axum::response::Result<Json<Option<EvaluateBoxTreeSummary>>, (StatusCode, String)> {
-    let mut res = {
-        let ocel_guard = state.ocel.read().unwrap();
-        let ocel = ocel_guard
-            .as_ref()
-            .ok_or((StatusCode::NOT_FOUND, "No OCEL Loaded".to_string()))?;
-        evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))
-            .map_err(|s| (StatusCode::BAD_REQUEST, s))?
+/// Which origins may read an `/api` response.
+///
+/// Not `CorsLayer::permissive()`. `/api` is one generic `POST /call` that runs any registered
+/// binding, next to `/load-local` (reads files under `DATA_PATH`) and `/hpc/login` (SSH
+/// credentials), and it has no authentication -- so with `*` any page the user happens to have open
+/// could drive the whole backend and read the answers. In production the server also serves the UI,
+/// which is same-origin and needs no CORS at all; the cross-origin cases are `vite dev` on another
+/// port and the HPC port-forward the frontend talks to, both loopback.
+///
+/// `OCPQ_ALLOWED_ORIGINS` (comma-separated, exact origins) replaces the loopback rule for a
+/// deployment that serves the UI from a different host.
+fn cors_layer() -> CorsLayer {
+    let configured: Option<Vec<String>> = std::env::var("OCPQ_ALLOWED_ORIGINS")
+        .ok()
+        .map(|v| v.split(',').map(|o| o.trim().to_string()).filter(|o| !o.is_empty()).collect());
+    let allow = match configured {
+        Some(list) if !list.is_empty() => {
+            println!("  CORS: {}", list.join(", "));
+            AllowOrigin::predicate(move |origin, _| {
+                origin.to_str().is_ok_and(|o| list.iter().any(|a| a == o))
+            })
+        }
+        // Any port, so `vite dev` and a forwarded HPC port both work without being enumerated; the
+        // host is pinned to loopback, which is what keeps a remote page out.
+        _ => AllowOrigin::predicate(|origin, _| {
+            origin.to_str().is_ok_and(|o| {
+                o.strip_prefix("http://")
+                    .map(|rest| rest.split(':').next().unwrap_or(rest))
+                    .is_some_and(|host| host == "localhost" || host == "127.0.0.1" || host == "[::1]")
+            })
+        }),
     };
-    // Hold the eval_res lock while assigning the version so the cached snapshot
-    // and the version we hand to the client are always consistent, even under
-    // concurrent evaluations.
-    let mut eval_guard = state.eval_res.write().unwrap();
-    res.eval_version = state.eval_version_counter.fetch_add(1, Ordering::SeqCst) + 1;
-    let summary = res.summary();
-    *eval_guard = Some(res);
-    Ok(Json(Some(summary)))
+    CorsLayer::new()
+        .allow_origin(allow)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any)
 }
 
-async fn eval_results_page(
-    State(state): State<AppState>,
-    Json(req): Json<EvalPageRequest>,
-) -> Result<Json<EvalPageResponse>, (StatusCode, String)> {
-    let guard = state.eval_res.read().unwrap();
-    let res = guard.as_ref().ok_or((
-        StatusCode::NOT_FOUND,
-        "No evaluation result cached".to_string(),
-    ))?;
-    match res.get_page(&req) {
-        Ok(page) => Ok(Json(page)),
-        Err(e) if e.starts_with("stale eval_version") => Err((StatusCode::GONE, e)),
-        Err(e) => Err((StatusCode::BAD_REQUEST, e)),
+#[derive(Clone)]
+struct WebBackend {
+    state: Arc<ExtendedAppState>,
+    /// Engine events fanned out to connected SSE clients as `(event name, JSON payload)`.
+    events: broadcast::Sender<(String, String)>,
+    /// The HPC session, and the port forwards opened for jobs submitted through it.
+    hpc_client: Arc<RwLock<Option<Client>>>,
+    hpc_jobs: Arc<JobForwards>,
+}
+
+impl Default for WebBackend {
+    fn default() -> Self {
+        let (events, _) = broadcast::channel(256);
+        Self {
+            state: Arc::new(ExtendedAppState::default()),
+            events,
+            hpc_client: Arc::new(RwLock::new(None)),
+            hpc_jobs: Arc::new(JobForwards::default()),
+        }
     }
 }
 
-pub async fn export_ocel_req(
-    state: State<AppState>,
-    Json(format): Json<ExportFormat>,
-) -> (StatusCode, Bytes) {
-    with_ocel_from_state(&state, |ocel| {
-        let full_ocel = ocel.construct_ocel();
-        let bytes = match format {
-            ExportFormat::XML => {
-                let mut w = Cursor::new(Vec::new());
-                export_ocel_xml(&mut w, &full_ocel).unwrap();
-                Bytes::from(w.into_inner())
-            }
-            ExportFormat::JSON => Bytes::from(export_ocel_json_to_vec(&full_ocel).unwrap()),
-            ExportFormat::SQLITE => Bytes::from(export_ocel_sqlite_to_vec(&full_ocel).unwrap()),
-        };
-        (StatusCode::OK, bytes)
+impl Backend for WebBackend {
+    fn get_state(&self) -> &ExtendedAppState {
+        &self.state
+    }
+    fn emit<S: Serialize + Clone>(&self, name: &str, data: S) -> Result<(), String> {
+        let json = serde_json::to_string(&data).map_err(|e| e.to_string())?;
+        // Best-effort: zero connected SSE clients (no subscribers) is not an error.
+        let _ = self.events.send((name.to_string(), json));
+        Ok(())
+    }
+}
+
+/// Map a backend `Result<_, String>` error into a 500 with the message as the body text.
+fn err(e: String) -> (StatusCode, String) {
+    (StatusCode::INTERNAL_SERVER_ERROR, e)
+}
+
+#[derive(Deserialize)]
+struct CallReq {
+    id: String,
+    args: Value,
+    #[serde(default)]
+    output_name: Option<String>,
+}
+
+/// The one route every binding is reached through. `execute_binding` is synchronous CPU work (and
+/// the `dbcon`-backed extraction bindings own a runtime of their own), so it goes to the blocking
+/// pool rather than stalling a reactor thread.
+async fn call(
+    State(b): State<WebBackend>,
+    Json(req): Json<CallReq>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let bytes = tokio::task::spawn_blocking(move || {
+        backend_shared::execute_binding(&b, &req.id, &req.args, req.output_name.as_deref())
     })
-    .unwrap_or((StatusCode::INTERNAL_SERVER_ERROR, Bytes::default()))
+    .await
+    .map_err(|e| err(e.to_string()))?
+    .map_err(err)?;
+    Ok(([(header::CONTENT_TYPE, "application/json")], bytes))
 }
 
-pub async fn filter_export_with_box_tree_req<'a>(
-    state: State<AppState>,
-    Json(req): Json<FilterExportWithBoxTreeRequest>,
-) -> (StatusCode, Bytes) {
-    with_ocel_from_state(&state, |ocel| {
-        let res = filter_ocel_box_tree(req.tree, ocel).unwrap();
-        let bytes = match req.export_format {
-            ExportFormat::XML => {
-                let inner = Vec::new();
-                let mut w = Cursor::new(inner);
-                export_ocel_xml(&mut w, &res).unwrap();
-                Bytes::from(w.into_inner())
-            }
-            ExportFormat::JSON => {
-                let res = export_ocel_json_to_vec(&res).unwrap();
-                Bytes::from(res)
-            }
-            ExportFormat::SQLITE => {
-                let res = export_ocel_sqlite_to_vec(&res).unwrap();
-                Bytes::from(res)
-            }
-        };
-        (StatusCode::OK, bytes)
+async fn functions() -> impl IntoResponse {
+    Json(backend_shared::list_functions())
+}
+
+async fn item_kinds() -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok(Json(backend_shared::get_all_item_kinds().map_err(err)?))
+}
+
+async fn objects(State(b): State<WebBackend>) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok(Json(
+        backend_shared::get_objects_with_type(&b).map_err(err)?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct SetLabelParams {
+    id: String,
+    label: Option<String>,
+}
+
+async fn set_label(
+    State(b): State<WebBackend>,
+    Query(p): Query<SetLabelParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    backend_shared::set_object_label(&b, p.id, p.label).map_err(err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct RenameParams {
+    from: String,
+    to: String,
+}
+
+async fn rename(
+    State(b): State<WebBackend>,
+    Query(p): Query<RenameParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    backend_shared::rename_object(&b, &p.from, &p.to).map_err(err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct LoadParams {
+    id: String,
+    kind: String,
+    format: String,
+}
+
+async fn load(
+    State(b): State<WebBackend>,
+    Query(p): Query<LoadParams>,
+    data: Bytes,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let kind = RegistryItemKind::from_str(&p.kind)
+        .map_err(|_| (StatusCode::BAD_REQUEST, format!("Unknown item kind: {}", p.kind)))?;
+    tokio::task::spawn_blocking(move || {
+        backend_shared::load_item_bytes(&b, p.id, &kind, &data, &p.format)
     })
-    .unwrap_or((StatusCode::INTERNAL_SERVER_ERROR, Bytes::default()))
+    .await
+    .map_err(|e| err(e.to_string()))?
+    .map_err(err)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn auto_discover_constraints_handler<'a>(
-    state: State<AppState>,
-    Json(req): Json<AutoDiscoverConstraintsRequest>,
-) -> Json<Option<AutoDiscoverConstraintsResponse>> {
-    Json(with_ocel_from_state(&state, |ocel| {
-        auto_discover_constraints_with_options(ocel, req)
-    }))
+#[derive(Deserialize)]
+struct ExportParams {
+    name: String,
+    format: String,
 }
 
-pub async fn auto_discover_oc_declare_handler(
-    state: State<AppState>,
-    Json(req): Json<OCDeclareDiscoveryOptions>,
-) -> Json<Option<Vec<OCDeclareArc>>> {
-    Json(with_ocel_from_state(&state, |locel| {
-        ocpq_shared::process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints(locel, req)
-    }))
-}
-pub async fn evaluate_oc_declare_arcs_handler(
-    state: State<AppState>,
-    Json(req): Json<Vec<OCDeclareArc>>,
-) -> Json<Option<Vec<f64>>> {
-    Json(with_ocel_from_state(&state, |locel| {
-        req.iter()
-            .map(|arc| arc.get_for_all_evs_perf(locel))
-            .collect()
-    }))
-}
-pub async fn get_activity_statistics_handler(
-    state: State<AppState>,
-    Json(req): Json<String>,
-) -> Json<Option<ActivityStatistics>> {
-    Json(with_ocel_from_state(&state, |ocel| {
-        get_activity_statistics(ocel, &req)
-    }))
-}
-pub async fn get_oc_declare_edge_statistics_handler(
-    state: State<AppState>,
-    Json(req): Json<OCDeclareArc>,
-) -> Json<Option<BinnedEdgeDurationStats>> {
-    Json(with_ocel_from_state(&state, |ocel| {
-        get_edge_stats(ocel, &req)
-    }))
+async fn export(
+    State(b): State<WebBackend>,
+    Query(p): Query<ExportParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let bytes = tokio::task::spawn_blocking(move || {
+        backend_shared::export_object(&b, &p.name, &p.format)
+    })
+    .await
+    .map_err(|e| err(e.to_string()))?
+    .map_err(err)?;
+    Ok(([(header::CONTENT_TYPE, "application/octet-stream")], bytes))
 }
 
-pub async fn translate_to_db_req(Json(req): Json<DBTranslationInput>) -> String {
-    translate_to_sql_shared(req)
+#[derive(Deserialize)]
+struct UnloadParams {
+    name: String,
 }
 
-pub async fn export_bindings_table(
-    state: State<AppState>,
-    Json((node_index, table_options)): Json<(usize, TableExportOptions)>,
-) -> (StatusCode, Bytes) {
-    if let Some(ocel) = state.ocel.read().unwrap().as_ref() {
-        if let Some(eval_res) = state.eval_res.read().unwrap().as_ref() {
-            if let Some(node_eval_res) = eval_res.evaluation_results.get(node_index) {
-                let inner = Vec::new();
-                let mut w: Cursor<Vec<u8>> = Cursor::new(inner);
-                export_bindings_to_writer(ocel, node_eval_res, &mut w, &table_options).unwrap();
-                let b = Bytes::from(w.into_inner());
-                return (StatusCode::OK, b);
+async fn unload(
+    State(b): State<WebBackend>,
+    Query(p): Query<UnloadParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    backend_shared::unload_object(&b, p.name).map_err(err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct LoadArtifactParams {
+    id: String,
+    kind: String,
+    format: String,
+}
+
+async fn load_artifact(
+    State(b): State<WebBackend>,
+    Query(p): Query<LoadArtifactParams>,
+    data: Bytes,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    backend_shared::load_artifact_bytes(&b, p.id, &p.kind, &data, &p.format).map_err(err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn artifacts(State(b): State<WebBackend>) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok(Json(backend_shared::list_artifacts(&b).map_err(err)?))
+}
+
+#[derive(Deserialize)]
+struct ArtifactParams {
+    id: String,
+}
+
+async fn artifact(
+    State(b): State<WebBackend>,
+    Query(p): Query<ArtifactParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    Ok(Json(backend_shared::get_artifact(&b, &p.id).map_err(err)?))
+}
+
+async fn unload_artifact(
+    State(b): State<WebBackend>,
+    Query(p): Query<ArtifactParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    backend_shared::unload_artifact(&b, p.id).map_err(err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct ExportArtifactParams {
+    id: String,
+    format: String,
+}
+
+async fn export_artifact(
+    State(b): State<WebBackend>,
+    Query(p): Query<ExportArtifactParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let bytes = backend_shared::export_artifact(&b, &p.id, &p.format).map_err(err)?;
+    Ok(([(header::CONTENT_TYPE, "application/octet-stream")], bytes))
+}
+
+/// Server-Sent Events stream of engine events (`objects-changed`, `*-import-finished`, ...), so the
+/// http transport live-reconciles like wasm and tauri. Each engine `emit` is forwarded as a named
+/// SSE event.
+async fn events(State(b): State<WebBackend>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let stream = BroadcastStream::new(b.events.subscribe()).filter_map(|msg| {
+        msg.ok()
+            .map(|(name, json)| Ok(Event::default().event(name).data(json)))
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+/// Logs sitting next to the checkout, offered so a developer can load one without an upload.
+async fn available_local(
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
+    let mut names: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(DATA_PATH) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".json") || name.ends_with(".xml") || name.ends_with(".sqlite") {
+                names.push(name);
             }
         }
     }
-    (StatusCode::NOT_FOUND, Bytes::default())
+    names.sort();
+    Ok(Json(names))
 }
 
-pub async fn get_event_info_req<'a>(
-    state: State<AppState>,
-    Path(event_id): Path<String>,
-) -> Json<Option<OCELEvent>> {
-    Json(
-        with_ocel_from_state(&state, |ocel| {
-            ocel.get_ev_by_id(event_id)
-                .map(|e_index| ocel.get_full_ev(&e_index).into_owned())
-        })
-        .unwrap_or_default(),
-    )
-}
-pub async fn get_object_info_req<'a>(
-    state: State<AppState>,
-    Path(object_id): Path<String>,
-) -> Json<Option<OCELObject>> {
-    Json(
-        with_ocel_from_state(&state, |ocel| {
-            ocel.get_ob_by_id(&object_id)
-                .map(|o_index| ocel.get_full_ob(&o_index).into_owned())
-        })
-        .unwrap_or_default(),
-    )
+#[derive(Deserialize)]
+struct LoadLocalParams {
+    id: String,
+    kind: String,
+    name: String,
 }
 
-async fn get_event_req<'a>(
-    state: State<AppState>,
-    Json(req): Json<IndexOrID>,
-) -> Json<Option<EventWithIndex>> {
-    let res = with_ocel_from_state(&state, |ocel| get_event_info(ocel, req)).flatten();
-
-    Json(res)
+/// Load one of the logs `available_local` listed, by name rather than by upload.
+async fn load_local(
+    State(b): State<WebBackend>,
+    Json(p): Json<LoadLocalParams>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Reject anything that could escape the data directory: this takes a name, not a path.
+    if p.name.contains('/') || p.name.contains('\\') || p.name.contains("..") {
+        return Err((StatusCode::BAD_REQUEST, format!("Invalid name: {}", p.name)));
+    }
+    let kind = RegistryItemKind::from_str(&p.kind)
+        .map_err(|_| (StatusCode::BAD_REQUEST, format!("Unknown item kind: {}", p.kind)))?;
+    let path = format!("{DATA_PATH}{}", p.name);
+    tokio::task::spawn_blocking(move || backend_shared::load_item_path(&b, p.id, &kind, &path))
+        .await
+        .map_err(|e| err(e.to_string()))?
+        .map_err(err)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
-async fn get_object_req<'a>(
-    state: State<AppState>,
-    Json(req): Json<IndexOrID>,
-) -> Json<Option<ObjectWithIndex>> {
-    let res = with_ocel_from_state(&state, |ocel| get_object_info(ocel, req)).flatten();
-
-    Json(res)
-}
-
-async fn login_to_hpc_web<'a>(
-    State(state): State<AppState>,
+async fn hpc_login(
+    State(b): State<WebBackend>,
     Json(cfg): Json<ConnectionConfig>,
-) -> Result<Json<()>, (StatusCode, String)> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let client = login_on_hpc(&cfg)
         .await
-        .map_err(|er| (StatusCode::UNAUTHORIZED, er.to_string()))?;
-    let mut x = state.client.write().unwrap();
-    *x = Some(client);
-
-    Ok(Json(()))
+        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
+    *b.hpc_client.write().unwrap() = Some(client);
+    Ok(StatusCode::NO_CONTENT)
 }
 
-async fn start_hpc_job_web(
-    State(state): State<AppState>,
+async fn hpc_start(
+    State(b): State<WebBackend>,
     Json(options): Json<OCPQJobOptions>,
 ) -> Result<Json<String>, (StatusCode, String)> {
-    let x = state.client.write().unwrap().clone().unwrap();
-    let c = Arc::new(x);
-    let c2 = Arc::clone(&c);
+    let client = b
+        .hpc_client
+        .read()
+        .unwrap()
+        .clone()
+        .ok_or((StatusCode::UNAUTHORIZED, "Not logged in to HPC".to_string()))?;
     let port: u16 = options
         .port
-        .parse::<u16>()
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let (_folder_id, job_id) = submit_hpc_job(c, options)
+        .parse()
+        .map_err(|e: std::num::ParseIntError| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let client = Arc::new(client);
+    let (_folder_id, job_id) = submit_hpc_job(Arc::clone(&client), options)
         .await
-        .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
-    let p = start_port_forwarding(
-        c2,
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let forward = start_port_forwarding(
+        client,
         &format!("127.0.0.1:{port}"),
         &format!("127.0.0.1:{port}"),
     )
     .await
-    .map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
-
-    state.jobs.write().unwrap().push((job_id.clone(), port, p));
+    .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    b.hpc_jobs.insert(job_id.clone(), port, forward);
     Ok(Json(job_id))
 }
 
-async fn get_hpc_job_status_web(
-    State(state): State<AppState>,
+async fn hpc_job_status(
+    State(b): State<WebBackend>,
     Path(job_id): Path<String>,
 ) -> Result<Json<JobStatus>, (StatusCode, String)> {
-    let x = state.client.write().unwrap().clone().unwrap();
-    let c = Arc::new(x);
-    let status = get_job_status(c, job_id).await;
-    let status = status.map_err(|er| (StatusCode::BAD_REQUEST, er.to_string()))?;
+    let client = b
+        .hpc_client
+        .read()
+        .unwrap()
+        .clone()
+        .ok_or((StatusCode::UNAUTHORIZED, "Not logged in to HPC".to_string()))?;
+    let status = get_job_status(Arc::new(client), job_id.clone())
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    // Polling this is the only signal either target gets that a job is done, so it is where the
+    // forward is closed; otherwise the task keeps holding its local port for the process lifetime.
+    if job_is_over(&status) {
+        b.hpc_jobs.release(&job_id);
+    }
     Ok(Json(status))
 }
 
-async fn connect_data_source_handler(
-    Json(req): Json<ConnectDataSourceRequest>,
-) -> Result<Json<DataSourceMetadata>, (StatusCode, String)> {
-    let metadata = connect_and_get_metadata(req)
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    Ok(Json(metadata))
-}
+#[tokio::main]
+async fn main() {
+    let state = WebBackend::default();
 
-async fn execute_extraction_handler(
-    State(state): State<AppState>,
-    Json(req): Json<ExecuteExtractionRequest>,
-) -> Result<Json<ExecuteExtractionResponse>, (StatusCode, String)> {
-    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
-        .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let api = Router::new()
+        .route("/call", post(call))
+        .route("/functions", get(functions))
+        .route("/item-kinds", get(item_kinds))
+        .route("/objects", get(objects))
+        .route("/set-label", post(set_label))
+        .route("/rename", post(rename))
+        .route("/load", post(load))
+        .route("/export", get(export))
+        .route("/unload", post(unload))
+        .route("/load-artifact", post(load_artifact))
+        .route("/artifacts", get(artifacts))
+        .route("/artifact", get(artifact))
+        .route("/unload-artifact", post(unload_artifact))
+        .route("/export-artifact", get(export_artifact))
+        .route("/events", get(events))
+        .route("/available-local", get(available_local))
+        .route("/load-local", post(load_local))
+        .route("/hpc/login", post(hpc_login))
+        .route("/hpc/start", post(hpc_start))
+        .route("/hpc/job-status/:job_id", get(hpc_job_status))
+        .layer(DefaultBodyLimit::disable());
 
-    *state.ocel.write().unwrap() = Some(locel);
-    clear_eval_res(&state);
-    Ok(Json(response))
-}
+    // Built frontend assets. Overridable for deployment; defaults to the in-repo build output.
+    let dist = std::env::var("OCPQ_DIST")
+        .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../frontend/dist").into());
+    let index = format!("{dist}/index.html");
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    let app = Router::new()
+        .nest("/api", api)
+        // SPA: serve static files, falling back to index.html for client-side routes.
+        .fallback_service(ServeDir::new(&dist).not_found_service(ServeFile::new(index)))
+        .layer(cors_layer())
+        .with_state(state);
 
-    #[test]
-    fn clear_eval_res_drops_cached_result() {
-        let state = AppState::default();
-        *state.eval_res.write().unwrap() = Some(EvaluateBoxTreeResult::default());
-        assert!(state.eval_res.read().unwrap().is_some());
-
-        clear_eval_res(&state);
-
-        assert!(state.eval_res.read().unwrap().is_none());
-    }
+    let port: u16 = std::env::var("OCPQ_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(3000);
+    // Loopback by default. `/api` is unauthenticated and `/call` runs any registered binding, so
+    // reaching it from the network is opt-in via `OCPQ_BIND` rather than the default.
+    let host = std::env::var("OCPQ_BIND").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let addr = format!("{host}:{port}");
+    println!("ocpq webserver on http://{addr}  (serving {dist})");
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }

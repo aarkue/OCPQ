@@ -1,82 +1,73 @@
+import { AttributeValueStats, OCELCountInfo } from "@r4pm/components";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { LuDownload, LuTrash2 } from "react-icons/lu";
-import { RxArrowRight } from "react-icons/rx";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { R4pmIsland } from "@/components/r4pm/R4pmIsland";
 import { Button } from "@/components/ui/button";
 import { useBackend } from "@/hooks";
-import { useInvalidateOcel, useOcelInfo } from "@/hooks/useOcelInfo";
-import OcelTypeViewer from "./OcelTypeViewer";
+import {
+	useAttributeStats,
+	useInvalidateOcel,
+	useOcelInfo,
+	useOcelStats,
+} from "@/hooks/useOcelInfo";
+
+function AttrStatsDetail({
+	scope,
+	type,
+	attr,
+}: {
+	scope: "event" | "object";
+	type: string;
+	attr: string;
+}) {
+	const stat = useAttributeStats(scope, type, attr).data;
+	return (
+		<div className="mt-2 border-t pt-3">
+			<div className="text-sm font-semibold mb-1">
+				{type} - {attr}
+			</div>
+			{stat ? (
+				<AttributeValueStats stat={stat} />
+			) : (
+				<div className="text-sm text-muted-foreground">Loading...</div>
+			)}
+		</div>
+	);
+}
 
 export default function OcelInfoViewer() {
 	const ocelInfo = useOcelInfo();
+	const ocelStats = useOcelStats();
 	if (ocelInfo == null || ocelInfo === undefined) {
 		return <div>No Info!</div>;
 	}
 	return (
 		<div className="my-4 text-lg text-left">
 			<h2 className="text-4xl font-black">OCEL Info</h2>
-			<p className="text-muted-foreground flex flex-col  leading-tight mt-2">
-				<span>{ocelInfo.num_events} Events</span>
-				<span>{ocelInfo.num_objects} Objects</span>
+			<p className="text-muted-foreground flex flex-col leading-tight mt-2">
+				<span>{ocelInfo.event_types.length} Event Types</span>
+				<span>{ocelInfo.object_types.length} Object Types</span>
 			</p>
-			<div className="font-medium mt-4 mb-3 bg-fuchsia-50 p-3 rounded border border-fuchsia-100">
-				<h3 className="font-black text-2xl">What do you want to do?</h3>
-				<div className="ml-2">
-					<p>
-						Create custom queries to freely explore the dataset.
-						<span className="text-sm italic font-normal mb-1 block">
-							How many orders are delivered late? Which customers have the most payment reminders?
-						</span>
-					</p>
-					<Link to="/constraints">
-						<Button className=" h-12 text-xl  bg-purple-700 text-white font-bold cursor-pointer hover:bg-purple-600">
-							{" "}
-							<RxArrowRight className="mr-2" />
-							OCPQ Query Editor
-						</Button>
-					</Link>
+			{ocelStats && (
+				<div className="mt-4 mb-3">
+					<R4pmIsland>
+						<OCELCountInfo
+							data={ocelStats}
+							attributes={{
+								event: Object.fromEntries(ocelInfo.event_types.map((t) => [t.name, t.attributes])),
+								object: Object.fromEntries(
+									ocelInfo.object_types.map((t) => [t.name, t.attributes]),
+								),
+							}}
+							renderAttributeDetail={(scope, type, attr) => (
+								<AttrStatsDetail scope={scope} type={type} attr={attr} />
+							)}
+						/>
+					</R4pmIsland>
 				</div>
-				<div className="ml-2">
-					<p className="mt-2">
-						Discover and analyze behavioral patterns.
-						<span className="text-sm italic font-normal mb-1 block">
-							What happens after an order is placed? Is the same employee placing an order also
-							confirming it?
-						</span>
-					</p>
-					<Link to="/oc-declare">
-						<Button className="h-12 text-xl bg-emerald-600 text-white font-bold cursor-pointer hover:bg-emerald-500">
-							{" "}
-							<RxArrowRight className="mr-2" /> OC-DECLARE
-						</Button>
-					</Link>
-				</div>
-			</div>
-			<div className="grid grid-cols-[1fr_1fr] gap-x-2 mb-2">
-				<div className="bg-green-100 py-2 px-2 rounded-lg shadow border border-emerald-200">
-					<h3 className="text-2xl font-semibold">
-						Event Types{" "}
-						<span className="text-gray-600 text-xl ml-2">{ocelInfo.event_types.length}</span>
-					</h3>
-					<div className="flex flex-wrap">
-						{ocelInfo.event_types.map((et) => (
-							<OcelTypeViewer key={et.name} typeInfo={et} type="event" />
-						))}
-					</div>
-				</div>
-				<div className="bg-blue-100 py-2 px-2 rounded-lg shadow border border-sky-200">
-					<h3 className="text-2xl font-semibold">
-						Object Types{" "}
-						<span className="text-gray-600 text-xl ml-2">{ocelInfo.object_types.length}</span>
-					</h3>
-					<div className="flex flex-wrap">
-						{ocelInfo.object_types.map((et) => (
-							<OcelTypeViewer key={et.name} typeInfo={et} type="object" />
-						))}
-					</div>
-				</div>
-			</div>
+			)}
 			<ExportOcelSection />
 			<UnloadOcelSection />
 		</div>

@@ -1,6 +1,8 @@
+import { ActivityChooser, ObjectTypeChooser } from "@r4pm/components";
 import { useContext, useState } from "react";
 import { LuAsterisk, LuPlus } from "react-icons/lu";
 import FilterLabelIcon from "@/components/FilterLabelIcon";
+import { R4pmIsland } from "@/components/r4pm/R4pmIsland";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -14,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import MultiSelect from "@/components/ui/multi-select";
+import { useOcelStats } from "@/hooks";
 import type { BindingBox } from "@/types/generated/BindingBox";
 import type { EventVariable } from "@/types/generated/EventVariable";
 import type { FilterLabel } from "@/types/generated/FilterLabel";
@@ -32,6 +34,7 @@ export default function NewVariableChooser({
 	updateBox: (box: BindingBox) => unknown;
 }) {
 	const { ocelInfo, getAvailableVars, getVarName } = useContext(VisualEditorContext);
+	const ocelStats = useOcelStats();
 	const [alertState, setAlertState] = useState<
 		{
 			variant: "event" | "object";
@@ -259,20 +262,37 @@ export default function NewVariableChooser({
 											: getVarName(alertState.key, "event").name
 									}`}
 								/>
-								<MultiSelect
-									options={(alertState?.variant === "object"
-										? ocelInfo.object_types
-										: ocelInfo.event_types
-									).map((t) => ({
-										label: t.name,
-										value: t.name,
-									}))}
-									placeholder={""}
-									defaultValue={alertState.value}
-									onValueChange={(value: string[]) => {
-										setAlertState({ ...alertState, value });
-									}}
-								/>
+								<R4pmIsland>
+									{alertState?.variant === "object" ? (
+										<ObjectTypeChooser
+											counts={
+												ocelStats?.object_type_counts ??
+												Object.fromEntries(ocelInfo.object_types.map((t) => [t.name, 0]))
+											}
+											value={new Set(alertState.value)}
+											onChange={(next) =>
+												setAlertState((s) => (s ? { ...s, value: [...next] } : s))
+											}
+											mode="multi"
+											searchable
+											showCutoff={false}
+										/>
+									) : (
+										<ActivityChooser
+											counts={
+												ocelStats?.event_type_counts ??
+												Object.fromEntries(ocelInfo.event_types.map((t) => [t.name, 0]))
+											}
+											value={new Set(alertState.value)}
+											onChange={(next) =>
+												setAlertState((s) => (s ? { ...s, value: [...next] } : s))
+											}
+											mode="multi"
+											searchable
+											showCutoff={false}
+										/>
+									)}
+								</R4pmIsland>
 							</div>
 						</AlertDialogHeader>
 						<AlertDialogFooter>

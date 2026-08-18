@@ -2,15 +2,47 @@
 resolver = "2"
 
 members = [
-	"backend/shared",
+  "backend/ocpq-core",
+  "backend/app-bindings",
+  "backend/backend-shared",
+  "backend/ocpq-native",
+  "backend/meta-gen",
+  "backend/wasm",
   "backend/web-server",
   "backend/ocpq_cli",
-  "tauri/src-tauri/"
+  "tauri/src-tauri/",
+]
+# `tauri/src-tauri` needs system GUI libs (build it via `cargo tauri build`), `wasm` only builds
+# for wasm32, and `meta-gen` is a codegen tool. None belong in a plain `cargo check` of the tree.
+default-members = [
+  "backend/ocpq-core",
+  "backend/app-bindings",
+  "backend/backend-shared",
+  "backend/ocpq-native",
+  "backend/web-server",
+  "backend/ocpq_cli",
 ]
 
 
-[patch.crates-io]
-sqlx = { git =  "https://github.com/aarkue/sqlx-fix.git", branch = "sqlite3-fix"}
+# LOCAL DEVELOPMENT ONLY -- DO NOT COMMIT THIS BLOCK.
+#
+# Builds against the working copy of rust4pm rather than the revision the git declarations name, so
+# `meta-gen` sees bindings as they are written and the generated frontend client stays in step.
+#
+# The path is absolute and specific to one machine, so a commit carrying it fails every build that
+# is not this checkout -- including `cli-build.yml` and `tauri-build-app.yml`, which run on GitHub
+# runners and fire on a `v*` tag. It is therefore deliberately kept out of the index: the file is
+# expected to stay modified-but-unstaged. Check with `git diff --cached Cargo.toml` before a release
+# and drop the block entirely once the rust4pm branch is merged and the deps name a rev or tag.
+[patch."https://github.com/aarkue/rust4pm.git"]
+process_mining = { path = "../rust4pm/process_mining" }
+macros_process_mining = { path = "../rust4pm/macros_process_mining" }
+
+# Same reason, and same DO-NOT-COMMIT rule: `extraction-dbcon-duckdb` names `dbcon/duckdb`, a
+# feature the pinned rev does not have yet. Remove this once dbcon's DuckDB backend is pushed and
+# rust4pm's `rev =` is bumped past it.
+[patch."https://github.com/aarkue/dbcon.git"]
+dbcon = { path = "../dbcon" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [profile.release.package.ocpq-web-server]

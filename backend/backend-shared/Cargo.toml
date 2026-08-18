@@ -1,0 +1,45 @@
+[package]
+name = "backend-shared"
+version = "0.1.0"
+edition = "2021"
+
+# The transport-agnostic half of every OCPQ backend: the item registry every binding resolves its
+# arguments from, the `Backend` trait a target implements to supply state and events, and the
+# generic entry points (`execute_binding`, `list_functions`, load/export/unload) that the axum
+# server, the tauri app and the wasm build all expose verbatim.
+#
+# Which `process_mining` backends are compiled in is decided here rather than in `ocpq-core`,
+# because the answer differs per target: the wasm build cannot have `rusqlite` or `sqlx`.
+
+[dependencies]
+ocpq-core = { path = "../ocpq-core" }
+process_mining ={ git = "https://github.com/aarkue/rust4pm.git", branch = "feat/extraction-blueprints", features = [
+    "bindings",
+    "extraction-blueprint",
+] }
+serde = { version = "1.0.192", features = ["derive"] }
+serde_json = "1.0.108"
+schemars = { version = "1.1.0", features = ["chrono04", "uuid1"] }
+
+[features]
+default = ["bindings"]
+# Present so the `#[register_binding]` macro's `cfg(feature = "bindings")` gate resolves here too;
+# `process_mining/bindings` is already forced by the dependency above.
+bindings = ["process_mining/bindings"]
+# OCEL 2.0 SQLite import/export. Links native sqlite3, so native targets only.
+ocel-sqlite = ["ocpq-core/ocel-sqlite", "process_mining/ocel-sqlite"]
+# File-backed extraction sources: SQLite, CSV and Parquet, all readable from bytes and all
+# buildable for wasm32 (`dbcon` substitutes `sqlite-wasm-rs` there).
+extraction-dbcon = ["ocpq-core/extraction-dbcon", "process_mining/extraction-dbcon"]
+# DuckDB links a native library and has no wasm32 build, so it is opt-in like PostgreSQL.
+extraction-dbcon-duckdb = [
+    "extraction-dbcon",
+    "ocpq-core/extraction-dbcon-duckdb",
+    "process_mining/extraction-dbcon-duckdb",
+]
+# Adds PostgreSQL, which pulls `sqlx` and does not build for wasm32.
+extraction-dbcon-postgres = [
+    "extraction-dbcon",
+    "ocpq-core/extraction-dbcon-postgres",
+    "process_mining/extraction-dbcon-postgres",
+]

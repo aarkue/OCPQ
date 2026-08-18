@@ -1,0 +1,34 @@
+[package]
+name = "ocpq-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# In-browser OCPQ backend. Exposes the same generic entry points as the axum server and the tauri
+# app, so `BackendProviderContext` speaks one protocol to all three.
+#
+# `ocel-sqlite` (rusqlite) and `extraction-dbcon-postgres` (sqlx) are deliberately absent: both
+# link native libraries that do not build for wasm32. SQLite/CSV/Parquet extraction still works
+# through `extraction-dbcon`, which `dbcon` backs with `sqlite-wasm-rs` on this target.
+
+[dependencies]
+backend-shared = { path = "../backend-shared", features = ["extraction-dbcon"] }
+app-bindings = { path = "../app-bindings", features = ["extraction-dbcon"] }
+wasm-bindgen = "0.2.84"
+serde = { version = "1.0.192", features = ["derive"] }
+serde_json = "1.0.108"
+gloo-utils = { version = "0.2", features = ["serde"] }
+console_error_panic_hook = { version = "0.1.7", optional = true }
+
+# `ocpq-core` pulls in `rand`/`getrandom`; on wasm the `wasm_js` backend needs this feature.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+uuid = { version = "1.7.0", features = ["v4", "serde", "js"] }
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.34"

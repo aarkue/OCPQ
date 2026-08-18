@@ -1,4 +1,27 @@
+import type {
+	Blueprint as ExtractionBlueprint,
+	ExtractionCatalog,
+	ExtractionReport,
+	ValidationError as ExtractionValidationError,
+} from "@r4pm/components/extraction-blueprint";
 import { createContext } from "react";
+import type { BackendContext, UpdateInfo } from "./bindings/backend-context";
+import type {
+	AutoDiscoverConstraintsRequest as BindingAutoDiscoverRequest,
+	Blueprint as BindingBlueprint,
+	ExtractionCatalog as BindingCatalog,
+	EvalPageRequest as BindingEvalPageRequest,
+	OCDeclareDiscoveryOptions as BindingOCDeclareDiscoveryOptions,
+	OCELGraphOptions as BindingOCELGraphOptions,
+	PathEnumerateOptions as BindingPathEnumerateOptions,
+	PathSchemaDetailOptions as BindingPathSchemaDetailOptions,
+	PathSchemaOptions as BindingPathSchemaOptions,
+	TableExportOptions as BindingTableExportOptions,
+	EvaluateBoxTreeResultHandle,
+	SlimLinkedOCELHandle,
+} from "./bindings/generated";
+import { createHttpBackend } from "./bindings/http-backend";
+import { bindingsTableToBlob } from "./lib/table-file";
 import type { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
 import type { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
 import type {
@@ -7,17 +30,16 @@ import type {
 } from "./routes/visual-editor/helper/types";
 import type { DBTranslationInput } from "./types/DBTranslationInput";
 import type { ActivityStatistics } from "./types/generated/ActivityStatistics";
+import type { AttrScope } from "./types/generated/AttrScope";
 import type { BindingBoxTree } from "./types/generated/BindingBoxTree";
 import type { BinnedEdgeDurationStats } from "./types/generated/BinnedEdgeDurationStats";
-import type { ConnectDataSourceRequest } from "./types/generated/ConnectDataSourceRequest";
-import type { DataExtractionBlueprint } from "./types/generated/DataExtractionBlueprint";
-import type { DataSourceMetadata } from "./types/generated/DataSourceMetadata";
 import type { EvalPageRequest } from "./types/generated/EvalPageRequest";
 import type { EvalPageResponse } from "./types/generated/EvalPageResponse";
 import type { EvaluateBoxTreeSummary } from "./types/generated/EvaluateBoxTreeSummary";
-import type { ExecuteExtractionResponse } from "./types/generated/ExecuteExtractionResponse";
 import type { OCELGraphOptions } from "./types/generated/OCELGraphOptions";
+import type { OCELTypeStats } from "./types/generated/OCELTypeStats";
 import type { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
+import type { OcelAttributeStats } from "./types/generated/OcelAttributeStats";
 import type { PathEnumerateOptions } from "./types/generated/PathEnumerateOptions";
 import type { PathSchemaDetail } from "./types/generated/PathSchemaDetail";
 import type { PathSchemaDetailOptions } from "./types/generated/PathSchemaDetailOptions";
@@ -28,6 +50,9 @@ import type { PathTypeGraph } from "./types/generated/PathTypeGraph";
 import type { TableExportOptions } from "./types/generated/TableExportOptions";
 import type { ConnectionConfig, JobStatus } from "./types/hpc-backend";
 import type { OCELEvent, OCELInfo, OCELObject, SampleIds } from "./types/ocel";
+
+export type { UpdateInfo } from "./bindings/backend-context";
+
 /**
  * Derive the OCEL import format token from a file name, e.g. "json", "json.gz",
  * "xml", "xml.gz", "sqlite". The backend matches this by suffix (after stripping
@@ -44,8 +69,22 @@ export function ocelUploadFormat(fileName: string): string {
 	return suffix;
 }
 
+/** Source id -> `dbcon` connection string. Never part of a blueprint, always a separate argument. */
+export type ExtractionConnections = Record<string, string>;
+
+/** `ocpq_shared::extraction::ExecuteExtractionResponse`. Hand-written rather than ts-rs generated:
+ *  `ExtractionReport` is `Serialize`-only (some `ExtractionError` variants hold `&'static str`),
+ *  and its TypeScript shape is already generated from the same Rust types by `@r4pm/components`. */
+export type ExecuteExtractionResponse = { report: ExtractionReport };
+
 export type BackendProvider = {
 	"ocel/info": () => Promise<OCELInfo | undefined>;
+	"ocel/stats": () => Promise<OCELTypeStats | undefined>;
+	"ocel/attribute-stats": (
+		scope: AttrScope,
+		type: string,
+		attribute: string,
+	) => Promise<OcelAttributeStats | undefined>;
 	"ocel/sample-ids": (limit: number) => Promise<SampleIds | null>;
 	"ocel/upload"?: (file: File) => Promise<OCELInfo>;
 	"ocel/upload-from-xes"?: (file: File) => Promise<OCELInfo>;
@@ -106,41 +145,38 @@ export type BackendProvider = {
 	"get-version"?: () => Promise<string>;
 	"ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>;
 	"ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>;
+	/** Lossless projection of arcs onto a subset of activities (folds removed activities' constraints
+	 *  into the survivors). */
+	"ocel/project-oc-declare-arcs": (
+		arcs: OCDeclareArc[],
+		activities: string[],
+	) => Promise<OCDeclareArc[]>;
 	"ocel/get-activity-statistics": (activity: string) => Promise<ActivityStatistics>;
 	"ocel/get-oc-declare-edge-statistics": (edge: OCDeclareArc) => Promise<BinnedEdgeDurationStats>;
-	"data-source/connect": (request: ConnectDataSourceRequest) => Promise<DataSourceMetadata>;
+	/** Connect to every source in `connections` and merge the discovered schemas into one catalog. */
+	"data-extraction/discover-catalog": (
+		connections: ExtractionConnections,
+	) => Promise<ExtractionCatalog>;
+	/** The distinct values of one column, for the editor's value pickers. */
+	"data-extraction/column-domain": (
+		connections: ExtractionConnections,
+		sourceId: string,
+		table: string,
+		column: string,
+	) => Promise<string[]>;
+	/** Check a blueprint against a catalog. Touches no connection. */
+	"data-extraction/validate": (
+		blueprint: ExtractionBlueprint,
+		catalog: ExtractionCatalog,
+	) => Promise<ExtractionValidationError[]>;
+	/** Run a blueprint and load the resulting OCEL as the backend's current log.
+	 *
+	 *  `connections` is a separate argument on purpose: a blueprint carries no connection details,
+	 *  so a saved or exported one can never contain a secret. */
 	"data-extraction/execute": (
-		blueprint: DataExtractionBlueprint,
+		blueprint: ExtractionBlueprint,
+		connections: ExtractionConnections,
 	) => Promise<ExecuteExtractionResponse>;
-};
-
-export type UpdateInfo = {
-	currentVersion: string;
-	version: string;
-	date?: string;
-	body?: string;
-	download: (
-		onEvent: (
-			progress:
-				| {
-						event: "Started";
-						data: {
-							contentLength?: number;
-						};
-				  }
-				| {
-						event: "Progress";
-						data: {
-							chunkLength: number;
-						};
-				  }
-				| {
-						event: "Finished";
-				  },
-		) => void,
-	) => Promise<void>;
-	install: () => Promise<void>;
-	close: () => Promise<void>;
 };
 
 export async function warnForNoBackendProvider<T>(): Promise<T> {
@@ -152,6 +188,8 @@ export async function warnForNoBackendProvider<T>(): Promise<T> {
 
 export const ErrorBackendContext: BackendProvider = {
 	"ocel/info": warnForNoBackendProvider,
+	"ocel/stats": warnForNoBackendProvider,
+	"ocel/attribute-stats": warnForNoBackendProvider,
 	"ocel/sample-ids": warnForNoBackendProvider,
 	"ocel/check-constraints-box": warnForNoBackendProvider,
 	"ocel/eval-results/page": warnForNoBackendProvider,
@@ -174,9 +212,12 @@ export const ErrorBackendContext: BackendProvider = {
 	"download-blob": warnForNoBackendProvider,
 	"ocel/discover-oc-declare": warnForNoBackendProvider,
 	"ocel/evaluate-oc-declare-arcs": warnForNoBackendProvider,
+	"ocel/project-oc-declare-arcs": warnForNoBackendProvider,
 	"ocel/get-activity-statistics": warnForNoBackendProvider,
 	"ocel/get-oc-declare-edge-statistics": warnForNoBackendProvider,
-	"data-source/connect": warnForNoBackendProvider,
+	"data-extraction/discover-catalog": warnForNoBackendProvider,
+	"data-extraction/column-domain": warnForNoBackendProvider,
+	"data-extraction/validate": warnForNoBackendProvider,
 	"data-extraction/execute": warnForNoBackendProvider,
 };
 
@@ -184,326 +225,363 @@ export const BackendProviderContext = createContext<BackendProvider>(ErrorBacken
 
 export const DEFAULT_BACKEND_URL = "http://localhost:3000";
 
-export function getAPIServerBackendProvider(localBackendURL: string): BackendProvider {
-	return {
-		"ocel/info": async () => {
-			const res = await fetch(`${localBackendURL}/ocel/info`, {
-				method: "get",
-				headers: {},
-			});
-			return await res.json();
-		},
-		"ocel/sample-ids": async (limit) => {
-			const res = await fetch(`${localBackendURL}/ocel/sample-ids`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ limit }),
-			});
-			if (!res.ok) return null;
-			return await res.json();
-		},
-		"ocel/available": async () => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/available`, {
-					method: "get",
-					headers: {},
-				})
-			).json();
-		},
-		"ocel/upload": async (ocelFile) => {
-			const format = ocelUploadFormat(ocelFile.name);
-			const res = await fetch(`${localBackendURL}/ocel/upload/${format}`, {
-				method: "post",
-				body: ocelFile,
-				headers: {},
-			});
-			if (!res.ok) {
-				throw new Error(await res.text());
-			}
-			return await res.json();
-		},
-		"ocel/upload-from-xes": async (xesFile) => {
-			const format = xesFile.name.endsWith(".gz") ? ".xes.gz" : ".xes";
-			return await (
-				await fetch(`${localBackendURL}/ocel/upload-xes-conversion/${format}`, {
-					method: "post",
-					body: xesFile,
-					headers: {},
-				})
-			).json();
-		},
-		"ocel/load": async (name) => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/load`, {
-					method: "post",
-					body: JSON.stringify({ name }),
-					headers: { "Content-Type": "application/json" },
-				})
-			).json();
-		},
-		"ocel/unload": async () => {
-			await fetch(`${localBackendURL}/ocel/unload`, { method: "post" });
-		},
+/** Registry handle of the log the whole UI works on. OCPQ has exactly one "current" OCEL, so it
+ *  gets one fixed id instead of a handle threaded through every call site. */
+export const OCEL_ID = "ocel";
+const OCEL = OCEL_ID as SlimLinkedOCELHandle;
+
+/** The registry kind the current log is stored as. */
+const OCEL_KIND = "SlimLinkedOCEL";
+
+/** Where an extraction run builds its log, so a failed run cannot destroy the loaded one. */
+const EXTRACTION_SCRATCH_ID = "extraction-scratch";
+
+/** Registry handle of the latest evaluation, keyed like the log: the UI holds exactly one. */
+const EVAL_ID = "eval";
+const EVAL = EVAL_ID as EvaluateBoxTreeResultHandle;
+
+const EXPORT_FORMAT = { XML: "xml", JSON: "json", SQLITE: "sqlite" } as const;
+
+const MIME: Record<"XML" | "JSON" | "SQLITE", string> = {
+	XML: "text/xml",
+	JSON: "application/json",
+	SQLITE: "application/vnd.sqlite3",
+};
+
+/**
+ * The UI's types and the binding client's types are two generators' views of the same Rust
+ * structs (ts-rs for the app, schemars for the bindings). They differ only in how optionality and
+ * enum tagging are spelled, so the boundary needs a cast rather than a conversion.
+ */
+function twin<T>(value: unknown): T {
+	return value as T;
+}
+
+/** Implement the UI-facing provider on top of one transport. */
+export function createBackendProvider(backend: BackendContext): BackendProvider {
+	const call = backend.callBinding;
+
+	/** Ask the engine directly instead of looking for `OCEL_ID` in `listObjects()`: what the UI needs
+	 *  to know is whether the log can be read, and a listing can only say whether an id exists.
+	 *
+	 *  Deliberately NOT a try/catch around the read: that cannot tell "no log loaded" from "backend
+	 *  unreachable", and `ocel/info` resolving is what the sidebar uses as its liveness check, so
+	 *  swallowing transport errors would report a dead backend as online. Listing propagates a
+	 *  transport failure and answers the membership question separately.
+	 *
+	 *  Safe to ask the listing again now that a caller-named output keeps the default `Primary`
+	 *  role: it used to be re-keyed and stamped `Result`, which `get_objects_with_type` hides, so a
+	 *  freshly extracted log looked absent. */
+	const ifLoaded = async <T>(f: () => Promise<T>): Promise<T | undefined> => {
+		const loaded = (await backend.listObjects()).some((o) => o.id === OCEL_ID);
+		return loaded ? await f() : undefined;
+	};
+
+	const info = async (): Promise<OCELInfo> =>
+		twin(await call("app_bindings::ocel::ocel_info", { ocel: OCEL }));
+
+	const loadFile = async (file: File, format: string): Promise<OCELInfo> => {
+		const bytes = new Uint8Array(await file.arrayBuffer());
+		await backend.loadItem(OCEL_ID, OCEL_KIND, bytes, format);
+		return await info();
+	};
+
+	const provider: BackendProvider = {
+		"ocel/info": () => ifLoaded(info),
+		"ocel/stats": () =>
+			ifLoaded(async () =>
+				twin<OCELTypeStats>(await call("app_bindings::ocel::ocel_stats", { ocel: OCEL })),
+			),
+		"ocel/attribute-stats": async (scope, type, attribute) =>
+			twin(
+				await call("app_bindings::ocel::ocel_attribute_stats", {
+					ocel: OCEL,
+					scope,
+					type_name: type,
+					attribute,
+				}),
+			),
+		"ocel/sample-ids": async (limit) =>
+			twin(await call("app_bindings::ocel::ocel_sample_ids", { ocel: OCEL, limit })),
+		"ocel/unload": () => backend.unloadObject(OCEL_ID),
+		"ocel/upload": (file) => loadFile(file, ocelUploadFormat(file.name)),
+		"ocel/upload-from-xes": (file) => loadFile(file, file.name.endsWith(".gz") ? "xes.gz" : "xes"),
 		"ocel/check-constraints-box": async (tree, measurePerformance) => {
-			const result = await fetch(`${localBackendURL}/ocel/check-constraints-box`, {
-				method: "post",
-				body: JSON.stringify({ tree, measurePerformance }),
-				headers: { "Content-Type": "application/json" },
+			const evaluation = await call("app_bindings::query::check_constraints_box", {
+				ocel: OCEL,
+				tree: twin(tree),
+				measure_performance: measurePerformance,
+				output_id: EVAL_ID,
 			});
-			if (result.ok) {
-				return await result.json();
-			}
-			throw new Error(await result.text());
+			return twin(
+				await call("app_bindings::query::eval_summary", { ocel: OCEL, eval: evaluation }),
+			);
 		},
 		"ocel/eval-results/page": async (req) => {
-			const res = await fetch(`${localBackendURL}/ocel/eval-results/page`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(req),
-			});
-			if (res.status === 410) {
-				throw new Error("STALE_EVAL_VERSION");
+			try {
+				return twin(
+					await call("app_bindings::query::eval_results_page", {
+						ocel: OCEL,
+						eval: EVAL,
+						request: twin<BindingEvalPageRequest>(req),
+					}),
+				);
+			} catch (e) {
+				// `PaginatedBindingTable` matches this exact message to offer a re-run.
+				if (String(e).includes("stale eval_version")) throw new Error("STALE_EVAL_VERSION");
+				throw e;
 			}
-			if (!res.ok) {
-				throw new Error(`eval page failed: ${res.status}`);
-			}
-			return await res.json();
 		},
 		"ocel/export": async (format) => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/export`, {
-					method: "post",
-					body: JSON.stringify(format),
-					headers: { "Content-Type": "application/json" },
-				})
-			).blob();
+			const bytes = await backend.exportObject(OCEL_ID, EXPORT_FORMAT[format]);
+			return new Blob([bytes as BlobPart], { type: MIME[format] });
 		},
-		"ocel/export-filter-box": async (tree, exportFormat) => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/export-filter-box`, {
-					method: "post",
-					body: JSON.stringify({ tree, exportFormat }),
-					headers: { "Content-Type": "application/json" },
-				})
-			).blob();
-		},
-		"ocel/create-db-query": async (input) => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/create-db-query`, {
-					method: "post",
-					body: JSON.stringify(input),
-					headers: { "Content-Type": "application/json" },
-				})
-			).text();
-		},
-		"ocel/export-bindings": async (nodeId, options) => {
-			const res = await fetch(`${localBackendURL}/ocel/export-bindings`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify([nodeId, options]),
+		"ocel/export-filter-box": async (tree, format) => {
+			const handle = await call("app_bindings::query::export_filter_box", {
+				ocel: OCEL,
+				tree: twin(tree),
 			});
-			if (res.ok) {
-				return await res.blob();
+			try {
+				const bytes = await backend.exportObject(handle, EXPORT_FORMAT[format]);
+				return new Blob([bytes as BlobPart], { type: MIME[format] });
+			} finally {
+				await backend.unloadObject(handle).catch(() => undefined);
 			}
-			throw new Error(`${res.status} ${res.statusText}`);
 		},
-		"ocel/discover-constraints": async (autoDiscoveryOptions) => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/discover-constraints`, {
-					method: "post",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(autoDiscoveryOptions),
-				})
-			).json();
-		},
-		"ocel/discover-oc-declare": async (options) => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/discover-oc-declare`, {
-					method: "post",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(options),
-				})
-			).json();
-		},
-		"ocel/evaluate-oc-declare-arcs": async (arcs) => {
-			return await (
-				await fetch(`${localBackendURL}/ocel/evaluate-oc-declare-arcs`, {
-					method: "post",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(arcs),
-				})
-			).json();
+		"ocel/discover-constraints": async (options) =>
+			twin(
+				await call("app_bindings::query::discover_constraints", {
+					ocel: OCEL,
+					options: twin<BindingAutoDiscoverRequest>(options),
+				}),
+			),
+		"ocel/export-bindings": async (nodeIndex, options) => {
+			const table = await call("app_bindings::query::export_bindings_table", {
+				ocel: OCEL,
+				eval: EVAL,
+				node_index: nodeIndex,
+				options: twin<BindingTableExportOptions>(options),
+			});
+			return bindingsTableToBlob(table, options.format);
 		},
 		"ocel/graph": async (options) => {
-			const res = await fetch(`${localBackendURL}/ocel/graph`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(options),
+			const graph = await call("app_bindings::ocel::ocel_graph", {
+				ocel: OCEL,
+				options: twin<BindingOCELGraphOptions>(options),
 			});
-			if (res.ok) {
-				return await res.json();
+			if (graph === null) {
+				throw new Error("OCEL graph could not be built");
 			}
-			throw new Error(res.statusText);
+			return twin(graph);
 		},
-		"ocel/path-schemas/type-graph": async () => {
-			const res = await fetch(`${localBackendURL}/ocel/path-schemas/type-graph`);
-			if (res.ok) {
-				return await res.json();
-			}
-			throw new Error(res.statusText);
-		},
-		"ocel/path-schemas/enumerate": async (options) => {
-			const res = await fetch(`${localBackendURL}/ocel/path-schemas/enumerate`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(options),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw new Error(res.statusText);
-		},
-		"ocel/path-schemas/discover": async (options) => {
-			const res = await fetch(`${localBackendURL}/ocel/path-schemas/discover`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(options),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw new Error(res.statusText);
-		},
+		"ocel/path-schemas/type-graph": async () =>
+			twin(await call("app_bindings::path_schemas::ocpq_path_schema_type_graph", { ocel: OCEL })),
+		"ocel/path-schemas/enumerate": async (options) =>
+			twin(
+				await call("app_bindings::path_schemas::ocpq_path_schema_enumerate", {
+					ocel: OCEL,
+					options: twin<BindingPathEnumerateOptions>(options),
+				}),
+			),
+		"ocel/path-schemas/discover": async (options) =>
+			twin(
+				await call("app_bindings::path_schemas::ocpq_path_schema_discover", {
+					ocel: OCEL,
+					options: twin<BindingPathSchemaOptions>(options),
+				}),
+			),
 		"ocel/path-schemas/schema-detail": async (options) => {
-			const res = await fetch(`${localBackendURL}/ocel/path-schemas/schema-detail`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(options),
+			const detail = await call("app_bindings::path_schemas::ocpq_path_schema_detail", {
+				ocel: OCEL,
+				options: twin<BindingPathSchemaDetailOptions>(options),
 			});
-			if (res.ok) {
-				return await res.json();
+			if (detail === null) {
+				throw new Error("Path schema not found");
 			}
-			throw new Error(res.statusText);
-		},
-		"ocel/get-event": async (specifier) => {
-			const res = await fetch(`${localBackendURL}/ocel/get-event`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(specifier),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw new Error(res.statusText);
+			return twin(detail);
 		},
 		"ocel/get-object": async (specifier) => {
-			const res = await fetch(`${localBackendURL}/ocel/get-object`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(specifier),
+			const res = await call("app_bindings::ocel::ocel_get_object", {
+				ocel: OCEL,
+				specifier,
 			});
-			if (res.ok) {
-				return await res.json();
+			if (res === null) {
+				throw new Error("Object not found");
 			}
-			throw new Error(res.statusText);
+			return twin(res);
+		},
+		"ocel/get-event": async (specifier) => {
+			const res = await call("app_bindings::ocel::ocel_get_event", { ocel: OCEL, specifier });
+			if (res === null) {
+				throw new Error("Event not found");
+			}
+			return twin(res);
 		},
 		"hpc/login": async (connectionConfig) => {
-			const res = await fetch(`${localBackendURL}/hpc/login`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(connectionConfig),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw Error(await res.text());
+			if (backend.hpcLogin === undefined) throw new Error("HPC is not available on this backend");
+			await backend.hpcLogin(connectionConfig);
 		},
-		"hpc/start": async (jobConfig) => {
-			const res = await fetch(`${localBackendURL}/hpc/start`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(jobConfig),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw Error(await res.text());
+		"hpc/start": async (jobOptions) => {
+			if (backend.hpcStart === undefined) throw new Error("HPC is not available on this backend");
+			return await backend.hpcStart(jobOptions);
 		},
 		"hpc/job-status": async (jobID) => {
-			const res = await fetch(`${localBackendURL}/hpc/job-status/${jobID}`, {
-				method: "get",
-			});
-			if (res.ok) {
-				return await res.json();
+			if (backend.hpcJobStatus === undefined) {
+				throw new Error("HPC is not available on this backend");
 			}
-			throw Error(await res.text());
-		},
-		"ocel/get-activity-statistics": async (activity) => {
-			const res = await fetch(`${localBackendURL}/ocel/get-activity-statistics`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(activity),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw Error(await res.text());
-		},
-		"ocel/get-oc-declare-edge-statistics": async (edge) => {
-			const res = await fetch(`${localBackendURL}/ocel/get-oc-declare-edge-statistics`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(edge),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw Error(await res.text());
-		},
-		"oc-declare/template-string": async (arcs) => {
-			const res = await fetch(`${localBackendURL}/oc-declare/template-string`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(arcs),
-			});
-			if (res.ok) {
-				return await res.text();
-			}
-			throw Error(await res.text());
+			return await backend.hpcJobStatus(jobID);
 		},
 		"download-blob": async (blob, fileName) => {
-			const dataURL = URL.createObjectURL(blob);
-			const a = document.createElement("a");
-			a.setAttribute("download", fileName);
-			a.setAttribute("href", dataURL);
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			setTimeout(() => {
-				URL.revokeObjectURL(dataURL);
-			}, 2000);
+			const bytes = new Uint8Array(await blob.arrayBuffer());
+			await backend.saveBytes(bytes, fileName, blob.type === "" ? undefined : blob.type);
 		},
-		"data-source/connect": async (request) => {
-			const res = await fetch(`${localBackendURL}/data-source/connect`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(request),
+		"ocel/create-db-query": async (req) =>
+			await call("app_bindings::query::create_db_query", { input: twin(req) }),
+		"oc-declare/template-string": async (arcs) =>
+			await call("app_bindings::oc_declare::oc_declare_template_string", { arcs: twin(arcs) }),
+		"ocel/discover-oc-declare": async (options) =>
+			twin(
+				await call("app_bindings::oc_declare::oc_declare_discover", {
+					ocel: OCEL,
+					options: twin<BindingOCDeclareDiscoveryOptions>(options),
+				}),
+			),
+		"ocel/evaluate-oc-declare-arcs": async (arcs) =>
+			await call("app_bindings::oc_declare::oc_declare_evaluate_arcs", {
+				ocel: OCEL,
+				arcs: twin(arcs),
+			}),
+		"ocel/project-oc-declare-arcs": async (arcs, activities) =>
+			twin(
+				await call("app_bindings::oc_declare::oc_declare_project_arcs", {
+					arcs: twin(arcs),
+					activities,
+				}),
+			),
+		"ocel/get-activity-statistics": async (activity) =>
+			twin(
+				await call("app_bindings::oc_declare::oc_declare_activity_statistics", {
+					ocel: OCEL,
+					activity,
+				}),
+			),
+		"ocel/get-oc-declare-edge-statistics": async (edge) =>
+			twin(
+				await call("app_bindings::oc_declare::oc_declare_edge_statistics", {
+					ocel: OCEL,
+					arc: twin(edge),
+				}),
+			),
+		"data-extraction/discover-catalog": async (connections) =>
+			twin(
+				await call(
+					"process_mining::bindings::extraction_dbcon_bindings::extraction_discover_catalog",
+					{ connections },
+				),
+			),
+		"data-extraction/column-domain": async (connections, sourceId, table, column) =>
+			await call("process_mining::bindings::extraction_dbcon_bindings::extraction_column_domain", {
+				connections,
+				source_id: sourceId,
+				table,
+				column,
+			}),
+		"data-extraction/validate": async (blueprint, catalog) =>
+			twin(
+				await call("process_mining::bindings::extraction_bindings::extraction_validate", {
+					blueprint: twin<BindingBlueprint>(blueprint),
+					catalog: twin<BindingCatalog>(catalog),
+				}),
+			),
+		"data-extraction/execute": async (blueprint, connections) => {
+			// `extraction_run` fills its `ocel` argument in place and demands an empty log, so the run
+			// needs a freshly minted one. It gets a scratch id rather than the fixed one: a blueprint
+			// that fails part-way would otherwise leave the app holding an empty log in place of the
+			// one it had. The scratch only becomes the loaded log once the run returned.
+			const scratch = await call("process_mining::bindings::slim_ocel_bindings::locel_new", {
+				output_id: EXTRACTION_SCRATCH_ID,
 			});
-			if (res.ok) {
-				return await res.json();
+			let report: unknown;
+			try {
+				report = await call("process_mining::bindings::extraction_dbcon_bindings::extraction_run", {
+					ocel: scratch,
+					blueprint: twin<BindingBlueprint>(blueprint),
+					connections,
+				});
+			} catch (e) {
+				await backend.unloadObject(scratch).catch(() => undefined);
+				throw e;
 			}
-			throw Error(await res.text());
-		},
-		"data-extraction/execute": async (blueprint) => {
-			const res = await fetch(`${localBackendURL}/data-extraction/execute`, {
-				method: "post",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ blueprint }),
-			});
-			if (res.ok) {
-				return await res.json();
-			}
-			throw Error(await res.text());
+			await backend.renameObject(scratch, OCEL_ID);
+			return { report: twin<ExtractionReport>(report) };
 		},
 	};
+
+	if (backend.listLocalItems !== undefined && backend.loadLocalItem !== undefined) {
+		const listLocal = backend.listLocalItems;
+		const loadLocal = backend.loadLocalItem;
+		provider["ocel/available"] = () => listLocal();
+		provider["ocel/load"] = async (name) => {
+			await loadLocal(OCEL_ID, OCEL_KIND, name);
+			return await info();
+		};
+	}
+
+	if (backend.loadItemPath !== undefined) {
+		const loadPath = backend.loadItemPath;
+		const pick = backend.pickFiles;
+		provider["ocel/picker"] = async (path) => {
+			let target = path;
+			if (target === undefined && pick !== undefined) {
+				const picked = await pick({
+					filters: [
+						{
+							name: "OCEL2",
+							extensions: [
+								"json",
+								"xml",
+								"jsonocel",
+								"xmlocel",
+								"sqlite",
+								"sqlite3",
+								"db",
+								"json.gz",
+								"xml.gz",
+							],
+						},
+						{ name: "XES", extensions: ["xes", "xes.gz"] },
+					],
+				});
+				target = picked?.[0];
+			}
+			if (target === undefined) {
+				throw new Error("No file selected");
+			}
+			await loadPath(OCEL_ID, OCEL_KIND, target);
+			return await info();
+		};
+	}
+
+	if (backend.pickFiles !== undefined) {
+		const pick = backend.pickFiles;
+		provider["pick-file"] = async (filters) => {
+			const picked = await pick({ filters: filters ?? [{ name: "All", extensions: ["*"] }] });
+			return picked?.[0] ?? null;
+		};
+	}
+
+	if (backend.onDragDrop !== undefined) provider["drag-drop-listener"] = backend.onDragDrop;
+	if (backend.getInitialFiles !== undefined) {
+		provider["ocel/get-initial-files"] = backend.getInitialFiles;
+	}
+	if (backend.checkForUpdates !== undefined)
+		provider["check-for-updates"] = backend.checkForUpdates;
+	if (backend.restart !== undefined) provider.restart = backend.restart;
+	if (backend.getVersion !== undefined) provider["get-version"] = backend.getVersion;
+
+	return provider;
+}
+
+export function getAPIServerBackendProvider(localBackendURL: string): BackendProvider {
+	return createBackendProvider(createHttpBackend(`${localBackendURL}/api`));
 }

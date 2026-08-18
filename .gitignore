@@ -1,4 +1,13 @@
- 
+
 target/
 bench-results*.jsonl
 .superpowers/
+
+# The repo root became a pnpm workspace, so it has a node_modules of its own.
+node_modules/
+
+# wasm-pack output, built by `pnpm build:wasm`.
+frontend/public/wasm/
+
+# AI/workflow scaffolding: plans stay local, out of the repo history.
+bindings-migration-plan.md

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @source "./**/*.{ts,tsx}";
 @source "../tauri/**/*.{ts,tsx}";
+@source "../node_modules/@r4pm/components/dist/**/*.js";
+@source "../node_modules/@r4pm/components/src/**/*.{ts,tsx}";
 
 :root {
 	--background: hsl(0 0% 100%);

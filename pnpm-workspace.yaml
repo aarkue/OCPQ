@@ -1,0 +1,17 @@
+# `tauri/` is deliberately absent: it is a self-contained pnpm project with its own workspace
+# file, and its package is also named "frontend", so listing it here makes two workspace projects
+# share a name and pnpm resolves `@r4pm/components` to the published version instead of the
+# local link.
+packages:
+  - frontend
+
+# Vite's bundler. The install script only selects the platform binary, which pnpm already resolves
+# as `@esbuild/linux-x64`, but without the approval every `pnpm install` and `pnpm exec` fails its
+# dependency-status precheck.
+allowBuilds:
+  esbuild: true
+
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  # Linked from a local checkout, so the release-age floor cannot apply to it.
+  - '@r4pm/components'

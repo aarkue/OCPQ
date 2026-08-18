@@ -1,256 +1,32 @@
 import "$/globals.css";
 import "$/index.css";
-import { getVersion } from "@tauri-apps/api/app";
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import * as dialog from "@tauri-apps/plugin-dialog";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeFile } from "@tauri-apps/plugin-fs";
-import { relaunch } from "@tauri-apps/plugin-process";
+import "@r4pm/components/ui/styles.css";
 import { check } from "@tauri-apps/plugin-updater";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import {
-	type BackendProvider,
-	BackendProviderContext,
-	ocelUploadFormat,
-} from "$/BackendProviderContext";
+import { BackendProviderContext, createBackendProvider } from "$/BackendProviderContext";
+import { createTauriBackend } from "$/bindings/tauri-backend";
 import { MainRouterProvider } from "$/router";
-import type { DiscoverConstraintsResponse } from "$/routes/visual-editor/helper/types";
-import type { DBTranslationInput } from "$/types/DBTranslationInput";
-import type { BindingBoxTree } from "$/types/generated/BindingBoxTree";
-import type { OCPQJobOptions } from "$/types/generated/OCPQJobOptions";
-import type { ConnectionConfig, JobStatus } from "$/types/hpc-backend";
-import type {
-	EventTypeQualifiers,
-	ObjectTypeQualifiers,
-	OCELInfo,
-} from "$/types/ocel";
 
-const tauriBackend: BackendProvider = {
-	"ocel/info": async () => {
-		const ocelInfo: OCELInfo | undefined = await invoke(
-			"get_current_ocel_info",
-		);
-		return ocelInfo;
-	},
-	"ocel/picker": async (givenPath) => {
-		let path: string | undefined | null = givenPath;
-		if (path === undefined) {
-			path = await dialog.open({
-				title: "Select an OCEL2 file",
-				filters: [
-					{
-						name: "OCEL2",
-						extensions: [
-							"json",
-							"xml",
-							"jsonocel",
-							"xmlocel",
-							"sqlite",
-							"sqlite3",
-							"db",
-							"json.gz",
-							"xml.gz",
-						],
-					},
-					{ name: "XES", extensions: ["xes", "xes.gz"] },
-				],
-			});
-		}
-		if (typeof path === "string") {
-			if (path.endsWith(".xes") || path.endsWith(".xes.gz")) {
-				const ocelInfo: OCELInfo = await invoke("import_xes_path_as_ocel", {
-					path,
-				});
-				return ocelInfo;
-			} else {
-				const ocelInfo: OCELInfo = await invoke("import_ocel", { path });
-				return ocelInfo;
-			}
-		}
-		throw new Error("No file selected");
-	},
-	"ocel/upload": async (ocelFile) => {
-		if (ocelFile.name.endsWith(".xes") || ocelFile.name.endsWith(".xes.gz")) {
-			const bytes = await ocelFile.arrayBuffer();
-			const ocelInfo: OCELInfo = await new Promise((res, _rej) =>
-				setTimeout(async () => {
-					const ocelInfo: OCELInfo = await invoke("import_xes_slice_as_ocel", {
-						data: bytes,
-						format: ocelFile.name.endsWith(".xes.gz") ? ".xes.gz" : ".xes",
-					});
-					res(ocelInfo);
-				}, 100),
-			);
-			return ocelInfo;
-		} else {
-			const format = ocelUploadFormat(ocelFile.name);
-			const bytes = await ocelFile.arrayBuffer();
-			const ocelInfo: OCELInfo = await new Promise((res, _rej) =>
-				setTimeout(async () => {
-					const ocelInfo: OCELInfo = await invoke("import_ocel_slice", {
-						data: bytes,
-						format,
-					});
-					res(ocelInfo);
-				}, 100),
-			);
-			return ocelInfo;
-		}
-	},
-
-	"ocel/check-constraints-box": async (tree, measurePerformance) => {
-		return await invoke("check_with_box_tree", {
-			req: { tree, measurePerformance },
-		});
-	},
-	"ocel/eval-results/page": async (req) => {
-		try {
-			return await invoke("get_eval_result_page", { req });
-		} catch (e) {
-			if (typeof e === "string" && e.includes("stale eval_version")) {
-				throw new Error("STALE_EVAL_VERSION");
-			}
-			throw e;
-		}
-	},
-	"ocel/discover-constraints": async (options) => {
-		return await invoke<DiscoverConstraintsResponse>(
-			"auto_discover_constraints",
-			{ options },
-		);
-	},
-	"ocel/discover-oc-declare": async (options) => {
-		return await invoke("auto_discover_oc_declare", { options });
-	},
-	"ocel/evaluate-oc-declare-arcs": async (arcs) => {
-		return await invoke("evaluate_oc_declare_arcs", { arcs });
-	},
-	"ocel/get-oc-declare-edge-statistics": async (arc) => {
-		return await invoke("get_oc_declare_edge_statistics", { arc });
-	},
-	"oc-declare/template-string": async (arcs) => {
-		return await invoke("get_oc_declare_template_string", { arcs });
-	},
-	"ocel/get-activity-statistics": async (activity) => {
-		return await invoke("get_oc_declare_activity_statistics", { activity });
-	},
-	"ocel/export-bindings": async (nodeIndex, options) => {
-		await invoke("export_bindings_table", {
-			nodeIndex,
-			options,
-		});
-		return undefined;
-	},
-	"ocel/graph": async (options) => {
-		return await invoke("ocel_graph", { options });
-	},
-	"ocel/path-schemas/type-graph": async () => {
-		return await invoke("path_type_graph_cmd");
-	},
-	"ocel/path-schemas/enumerate": async (options) => {
-		return await invoke("enumerate_path_schemas_cmd", { options });
-	},
-	"ocel/path-schemas/discover": async (options) => {
-		return await invoke("discover_path_schemas_cmd", { options });
-	},
-	"ocel/path-schemas/schema-detail": async (options) => {
-		return await invoke("schema_detail_cmd", { options });
-	},
-	"ocel/sample-ids": async (limit: number) => {
-		return await invoke("get_sample_ids", { limit });
-	},
-	"ocel/get-event": async (req) => {
-		return await invoke("get_event", { req });
-	},
-	"ocel/create-db-query": async (req: DBTranslationInput) => {
-		return await invoke("create_db_query", { input: req });
-	},
-	"ocel/get-object": async (req) => {
-		return await invoke("get_object", { req });
-	},
-	"ocel/unload": async () => {
-		await invoke("unload_ocel");
-	},
-	"ocel/export": async (format: "XML" | "JSON" | "SQLITE") => {
-		await invoke("export_ocel", { format });
-		return undefined;
-	},
-	"ocel/export-filter-box": async (
-		tree: BindingBoxTree,
-		format: "XML" | "JSON" | "SQLITE",
-	) => {
-		const res: undefined = await invoke("export_filter_box", {
-			req: { tree, exportFormat: format },
-		});
-		//  const blob = new Blob([res],{type: format === "JSON" ?
-		//   "application/json" : (format === "XML" ? "text/xml" : "application/vnd.sqlite3")})
-		//  return blob;
-		return undefined;
-	},
-	"hpc/login": async (connectionConfig: ConnectionConfig): Promise<void> => {
-		return await invoke("login_to_hpc_tauri", { cfg: connectionConfig });
-	},
-	"hpc/start": async (jobOptions: OCPQJobOptions): Promise<string> => {
-		return await invoke("start_hpc_job_tauri", { options: jobOptions });
-	},
-	"hpc/job-status": async (jobID: string): Promise<JobStatus> => {
-		return await invoke("get_hpc_job_status_tauri", { jobId: jobID });
-	},
-	"download-blob": async (blob, fileName) => {
-		const filePath = await save({ defaultPath: fileName });
-		if (filePath) {
-			await writeFile(filePath, new Uint8Array(await blob.arrayBuffer()));
-		}
-	},
-	"pick-file": async (filters) => {
-		const path = await dialog.open({
-			title: "Select file",
-			filters: filters ?? [{ name: "All", extensions: ["*"] }],
-		});
-		return typeof path === "string" ? path : null;
-	},
-	"drag-drop-listener": async (f) => {
-		const unregister = await getCurrentWebview().onDragDropEvent((event) => {
-			if (event.payload.type === "enter") {
-				f({ type: "enter", path: event.payload.paths[0] });
-			} else if (event.payload.type === "leave") {
-				f({ type: "leave" });
-			} else if (event.payload.type === "drop") {
-				f({ type: "drop", path: event.payload.paths[0] });
-			}
-		});
-		return unregister;
-	},
-	"ocel/get-initial-files": () => {
-		return invoke("get_initial_files");
-	},
-	"check-for-updates": async () => {
-		const update = await check();
-		if (update === null) {
-			return update;
-		}
-		return update;
-	},
-	restart: () => {
-		return relaunch();
-	},
-	"get-version": () => {
-		return getVersion();
-	},
-	"data-source/connect": async (req) => {
-		return await invoke("connect_data_source", { req });
-	},
-	"data-extraction/execute": async (blueprint) => {
-		return await invoke("execute_extraction", { req: { blueprint } });
-	},
+/** The desktop backend is the shared tauri transport, plus the updater.
+ *
+ *  The updater stays here rather than in `bindings/tauri-backend.ts` because
+ *  `@tauri-apps/plugin-updater` is a dependency of this project only: the shared transport reaches
+ *  tauri through `__TAURI_INTERNALS__` so that `frontend/` typechecks without any tauri package,
+ *  and the updater's `Update` object cannot be reconstructed that way. */
+const backend = {
+	...createBackendProvider(createTauriBackend()),
+	"check-for-updates": () => check(),
 };
 
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root");
+if (root === null) {
+	throw new Error("no #root element to mount into");
+}
+
+ReactDOM.createRoot(root).render(
 	<React.StrictMode>
-		<BackendProviderContext.Provider value={tauriBackend}>
+		<BackendProviderContext.Provider value={backend}>
 			<MainRouterProvider />
 		</BackendProviderContext.Provider>
 	</React.StrictMode>,
