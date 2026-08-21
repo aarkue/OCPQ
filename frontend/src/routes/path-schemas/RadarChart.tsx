@@ -1,5 +1,5 @@
+import { ThemedPlot as Plot } from "@r4pm/components/charts";
 import { useMemo } from "react";
-import Plot from "react-plotly.js";
 import type { PathSchemaRow } from "@/types/generated/PathSchemaRow";
 import { schemaColorAt } from "./lib";
 

@@ -2,15 +2,32 @@
 resolver = "2"
 
 members = [
-	"backend/shared",
+  "backend/ocpq-core",
+  "backend/app-bindings",
+  "backend/backend-shared",
+  "backend/ocpq-native",
+  "backend/meta-gen",
+  "backend/wasm",
   "backend/web-server",
   "backend/ocpq_cli",
-  "tauri/src-tauri/"
+  "tauri/src-tauri/",
+]
+# `tauri/src-tauri` needs system GUI libs (build it via `cargo tauri build`), `wasm` only builds
+# for wasm32, and `meta-gen` is a codegen tool. None belong in a plain `cargo check` of the tree.
+default-members = [
+  "backend/ocpq-core",
+  "backend/app-bindings",
+  "backend/backend-shared",
+  "backend/ocpq-native",
+  "backend/web-server",
+  "backend/ocpq_cli",
 ]
 
-
-[patch.crates-io]
-sqlx = { git =  "https://github.com/aarkue/sqlx-fix.git", branch = "sqlite3-fix"}
+[workspace.dependencies]
+process_mining = { git = "https://github.com/aarkue/rust4pm.git", branch = "main", features = [
+    "bindings",
+    "extraction-blueprint",
+] }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [profile.release.package.ocpq-web-server]

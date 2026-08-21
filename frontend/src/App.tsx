@@ -1,8 +1,15 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { BsFileEarmarkBreak, BsFiletypeJson, BsFiletypeSql, BsFiletypeXml } from "react-icons/bs";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+	BsFileEarmarkBreak,
+	BsFiletypeCsv,
+	BsFiletypeJson,
+	BsFiletypeSql,
+	BsFiletypeXml,
+} from "react-icons/bs";
+import { LuFileArchive, LuFileSpreadsheet, LuFileUp } from "react-icons/lu";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import {
 	type BackendProvider,
@@ -75,7 +82,9 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 	const ocelInfoQuery = useOcelInfoQuery();
 	const availableOcelsQuery = useOcelAvailable();
 
-	const ocelInfo = ocelInfoQuery.data;
+	const ocelInfo = ocelInfoQuery.data ?? undefined;
+	// The query resolving at all is the liveness signal: it succeeds with null when the backend is
+	// reachable but no log is loaded yet, and only fails when the backend cannot be reached.
 	const backendAvailable = ocelInfoQuery.isSuccess;
 	const availableOcels = availableOcelsQuery.data ?? [];
 
@@ -145,7 +154,9 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 						},
 					);
 				} else {
-					const isOcel = e.path.endsWith(".json") || e.path.endsWith(".xml") || isSqlite;
+					const isZip = e.path.endsWith(".zip");
+					const isOcel =
+						e.path.endsWith(".json") || e.path.endsWith(".xml") || isSqlite || isCsv || isZip;
 					const isXes = e.path.endsWith(".xes") || e.path.endsWith(".xes.gz");
 
 					if (isOcel || isXes) {
@@ -155,7 +166,11 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 								? BsFiletypeXml
 								: isSqlite
 									? BsFiletypeSql
-									: BsFileEarmarkBreak;
+									: isCsv
+										? BsFiletypeCsv
+										: isZip
+											? LuFileArchive
+											: BsFileEarmarkBreak;
 
 						toast(
 							<p className="text-md font-medium flex items-center gap-x-1">
@@ -245,48 +260,67 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 		<InfoSheetContext.Provider
 			value={{ infoSheetState: infoSheet, setInfoSheetState: setInfoSheet }}
 		>
-			<div className="max-w-full overflow-hidden h-screen text-center grid grid-cols-[13rem_auto]">
+			<div className="max-w-full overflow-hidden h-screen grid grid-cols-[13rem_auto]">
 				<Sidebar ocelInfo={ocelInfo} backendAvailable={backendAvailable}>
 					{children}
 				</Sidebar>
 				<div className="px-4 overflow-auto my-4">
 					{isAtRoot && (
-						<>
+						<div className="text-center">
 							<h2 className="text-4xl font-black mb-2">Load a Dataset</h2>
 							<p className="text-xl text-muted-foreground mb-1">
-								OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite)
+								OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite, CSV, ZIP)
 							</p>
-							<p className="text-sm text-muted-foreground mb-2">
+							<p className="text-sm text-muted-foreground mb-6">
 								XES/XES.GZ files are also supported and are interpreted with the single object type{" "}
 								<span className="font-mono italic">Case</span>.
 							</p>
-						</>
-					)}
-					{isAtRoot && (
-						<OcelFilePicker
-							loading={loading}
-							setLoading={setLoading}
-							onOcelLoaded={setOcelInfoAndNavigate}
-						/>
-					)}
-					{isAtRoot && showAvailableOcels && (
-						<OcelSelector
-							availableOcels={availableOcels}
-							loading={loading}
-							setLoading={setLoading}
-							onOcelLoaded={setOcelInfoAndNavigate}
-						/>
-					)}
-					{isAtRoot && (
-						<>
-							{showAvailableOcels && <div className="w-full">OR</div>}
-							<OcelDropzone
-								loading={loading}
-								setLoading={setLoading}
-								onFileSelect={handleFileUpload}
-								onOcelLoaded={setOcelInfoAndNavigate}
-							/>
-						</>
+							<div className="mx-auto grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2">
+								<div className="flex flex-col items-center rounded-lg border-2 border-green-300/40 bg-green-300/10 p-6">
+									<div className="mb-1 flex items-center justify-center gap-2">
+										<LuFileUp className="text-green-700" size={22} />
+										<h3 className="text-xl font-bold">Select an Event Log</h3>
+									</div>
+									<p className="mb-4 text-sm text-muted-foreground">
+										Already have a single OCEL or XES file? Load it directly.
+									</p>
+									<div className="flex w-full flex-1 flex-col items-center justify-center gap-2">
+										<OcelFilePicker
+											loading={loading}
+											setLoading={setLoading}
+											onOcelLoaded={setOcelInfoAndNavigate}
+										/>
+										{showAvailableOcels && (
+											<OcelSelector
+												availableOcels={availableOcels}
+												loading={loading}
+												setLoading={setLoading}
+												onOcelLoaded={setOcelInfoAndNavigate}
+											/>
+										)}
+										<OcelDropzone
+											loading={loading}
+											setLoading={setLoading}
+											onFileSelect={handleFileUpload}
+											onOcelLoaded={setOcelInfoAndNavigate}
+										/>
+									</div>
+								</div>
+								<Link
+									to="/data-extraction"
+									className="group flex h-full flex-col items-center justify-center rounded-lg border-2 border-blue-300/40 bg-blue-300/10 p-6 text-center transition-colors hover:border-blue-400 hover:bg-blue-300/30"
+								>
+									<div className="mb-1 flex items-center justify-center gap-2">
+										<LuFileSpreadsheet className="text-blue-700" size={22} />
+										<h3 className="text-xl font-bold">Extract from Tables</h3>
+									</div>
+									<p className="text-sm text-muted-foreground">
+										Source an Object-Centric Event Log from CSV, XLSX, or Parquet files, or a connected database (PostgreSQL,
+										SQLite, DuckDB).
+									</p>
+								</Link>
+							</div>
+						</div>
 					)}
 					<Outlet />
 				</div>

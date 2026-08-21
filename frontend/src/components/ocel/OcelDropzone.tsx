@@ -55,17 +55,17 @@ export function OcelDropzone({
 	};
 
 	return (
-		<div className="my-4">
+		<div className="w-full">
 			<div
-				className="flex items-center justify-center w-full max-w-2xl mx-auto"
+				className="flex items-center justify-center w-full"
 				onDragOver={(ev) => ev.preventDefault()}
 				onDrop={handleDrop}
 			>
 				<label
 					htmlFor="dropzone-ocel-file"
 					className={clsx(
-						"flex flex-col items-center justify-center w-full h-64 border-2 border-gray-400 border-dashed rounded-lg cursor-pointer",
-						!loading && "bg-blue-50/20 hover:bg-blue-100/30",
+						"flex flex-col items-center justify-center w-full h-48 border-2 border-gray-400 border-dashed rounded-lg cursor-pointer",
+						!loading && "bg-green-50/20 hover:bg-green-200/40",
 						loading && "bg-gray-200/30",
 					)}
 				>
@@ -75,7 +75,8 @@ export function OcelDropzone({
 							here
 						</p>
 						<p className="text-xs text-gray-500">
-							Supported: OCEL2-JSON, OCEL2-XML, OCEL2-SQLITE, XES/XES.GZ (Interpreted as OCEL)
+							Supported: OCEL2-JSON, OCEL2-XML, OCEL2-SQLITE, OCEL2-CSV, OCEL2-ZIP (bundle),
+							XES/XES.GZ (Interpreted as OCEL)
 						</p>
 					</div>
 					<input
@@ -85,7 +86,7 @@ export function OcelDropzone({
 						id="dropzone-ocel-file"
 						type="file"
 						className="hidden"
-						accept=".json, .json.gz, .xml, .xml.gz, .sqlite, .xes, .xes.gz"
+						accept=".json, .json.gz, .xml, .xml.gz, .sqlite, .csv, .csv.gz, .zip, .xes, .xes.gz"
 					/>
 				</label>
 			</div>

@@ -1,4 +1,4 @@
-ocpq_shared::use_mimalloc!();
+ocpq_core::use_mimalloc!();
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -11,7 +11,7 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
-use ocpq_shared::{
+use ocpq_core::{
     binding_box::{evaluate_box_tree, Binding, BindingBoxTree},
     db_translation::{
         translate_to_cypher_shared, translate_to_sql_shared, DBTranslationInput, DatabaseType,
@@ -154,7 +154,7 @@ fn run_evaluate(args: EvaluateArgs) {
     let res = evaluate_box_tree(bbox_tree, &index_linked_ocel, true);
 
     let now = Instant::now();
-    // Avoid colons in the timestamp -- Windows treats them as illegal path
+    // Avoid colons in the timestamp. Windows treats them as illegal path
     // characters and `File::create` would fail at runtime.
     let stamp = DateTime::<Utc>::from(SystemTime::now())
         .format("%Y%m%dT%H%M%SZ")
@@ -467,7 +467,7 @@ fn node_profile_inputs(
     node_idx: usize,
     tree: &BindingBoxTree,
     ocel: &SlimLinkedOCEL,
-    step_cache: &[Vec<ocpq_shared::binding_box::BindingStep>],
+    step_cache: &[Vec<ocpq_core::binding_box::BindingStep>],
     parents: &[Option<usize>],
     memo: &mut HashMap<usize, Vec<Binding>>,
     sample_limit: usize,

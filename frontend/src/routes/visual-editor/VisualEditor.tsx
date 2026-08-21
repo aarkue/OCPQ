@@ -3,8 +3,8 @@ import {
 	type Connection,
 	Controls,
 	type Edge,
-	MarkerType,
 	type Node,
+	type OnConnectEnd,
 	Panel,
 	ReactFlow,
 	useReactFlow,
@@ -49,7 +49,10 @@ import { RxReset } from "react-icons/rx";
 import { TbFileExport, TbFilter, TbLogicAnd, TbPlus, TbSquare } from "react-icons/tb";
 import { v4 } from "uuid";
 import type { OCELInfo, OCELType } from "../../types/ocel";
-import { getAvailableChildNamesWithEdges } from "./helper/child-names";
+import {
+	getAvailableChildNamesWithEdges,
+	getNamesInConnectedTreeWithEdges,
+} from "./helper/child-names";
 import {
 	EVENT_TYPE_LINK_TYPE,
 	EVENT_TYPE_NODE_TYPE,
@@ -84,6 +87,14 @@ interface VisualEditorProps {
 	children?: ReactNode;
 	constraintInfo: ConstraintInfo;
 }
+
+const DEFAULT_EDGE_OPTIONS = {
+	type: EVENT_TYPE_LINK_TYPE,
+	style: {
+		strokeWidth: 4,
+		stroke: "#646464",
+	},
+} as const;
 
 export default function VisualEditor(props: VisualEditorProps) {
 	const { setInstance, registerOtherDataGetter, otherData, flushData, scheduleAutoSave } =
@@ -163,6 +174,20 @@ export default function VisualEditor(props: VisualEditorProps) {
 				);
 				return false;
 			}
+			if (edges.some((e) => e.target === target)) {
+				toast.error(
+					<span>
+						<b>Invalid connection</b>
+						<br />
+						Nodes can only have one parent!
+					</span>,
+					{
+						position: "bottom-center",
+						id: "invalid-connection-toast",
+					},
+				);
+				return false;
+			}
 			return true;
 		},
 		[instance],
@@ -215,6 +240,12 @@ export default function VisualEditor(props: VisualEditorProps) {
 	const getAvailableChildNames = useCallback(
 		(nodeID: string): string[] =>
 			getAvailableChildNamesWithEdges(instance.getEdges() as any, nodeID),
+		[instance],
+	);
+
+	const getNamesInConnectedTree = useCallback(
+		(nodeID: string): string[] =>
+			getNamesInConnectedTreeWithEdges(instance.getEdges() as any, nodeID),
 		[instance],
 	);
 
@@ -288,6 +319,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 
 	const addNewNode = useCallback(
 		(x: number | undefined = undefined, y: number | undefined = undefined) => {
+			const id = v4();
 			instance.setNodes((nodes) => {
 				const pos =
 					x === undefined || y === undefined
@@ -299,7 +331,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 				return [
 					...nodes,
 					{
-						id: v4(),
+						id,
 						type: EVENT_TYPE_NODE_TYPE,
 						position: {
 							x: pos.x - NODE_TYPE_SIZE[EVENT_TYPE_NODE_TYPE].width / 2,
@@ -319,8 +351,56 @@ export default function VisualEditor(props: VisualEditorProps) {
 					},
 				];
 			});
+			return id;
 		},
 		[instance],
+	);
+
+	const onConnectEnd = useCallback<OnConnectEnd>(
+		(event, connectionState) => {
+			// Only when the connection line was dropped on empty canvas (not on a handle)
+			if (
+				connectionState.isValid ||
+				connectionState.fromNode == null ||
+				connectionState.fromHandle == null
+			) {
+				return;
+			}
+			const evt = "changedTouches" in event ? event.changedTouches[0] : event;
+			if (!(evt.target instanceof Element) || evt.target.closest(".react-flow__node")) {
+				return;
+			}
+			const fromIsSource = connectionState.fromHandle.type === "source";
+			// Dragging from a target handle creates a new parent node; forbidden if one exists
+			if (
+				!fromIsSource &&
+				instance.getEdges().some((e) => e.target === connectionState.fromNode?.id)
+			) {
+				toast.error(
+					<span>
+						<b>Invalid connection</b>
+						<br />
+						Nodes can only have one parent!
+					</span>,
+					{
+						position: "bottom-center",
+						id: "invalid-connection-toast",
+					},
+				);
+				return;
+			}
+			const { x, y } = instance.screenToFlowPosition({ x: evt.clientX, y: evt.clientY });
+			const newNodeID = addNewNode(x, y);
+			instance.addEdges({
+				id: v4(),
+				source: fromIsSource ? connectionState.fromNode.id : newNodeID,
+				sourceHandle: fromIsSource ? connectionState.fromHandle.id : `${newNodeID}-source`,
+				target: fromIsSource ? newNodeID : connectionState.fromNode.id,
+				targetHandle: fromIsSource ? `${newNodeID}-target` : connectionState.fromHandle.id,
+				...DEFAULT_EDGE_OPTIONS,
+			});
+		},
+		[instance, addNewNode],
 	);
 
 	const addPastedData = useCallback(
@@ -502,6 +582,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 				showViolationsFor,
 				getAvailableVars,
 				getAvailableChildNames,
+				getNamesInConnectedTree,
 				getTypesForVariable,
 				getNodeIDByName,
 				filterMode,
@@ -596,19 +677,8 @@ export default function VisualEditor(props: VisualEditorProps) {
 						contextMenuTriggerRef.current.dispatchEvent(newEv);
 					}
 				}}
-				defaultEdgeOptions={{
-					type: EVENT_TYPE_LINK_TYPE,
-					markerEnd: {
-						type: MarkerType.ArrowClosed,
-						width: 15,
-						height: 12,
-						color: "#000000ff",
-					},
-					style: {
-						strokeWidth: 4,
-						stroke: "#646464",
-					},
-				}}
+				defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+				onConnectEnd={onConnectEnd}
 				onEdgeContextMenu={onEdgeContextMenu}
 				proOptions={{ hideAttribution: true }}
 				onSelectionChange={(sel) => {

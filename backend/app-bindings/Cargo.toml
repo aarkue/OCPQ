@@ -1,0 +1,26 @@
+[package]
+name = "app-bindings"
+version = "0.1.0"
+edition = "2021"
+
+# Every OCPQ function the frontend can call, as `#[register_binding]` wrappers over `ocpq-core`.
+
+[dependencies]
+ocpq-core = { path = "../ocpq-core" }
+# `#[register_binding]` expands to hardcoded `::process_mining::...` paths, so it must be in scope
+# under that exact name here too; a re-export from `ocpq-core` isn't enough.
+process_mining = { workspace = true }
+serde = { version = "1.0.192", features = ["derive"] }
+serde_json = "1.0.108"
+schemars = { version = "1.1.0", features = ["chrono04", "uuid1"] }
+chrono = "0.4.33"
+anyhow = "1.0.95"
+
+[features]
+default = ["bindings"]
+bindings = ["process_mining/bindings"]
+ocel-sqlite = ["ocpq-core/ocel-sqlite"]
+ocel-bundle = ["ocpq-core/ocel-bundle"]
+ocel-bundle-parquet = ["ocpq-core/ocel-bundle-parquet"]
+extraction-dbcon = ["ocpq-core/extraction-dbcon"]
+extraction-dbcon-postgres = ["ocpq-core/extraction-dbcon-postgres"]

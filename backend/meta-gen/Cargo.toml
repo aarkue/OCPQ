@@ -1,0 +1,19 @@
+[package]
+name = "meta-gen"
+version = "0.1.0"
+edition = "2021"
+
+# Codegen tool: dumps the live binding registry to JSON so the frontend client can be generated
+# from it. Kept out of `default-members` so its dependency resolution never unifies into the
+# runtime crates.
+
+[dependencies]
+app-bindings = { path = "../app-bindings", features = [
+    "ocel-sqlite",
+    "extraction-dbcon-postgres",
+] }
+backend-shared = { path = "../backend-shared", features = [
+    "ocel-sqlite",
+    "extraction-dbcon-postgres",
+] }
+serde_json = "1.0.108"

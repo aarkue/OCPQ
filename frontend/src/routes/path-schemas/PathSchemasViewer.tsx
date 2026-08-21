@@ -1,7 +1,16 @@
+import {
+	OcelTypeGraph,
+	type OcelTypeGraphEdge,
+	type OcelTypeGraphNode,
+	TypeScopeSelector,
+	ViewerExportFrame,
+} from "@r4pm/components";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { LuSettings2 } from "react-icons/lu";
+import { LuExternalLink, LuSettings2 } from "react-icons/lu";
+import { useNavigate } from "react-router-dom";
+import { R4pmIsland } from "@/components/r4pm/R4pmIsland";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -23,12 +32,11 @@ import type { TemporalMode } from "@/types/generated/TemporalMode";
 import DetailsPanel from "./DetailsPanel";
 import KindBadge from "./KindBadge";
 import {
+	blendHexColors,
 	connectedTopK,
 	eqLabel,
-	expandScope,
 	formatDuration,
 	heatStyle,
-	MAX_SCOPE_TYPES,
 	normalizeLog,
 	schemaColorAt,
 	typeKey,
@@ -36,8 +44,7 @@ import {
 } from "./lib";
 import RadarChart from "./RadarChart";
 import SchemaPathDiagram from "./SchemaPathDiagram";
-import TypeFilterPopover from "./TypeFilterPopover";
-import TypeGraphView from "./TypeGraphView";
+import { openSchemasAsCombinedQuery } from "./toQuery";
 
 type SortKey =
 	| "schema"
@@ -76,9 +83,13 @@ function SortHeader({
 	);
 }
 
+const edgeKey = (source: PathTypeRef, qualifier: string, target: PathTypeRef) =>
+	`${typeKey(source)}|${qualifier}|${typeKey(target)}`;
+
 export default function PathSchemasViewer() {
 	const ocelInfo = useOcelInfo();
 	const backend = useBackend();
+	const navigate = useNavigate();
 
 	const { data: typeGraph } = useQuery({
 		queryKey: ["ocel", "path-schemas", "type-graph"],
@@ -87,6 +98,14 @@ export default function PathSchemasViewer() {
 		retry: false,
 		enabled: ocelInfo !== undefined,
 	});
+
+	// The r4pm export frame reports failures via this event instead of throwing.
+	useEffect(() => {
+		const onError = (e: Event) =>
+			toast.error(`Image export failed: ${(e as CustomEvent<string>).detail}`);
+		window.addEventListener("propel:export-error", onError);
+		return () => window.removeEventListener("propel:export-error", onError);
+	}, []);
 
 	const [shownTypes, setShownTypes] = useState<PathTypeRef[]>([]);
 	const [source, setSource] = useState<PathTypeRef | null>(null);
@@ -179,34 +198,6 @@ export default function PathSchemasViewer() {
 	}, [typeGraph, shownTypes, source, target]);
 
 	const resetScopeToAuto = () => setShownTypes(autoScope);
-	const addScopeNeighbors = () => {
-		if (!typeGraph) return;
-		const { scope, skippedHubs, hitCap } = expandScope(
-			shownTypes,
-			typeGraph.nodes,
-			typeGraph.edges,
-		);
-		setShownTypes(scope);
-		if (skippedHubs.length > 0) {
-			const shown = skippedHubs.slice(0, 3).join(", ");
-			const more = skippedHubs.length > 3 ? `, +${skippedHubs.length - 3} more` : "";
-			toast(`Skipped ${skippedHubs.length} highly-connected type(s): ${shown}${more}`, {
-				icon: "⚠️",
-			});
-		}
-		if (hitCap) toast(`Scope capped at ${MAX_SCOPE_TYPES} types`, { icon: "⚠️" });
-	};
-	const selectAllScope = () => {
-		if (!typeGraph) return;
-		if (typeGraph.nodes.length <= MAX_SCOPE_TYPES) {
-			setShownTypes(typeGraph.nodes.map((n) => ({ name: n.name, is_event: n.is_event })));
-			return;
-		}
-		setShownTypes(
-			sortedTypes.slice(0, MAX_SCOPE_TYPES).map((n) => ({ name: n.name, is_event: n.is_event })),
-		);
-		toast(`Showing top ${MAX_SCOPE_TYPES} of ${typeGraph.nodes.length} types`, { icon: "⚠️" });
-	};
 
 	// Auto-enumerate (fast, type-level) once both source and target are chosen.
 	useEffect(() => {
@@ -352,6 +343,31 @@ export default function PathSchemasViewer() {
 		[selected, schemaByIndex],
 	);
 
+	const selectedSchemaInfos = useMemo(
+		() => selected.map((idx) => schemaByIndex.get(idx)).filter((s): s is PathSchemaInfo => !!s),
+		[selected, schemaByIndex],
+	);
+	const canOpenSelection = useMemo(() => {
+		if (selectedSchemaInfos.length < 2) return false;
+		const { source, target } = selectedSchemaInfos[0];
+		return selectedSchemaInfos.every(
+			(s) =>
+				s.source.name === source.name &&
+				s.source.is_event === source.is_event &&
+				s.target.name === target.name &&
+				s.target.is_event === target.is_event,
+		);
+	}, [selectedSchemaInfos]);
+
+	async function openSelectionAsQuery() {
+		try {
+			await openSchemasAsCombinedQuery(selectedSchemaInfos, temporal, boundedSeconds);
+			navigate("/constraints");
+		} catch {
+			toast.error("Failed to create query");
+		}
+	}
+
 	const selectedInfo = useMemo(
 		() => (detailIndex === null ? undefined : schemaByIndex.get(detailIndex)),
 		[schemaByIndex, detailIndex],
@@ -391,6 +407,98 @@ export default function PathSchemasViewer() {
 			setTarget(ref);
 		}
 	}
+
+	// Map PathTypeGraph -> generic OcelTypeGraph nodes/edges. Node id is the composite
+	// typeKey ("e:"/"o:" + name); edge id is the (source|qualifier|target) composite so
+	// schema steps (which carry the same endpoints) can key straight into it.
+	const graphNodes = useMemo<OcelTypeGraphNode[]>(
+		() =>
+			typeGraph
+				? typeGraph.nodes.map((n) => ({
+						id: typeKey(n),
+						label: n.name,
+						kind: n.is_event ? "event" : "object",
+						count: n.count,
+					}))
+				: [],
+		[typeGraph],
+	);
+	const graphEdges = useMemo<OcelTypeGraphEdge[]>(
+		() =>
+			typeGraph
+				? typeGraph.edges.map((e) => ({
+						id: edgeKey(e.source, e.qualifier, e.target),
+						source: typeKey(e.source),
+						target: typeKey(e.target),
+						qualifier: e.qualifier,
+						kind: e.source.is_event ? "e2o" : "o2o",
+					}))
+				: [],
+		[typeGraph],
+	);
+
+	// Scope for the TypeScopeSelector: the shown set as node ids. `onChange` maps ids back to refs.
+	const shownKeys = useMemo(() => new Set(shownTypes.map(typeKey)), [shownTypes]);
+	const onScopeChange = (ids: Set<string>) =>
+		setShownTypes([...ids].map((id) => refByKey.get(id)).filter((r): r is PathTypeRef => !!r));
+
+	const sourceKey = source ? typeKey(source) : null;
+	const targetKey = target ? typeKey(target) : null;
+
+	// Visible scope: the shown set, plus source/target, plus every node on a highlighted
+	// schema (so an off-scope schema path is never clipped). Only keys present in the current
+	// graph survive, so refs from a prior dataset never surface as raw composite-key nodes.
+	const visibleNodeIds = useMemo(() => {
+		const inGraph = new Set(graphNodes.map((n) => n.id));
+		const set = new Set<string>();
+		const add = (k: string) => {
+			if (inGraph.has(k)) set.add(k);
+		};
+		for (const t of shownTypes) add(typeKey(t));
+		if (sourceKey) add(sourceKey);
+		if (targetKey) add(targetKey);
+		for (const { source: s, steps } of highlightedSchemas) {
+			add(typeKey(s));
+			for (const step of steps) add(typeKey(step.reverse ? step.source : step.target));
+		}
+		return set;
+	}, [graphNodes, shownTypes, sourceKey, targetKey, highlightedSchemas]);
+
+	// Schema-highlight structures, keyed to match the generic node/edge ids above.
+	const { schemaNodeKeys, edgeHighlightColors } = useMemo(() => {
+		const nodeKeys = new Set<string>();
+		const colors = new Map<string, string[]>();
+		for (const { source: s, steps, color } of highlightedSchemas) {
+			nodeKeys.add(typeKey(s));
+			for (const step of steps) {
+				nodeKeys.add(typeKey(step.reverse ? step.source : step.target));
+				const key = edgeKey(step.source, step.qualifier, step.target);
+				const ex = colors.get(key);
+				if (ex) {
+					if (!ex.includes(color)) ex.push(color);
+				} else {
+					colors.set(key, [color]);
+				}
+			}
+		}
+		return { schemaNodeKeys: nodeKeys, edgeHighlightColors: colors };
+	}, [highlightedSchemas]);
+	const hasActiveSchema = highlightedSchemas.length > 0;
+
+	const nodeRingColor = (id: string) =>
+		id === sourceKey ? "#10b98180" : id === targetKey ? "#f43f5e80" : undefined;
+	const nodeDimmed = (id: string) =>
+		hasActiveSchema && !schemaNodeKeys.has(id) && id !== sourceKey && id !== targetKey;
+	const edgeStyle = (id: string) => {
+		const colors = edgeHighlightColors.get(id);
+		if (colors) return { color: blendHexColors(colors), width: 3 };
+		if (hasActiveSchema) return { color: "#cbd5e1", width: 1, dimmed: true };
+		return { color: "#94a3b8", width: 1.4 };
+	};
+	const handleGraphNodeClick = (id: string) => {
+		const ref = refByKey.get(id);
+		if (ref) onGraphNodeClick(ref);
+	};
 
 	if (ocelInfo === undefined) {
 		return <div className="p-4 text-lg">Load an OCEL to discover path schemas.</div>;
@@ -539,32 +647,38 @@ export default function PathSchemasViewer() {
 			<div className="flex flex-1 min-h-0 gap-2">
 				<div className="flex flex-col flex-1 min-w-0 gap-2">
 					<div className="border rounded-lg relative h-[42%] min-h-56 overflow-hidden bg-white">
-						<div className="absolute top-2 left-2 z-10">
+						{/* Top-right: the ViewerExportFrame menu sits at the very corner, the scope
+						    selector left of it. OcelTypeGraph's own Fit button is at top-left. */}
+						<div className="absolute top-2 right-16 z-30">
 							{typeGraph && (
-								<TypeFilterPopover
-									types={sortedTypes.map((n) => ({
-										name: n.name,
-										is_event: n.is_event,
-										count: n.count,
-									}))}
-									shownTypes={shownTypes}
-									setShownTypes={setShownTypes}
-									onResetAuto={resetScopeToAuto}
-									onAddNeighbors={addScopeNeighbors}
-									onSelectAll={selectAllScope}
-									isAuto={isAutoScope}
-								/>
+								<R4pmIsland>
+									<TypeScopeSelector
+										items={graphNodes}
+										value={shownKeys}
+										onChange={onScopeChange}
+										onResetAuto={resetScopeToAuto}
+										isAuto={isAutoScope}
+									/>
+								</R4pmIsland>
 							)}
 						</div>
 						{typeGraph && (
-							<TypeGraphView
-								typeGraph={typeGraph}
-								shownTypes={shownTypes}
-								selectedSource={source}
-								selectedTarget={target}
-								highlightedSchemas={highlightedSchemas}
-								onNodeClick={onGraphNodeClick}
-							/>
+							<R4pmIsland className="w-full h-full">
+								<ViewerExportFrame
+									filename="type-graph"
+									style={{ width: "100%", height: "100%" }}
+								>
+									<OcelTypeGraph
+										nodes={graphNodes}
+										edges={graphEdges}
+										visibleNodeIds={visibleNodeIds}
+										nodeRingColor={nodeRingColor}
+										nodeDimmed={nodeDimmed}
+										edgeStyle={edgeStyle}
+										onNodeClick={handleGraphNodeClick}
+									/>
+								</ViewerExportFrame>
+							</R4pmIsland>
 						)}
 					</div>
 
@@ -670,7 +784,17 @@ export default function PathSchemasViewer() {
 																outline: col ? "1px solid #fff" : "none",
 															}}
 														/>
-														<SchemaPathDiagram source={s.source} steps={s.steps} compact />
+														<div
+															className="min-w-0 flex-1 overflow-hidden"
+															style={{
+																maskImage:
+																	"linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent)",
+																WebkitMaskImage:
+																	"linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent)",
+															}}
+														>
+															<SchemaPathDiagram source={s.source} steps={s.steps} compact />
+														</div>
 														{m?.is_dead && (
 															<span className="text-[9px] bg-gray-200 text-gray-500 rounded px-1 shrink-0">
 																dead
@@ -765,6 +889,22 @@ export default function PathSchemasViewer() {
 						>
 							Details
 						</button>
+						{selected.length > 1 && (
+							<Button
+								size="sm"
+								variant="outline"
+								className="h-7 ml-2 gap-1.5"
+								onClick={() => void openSelectionAsQuery()}
+								disabled={!canOpenSelection}
+								title={
+									canOpenSelection
+										? "Create an OCPQ query requiring all selected paths at once"
+										: "Selected schemas must share the same source and target types"
+								}
+							>
+								<LuExternalLink size={13} /> Open selection as query
+							</Button>
+						)}
 						{selected.length > 0 && (
 							<div className="ml-auto flex items-center gap-1.5 pr-0.5">
 								<span className="text-[11px] text-gray-400">focus</span>

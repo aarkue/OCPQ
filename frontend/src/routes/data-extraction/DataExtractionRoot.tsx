@@ -44,24 +44,7 @@ export default function DataExtractionRoot() {
 				Data Extraction Blueprints
 			</h2>
 			<h4 className="font-semibold text-lg tracking-tight">Manage Data Extraction Blueprints</h4>
-			<p>
-				Extraction blueprints define how to extract object-centric event data from a variety of data
-				sources.
-				<br />
-				For example, blueprints allow connecting SQLite, PostgreSQL, or CSV data sources.
-			</p>
-			<div className="w-fit my-1 flex items-center text-xs font-semibold text-pink-950 bg-pink-300/30 p-1 px-2 rounded-md border border-pink-400/30">
-				<TbInfoCircle className="mr-2 size-6" />
-				<div>
-					<span className="text-base font-black">
-						Data Extraction Blueprints are currently in Beta.
-					</span>
-					<br />
-					Expect some rough edges, bugs, or missing functionality.
-					<br />
-					If you have any feedback or encounter any issues, please reach out via GitHub or email.
-				</div>
-			</div>
+			<p>Extract object-centric event data from databases (SQLite, PostgresSQL, DuckDB) or files (CSV, XLSX, Parquet).</p>
 			<div className="flex justify-between items-center mt-2 mb-3">
 				<Button
 					className="cursor-pointer"
@@ -120,9 +103,7 @@ export default function DataExtractionRoot() {
 								<br />
 							</>
 						)}
-						This blueprint and all contained data sources and extraction settings will be deleted.
-						<br />
-						This action cannot be undone.
+						This deletes the blueprint and its sources. This cannot be undone.
 					</div>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -156,9 +137,7 @@ export default function DataExtractionRoot() {
 				{blueprints.length === 0 && (
 					<div className="text-center text-muted-foreground py-12">
 						<p className="text-lg">No blueprints yet.</p>
-						<p className="text-sm mt-1">
-							Click "New Blueprint" to create your first data extraction blueprint.
-						</p>
+						<p className="text-sm mt-1">Click "New Blueprint" to get started.</p>
 					</div>
 				)}
 				{blueprints.length > 0 && (

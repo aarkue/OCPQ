@@ -39,8 +39,8 @@ export default function InfoSheetViewer() {
 	);
 }
 
+import { ThemedPlot as Plot } from "@r4pm/components/charts";
 import { DialogTitle } from "@radix-ui/react-dialog";
-import Plot from "react-plotly.js";
 import { getRandomStringColor } from "./lib/random-colors";
 import type { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
 

@@ -1,551 +1,337 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-ocpq_shared::use_mimalloc!();
+//! Desktop target: runs OCPQ inside a tauri app, mirroring the axum/wasm commands plus a few
+//! desktop-only ones (file dialogs, OS file associations, HPC session).
 
-use itertools::Itertools;
-use ocpq_shared::{
-    binding_box::{
-        evaluate_box_tree, filter_ocel_box_tree, CheckWithBoxTreeRequest, EvalPageRequest,
-        EvalPageResponse, EvaluateBoxTreeResult, EvaluateBoxTreeSummary, ExportFormat,
-        FilterExportWithBoxTreeRequest,
-    },
-    data_extraction::{
-        blueprint::ExecuteExtractionRequest, execute_extraction_slim_with_dbcon,
-        ExecuteExtractionResponse,
-    },
-    data_source::{connect_and_get_metadata, ConnectDataSourceRequest, DataSourceMetadata},
-    db_translation::{translate_to_sql_shared, DBTranslationInput},
-    discovery::{
-        auto_discover_constraints_with_options, AutoDiscoverConstraintsRequest,
-        AutoDiscoverConstraintsResponse,
-    },
-    get_event_info, get_object_info,
-    hpc_backend::{
-        get_job_status, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
-        ConnectionConfig, JobStatus, OCPQJobOptions,
-    },
-    oc_declare::statistics::{
-        get_activity_statistics, get_edge_stats, ActivityStatistics, BinnedEdgeDurationStats,
-    },
-    ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
-    path_schemas::{
-        discover_path_schemas, enumerate_path_schemas, path_type_graph, schema_detail,
-        PathEnumerateOptions, PathSchemaDetail, PathSchemaDetailOptions, PathSchemaInfo,
-        PathSchemaOptions, PathSchemaResult, PathTypeGraph,
-    },
-    process_mining::{
-        core::{
-            event_data::{
-                case_centric::xes::{import_xes_path, import_xes_slice, XESImportOptions},
-                object_centric::linked_ocel::SlimLinkedOCEL,
-            },
-            process_models::oc_declare::OCDeclareArc,
-        },
-        discovery::object_centric::oc_declare::OCDeclareDiscoveryOptions,
-        Exportable, Importable, OCEL,
-    },
-    table_export::{export_bindings_to_writer, TableExportFormat, TableExportOptions},
-    EventWithIndex, IndexOrID, OCELInfo, ObjectWithIndex,
-};
-use ocpq_shared::{
-    process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints,
-    trad_event_log::trad_log_to_ocel,
-};
-use std::{
-    fs::File,
-    io::{Cursor, Write},
-    path::Path,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-};
-use tauri::{
-    async_runtime::{JoinHandle, RwLock},
-    AppHandle, Manager, State,
-};
-use tauri_plugin_dialog::DialogExt;
+ocpq_core::use_mimalloc!();
 
-#[derive(Clone, Debug, Default)]
-pub struct AppState {
-    ocel: Arc<RwLock<Option<SlimLinkedOCEL>>>,
-    client: Arc<RwLock<Option<Client>>>,
-    jobs: Arc<RwLock<Vec<(String, u16, JoinHandle<()>)>>>,
-    eval_res: Arc<RwLock<Option<EvaluateBoxTreeResult>>>,
-    eval_version_counter: Arc<AtomicU64>,
-    initial_files: Arc<Mutex<Option<Vec<String>>>>,
+use std::str::FromStr;
+use std::sync::{Arc, Mutex, RwLock};
+
+use serde::Serialize;
+use serde_json::Value;
+use tauri::{Emitter, Manager, State};
+
+use backend_shared::process_mining::bindings::RegistryItemKind;
+use backend_shared::{Backend, ExtendedAppState};
+use ocpq_native::hpc_backend::{
+    get_job_status, job_is_over, login_on_hpc, start_port_forwarding, submit_hpc_job, Client,
+    ConnectionConfig, JobForwards, JobStatus, OCPQJobOptions,
+};
+
+// Force-link app-bindings so its registry entries survive an optimising build: `extern crate`
+// alone can get dropped, so `#[used]` pins a real symbol reference.
+extern crate app_bindings;
+#[used]
+static _FORCE_LINK_APP_BINDINGS: fn() -> String = app_bindings::app_ping;
+
+struct TauriBackend {
+    state: ExtendedAppState,
+    app: tauri::AppHandle,
+    hpc_client: RwLock<Option<Client>>,
+    hpc_jobs: JobForwards,
+    /// Paths the app was launched with via an OS file association or CLI args. Drained on first
+    /// read, so a relaunch does not re-import them.
+    initial_files: Mutex<Option<Vec<String>>>,
 }
 
-fn import_ocel_from_path(path: impl AsRef<Path>) -> Result<SlimLinkedOCEL, String> {
-    let ocel = SlimLinkedOCEL::import_from_path(path).map_err(|e| e.to_string())?;
-    Ok(ocel)
+impl Backend for TauriBackend {
+    fn get_state(&self) -> &ExtendedAppState {
+        &self.state
+    }
+    fn emit<S: Serialize + Clone>(&self, name: &str, data: S) -> Result<(), String> {
+        self.app.emit(name, data).map_err(|e| e.to_string())
+    }
 }
 
-async fn clear_eval_res(state: &AppState) {
-    *state.eval_res.write().await = None;
-}
+type Ctx<'a> = State<'a, Arc<TauriBackend>>;
+
+/// The one command every binding is reached through; runs on the blocking pool since bindings do
+/// synchronous CPU work and would otherwise stall the async runtime.
 #[tauri::command(async)]
-async fn import_ocel(path: &str, state: tauri::State<'_, AppState>) -> Result<OCELInfo, String> {
-    let locel = import_ocel_from_path(path)?;
-    let ocel_info: OCELInfo = (&locel).into();
-    let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(locel);
-    drop(state_guard);
-    clear_eval_res(&state).await;
-    Ok(ocel_info)
+async fn execute_binding(
+    backend: Ctx<'_>,
+    id: String,
+    args: Value,
+    output_name: Option<String>,
+) -> Result<Vec<u8>, String> {
+    let backend = Arc::clone(&backend);
+    tauri::async_runtime::spawn_blocking(move || {
+        backend_shared::execute_binding(&*backend, &id, &args, output_name.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn list_functions() -> Vec<backend_shared::process_mining::bindings::BindingMeta> {
+    backend_shared::list_functions()
+        .into_iter()
+        .map(Into::into)
+        .collect()
+}
+
+#[tauri::command]
+fn get_all_item_kinds() -> Result<Vec<backend_shared::RegistryItemInfo>, String> {
+    backend_shared::get_all_item_kinds()
+}
+
+#[tauri::command]
+fn get_all_objects_with_type(backend: Ctx<'_>) -> Result<Vec<backend_shared::ObjectInfo>, String> {
+    backend_shared::get_objects_with_type(&**backend)
+}
+
+#[tauri::command]
+fn set_object_label(backend: Ctx<'_>, id: String, label: Option<String>) -> Result<(), String> {
+    backend_shared::set_object_label(&**backend, id, label)
+}
+
+#[tauri::command]
+fn rename_object(backend: Ctx<'_>, from: String, to: String) -> Result<(), String> {
+    backend_shared::rename_object(&**backend, &from, &to)
+}
+
+#[tauri::command]
+fn unload_object(backend: Ctx<'_>, name: String) -> Result<(), String> {
+    backend_shared::unload_object(&**backend, name)
 }
 
 #[tauri::command(async)]
-async fn import_ocel_slice(
+async fn load_item_bytes(
+    backend: Ctx<'_>,
+    id: String,
+    kind: String,
     data: Vec<u8>,
-    format: &str,
-    state: tauri::State<'_, AppState>,
-) -> Result<OCELInfo, String> {
-    let locel = SlimLinkedOCEL::import_from_bytes(&data, format).map_err(|e| e.to_string())?;
-    let ocel_info: OCELInfo = (&locel).into();
-    let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(locel);
-    drop(state_guard);
-    clear_eval_res(&state).await;
-    Ok(ocel_info)
-}
-
-#[tauri::command(async)]
-async fn import_xes_path_as_ocel(
-    path: &str,
-    state: tauri::State<'_, AppState>,
-) -> Result<OCELInfo, String> {
-    let xes = import_xes_path(path, XESImportOptions::default()).map_err(|e| e.to_string())?;
-    let ocel = trad_log_to_ocel(&xes);
-
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
-    let ocel_info: OCELInfo = (&locel).into();
-    let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(locel);
-    drop(state_guard);
-    clear_eval_res(&state).await;
-    Ok(ocel_info)
-}
-#[tauri::command(async)]
-async fn import_xes_slice_as_ocel(
-    data: Vec<u8>,
-    format: &str,
-    state: tauri::State<'_, AppState>,
-) -> Result<OCELInfo, String> {
-    let xes = import_xes_slice(&data, format == ".xes.gz", XESImportOptions::default()).unwrap();
-    let ocel = trad_log_to_ocel(&xes);
-    let locel = SlimLinkedOCEL::from_ocel(ocel);
-    let ocel_info: OCELInfo = (&locel).into();
-    let mut state_guard = state.ocel.write().await;
-    *state_guard = Some(locel);
-    drop(state_guard);
-    clear_eval_res(&state).await;
-    Ok(ocel_info)
-}
-
-#[tauri::command(async)]
-async fn get_current_ocel_info(
-    state: tauri::State<'_, AppState>,
-) -> Result<Option<OCELInfo>, String> {
-    let res: Result<Option<OCELInfo>, String> = match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(Some(ocel.into())),
-        None => Ok(None),
-    };
-    res
-}
-
-#[tauri::command(async)]
-async fn get_sample_ids(
-    limit: usize,
-    state: tauri::State<'_, AppState>,
-) -> Result<ocpq_shared::SampleIds, String> {
-    let guard = state.ocel.read().await;
-    let ocel = guard.as_ref().ok_or_else(|| "No OCEL loaded".to_string())?;
-    Ok(ocpq_shared::get_sample_ids(ocel, limit))
-}
-
-#[tauri::command(async)]
-async fn check_with_box_tree(
-    req: CheckWithBoxTreeRequest,
-    state: State<'_, AppState>,
-) -> Result<EvaluateBoxTreeSummary, String> {
-    let ocel_guard = state.ocel.read().await;
-    let Some(ocel) = ocel_guard.as_ref() else {
-        return Err("No OCEL loaded".to_string());
-    };
-    let mut res = evaluate_box_tree(req.tree, ocel, req.measure_performance.unwrap_or(false))?;
-    drop(ocel_guard);
-    // Hold the eval_res lock while assigning the version so the cached snapshot
-    // and the version we hand to the client are always consistent, even under
-    // concurrent evaluations.
-    let mut eval_guard = state.eval_res.write().await;
-    res.eval_version = state.eval_version_counter.fetch_add(1, Ordering::SeqCst) + 1;
-    let summary = res.summary();
-    *eval_guard = Some(res);
-    Ok(summary)
-}
-
-#[tauri::command(async)]
-async fn get_eval_result_page(
-    req: EvalPageRequest,
-    state: State<'_, AppState>,
-) -> Result<EvalPageResponse, String> {
-    let guard = state.eval_res.read().await;
-    let res = guard
-        .as_ref()
-        .ok_or_else(|| "No evaluation result cached".to_string())?;
-    res.get_page(&req)
-}
-
-#[tauri::command(async)]
-async fn export_ocel(
-    format: ExportFormat,
-    state: State<'_, AppState>,
-    app: AppHandle,
+    format: String,
 ) -> Result<(), String> {
-    let ext = format.to_extension();
-    if let Some(path) = app
-        .dialog()
-        .file()
-        .set_title("Export OCEL")
-        .add_filter(format!("OCEL {:?} Files", format), &[ext])
-        .set_file_name(format!("ocel-export.{}", ext).as_str())
-        .blocking_save_file()
-    {
-        if let Some(path) = path.as_path() {
-            let guard = state.ocel.read().await;
-            let ocel = match guard.as_ref() {
-                Some(locel) => locel,
-                None => return Err("No OCEL loaded".to_string()),
-            };
-            let _ = std::fs::remove_file(path);
-            return SlimLinkedOCEL::export_to_path(ocel, path).map_err(|e| e.to_string());
-        }
-    }
-    Err("No path selected".to_string())
+    let kind = RegistryItemKind::from_str(&kind).map_err(|_| format!("Unknown item kind: {kind}"))?;
+    let backend = Arc::clone(&backend);
+    tauri::async_runtime::spawn_blocking(move || {
+        backend_shared::load_item_bytes(&*backend, id, &kind, &data, &format)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
+/// Desktop-only: read straight from a path, keeping a large log out of the IPC boundary.
 #[tauri::command(async)]
-async fn export_filter_box(
-    req: FilterExportWithBoxTreeRequest,
-    state: State<'_, AppState>,
-    app: AppHandle,
+async fn load_item_path(
+    backend: Ctx<'_>,
+    id: String,
+    kind: String,
+    path: String,
 ) -> Result<(), String> {
-    let res = match state.ocel.read().await.as_ref() {
-        Some(ocel) => {
-            let res: OCEL = filter_ocel_box_tree(req.tree, ocel).unwrap();
-            Some(res)
-        }
-        None => None,
-    }
-    .unwrap();
+    let kind = RegistryItemKind::from_str(&kind).map_err(|_| format!("Unknown item kind: {kind}"))?;
+    let backend = Arc::clone(&backend);
+    tauri::async_runtime::spawn_blocking(move || {
+        backend_shared::load_item_path(&*backend, id, &kind, &path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 
-    if let Some(path) = app
-        .dialog()
-        .file()
-        .set_title("Save Filtered OCEL")
-        .add_filter(
-            format!("OCEL {:?} Files", req.export_format),
-            &[req.export_format.to_extension()],
-        )
-        .set_file_name(format!("filtered-export.{}", req.export_format.to_extension()).as_str())
-        .blocking_save_file()
-    {
-        if let Some(path) = path.as_path() {
-            if let Ok(_file) = File::open(path) {
-                let _ = std::fs::remove_file(path);
-            }
-            return OCEL::export_to_path(&res, path).map_err(|er| er.to_string());
-        }
+/// Base64-encodes an export so it crosses IPC as one string; Tauri's default `Vec<u8>` -> JSON
+/// array encoding balloons a real log to hundreds of megabytes and fails outright.
+fn to_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b1 = chunk.get(1).copied().unwrap_or(0);
+        let b2 = chunk.get(2).copied().unwrap_or(0);
+        let n = (u32::from(chunk[0]) << 16) | (u32::from(b1) << 8) | u32::from(b2);
+        let sextet = |shift: u32| ALPHABET[(n >> shift & 63) as usize] as char;
+        out.push(sextet(18));
+        out.push(sextet(12));
+        out.push(if chunk.len() > 1 { sextet(6) } else { '=' });
+        out.push(if chunk.len() > 2 { sextet(0) } else { '=' });
     }
-    Err("No path selected".to_string())
+    out
 }
 
 #[tauri::command(async)]
-async fn auto_discover_constraints(
-    options: AutoDiscoverConstraintsRequest,
-    state: State<'_, AppState>,
-) -> Result<AutoDiscoverConstraintsResponse, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(auto_discover_constraints_with_options(ocel, options)),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-#[tauri::command(async)]
-async fn auto_discover_oc_declare(
-    options: OCDeclareDiscoveryOptions,
-    state: State<'_, AppState>,
-) -> Result<Vec<OCDeclareArc>, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(locel) => Ok(discover_behavior_constraints(locel, options)),
-        None => Err("No OCEL loaded".to_string()),
-    }
+async fn export_object(backend: Ctx<'_>, name: String, format: String) -> Result<String, String> {
+    let backend = Arc::clone(&backend);
+    tauri::async_runtime::spawn_blocking(move || {
+        backend_shared::export_object(&*backend, &name, &format).map(|b| to_base64(&b))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
-#[tauri::command(async)]
-async fn evaluate_oc_declare_arcs(
-    arcs: Vec<OCDeclareArc>,
-    state: State<'_, AppState>,
-) -> Result<Vec<f64>, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(locel) => {
-            let res = arcs
-                .iter()
-                .map(|arc| arc.get_for_all_evs_perf(locel))
-                .collect();
-            Ok(res)
-        }
-
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn get_oc_declare_edge_statistics(
-    arc: OCDeclareArc,
-    state: State<'_, AppState>,
-) -> Result<BinnedEdgeDurationStats, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(locel) => Ok(get_edge_stats(locel, &arc)),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn get_oc_declare_template_string(arcs: Vec<OCDeclareArc>) -> Result<String, String> {
-    let result = arcs.iter().map(|a| a.as_template_string()).join("\n");
-    Ok(result)
-}
-
-#[tauri::command(async)]
-async fn get_oc_declare_activity_statistics(
-    activity: String,
-    state: State<'_, AppState>,
-) -> Result<ActivityStatistics, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(locel) => Ok(get_activity_statistics(locel, &activity)),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
+/// Exports the situations of one evaluation node's binding table to CSV/XLSX.
 #[tauri::command(async)]
 async fn export_bindings_table(
+    backend: Ctx<'_>,
+    ocel_id: String,
+    eval_id: String,
     node_index: usize,
-    options: TableExportOptions,
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<(), String> {
-    if let Some(ocel) = state.ocel.read().await.as_ref() {
-        let mut writer = Cursor::new(Vec::new());
-        let eval_guard = state.eval_res.read().await;
-        let eval_res = eval_guard
-            .as_ref()
-            .and_then(|e_res| e_res.evaluation_results.get(node_index));
-        if let Some(node_eval_res) = eval_res {
-            export_bindings_to_writer(ocel, node_eval_res, &mut writer, &options).unwrap();
-            app.dialog()
-                .file()
-                .set_title("Save Filtered OCEL")
-                .add_filter(
-                    "CSV/XLSX Files",
-                    &[match options.format {
-                        TableExportFormat::CSV => "csv",
-                        TableExportFormat::XLSX => "xlsx",
-                    }],
-                )
-                .set_file_name(format!(
-                    "situation-table.{}",
-                    match options.format {
-                        TableExportFormat::CSV => "csv",
-                        TableExportFormat::XLSX => "xlsx",
-                    }
-                ))
-                .save_file(move |f| {
-                    if let Some(path) = f {
-                        if let Some(path) = path.as_path() {
-                            if let Ok(_file) = File::open(path) {
-                                let _ = std::fs::remove_file(path);
-                            }
-                            let mut f = File::create(path).unwrap();
-                            f.write_all(&writer.into_inner()).unwrap();
-                        }
-                    }
-                });
-            return Ok(());
-        }
-    }
-    Err("No OCEL loaded".to_string())
-}
-
-#[tauri::command(async)]
-async fn ocel_graph(
-    options: OCELGraphOptions,
-    state: State<'_, AppState>,
-) -> Result<OCELGraph, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => match get_ocel_graph(ocel, options) {
-            Some(graph) => Ok(graph),
-            None => Err("Could not construct OCEL Graph".to_string()),
-        },
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn path_type_graph_cmd(state: State<'_, AppState>) -> Result<PathTypeGraph, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(path_type_graph(ocel)),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn discover_path_schemas_cmd(
-    options: PathSchemaOptions,
-    state: State<'_, AppState>,
-) -> Result<PathSchemaResult, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(discover_path_schemas(ocel, options)),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn enumerate_path_schemas_cmd(
-    options: PathEnumerateOptions,
-    state: State<'_, AppState>,
-) -> Result<Vec<PathSchemaInfo>, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => Ok(enumerate_path_schemas(ocel, options)),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn schema_detail_cmd(
-    options: PathSchemaDetailOptions,
-    state: State<'_, AppState>,
-) -> Result<PathSchemaDetail, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => schema_detail(ocel, options).ok_or_else(|| "Schema not found".to_string()),
-        None => Err("No OCEL loaded".to_string()),
-    }
-}
-
-#[tauri::command(async)]
-async fn create_db_query(
-    input: DBTranslationInput,
-    _state: State<'_, AppState>,
+    options: ocpq_core::table_export::TableExportOptions,
 ) -> Result<String, String> {
-    Ok(translate_to_sql_shared(input))
+    let backend = Arc::clone(&backend);
+    tauri::async_runtime::spawn_blocking(move || {
+        backend_shared::export_bindings_table_file(&*backend, &ocel_id, &eval_id, node_index, &options)
+            .map(|b| to_base64(&b))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
+/// Desktop-only: write the export straight to `path`, for the same reason `load_item_path` exists.
 #[tauri::command(async)]
-async fn get_event(req: IndexOrID, state: State<'_, AppState>) -> Result<EventWithIndex, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => get_event_info(ocel, req),
-        None => None,
-    }
-    .ok_or("Failed to get event".to_string())
-}
-
-#[tauri::command(async)]
-async fn get_object(req: IndexOrID, state: State<'_, AppState>) -> Result<ObjectWithIndex, String> {
-    match state.ocel.read().await.as_ref() {
-        Some(ocel) => get_object_info(ocel, req),
-        None => None,
-    }
-    .ok_or("Failed to get object".to_string())
-}
-
-#[tauri::command(async)]
-async fn login_to_hpc_tauri(
-    cfg: ConnectionConfig,
-    state: State<'_, AppState>,
+async fn export_object_to_path(
+    backend: Ctx<'_>,
+    name: String,
+    format: String,
+    path: String,
 ) -> Result<(), String> {
-    let client = login_on_hpc(&cfg).await.map_err(|er| er.to_string())?;
-    let mut x = state.client.write().await;
-    *x = Some(client);
+    let backend = Arc::clone(&backend);
+    tauri::async_runtime::spawn_blocking(move || {
+        backend_shared::export_object_to_path(&*backend, &name, &format, &path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 
+#[tauri::command]
+fn load_artifact_bytes(
+    backend: Ctx<'_>,
+    id: String,
+    kind: String,
+    data: Vec<u8>,
+    format: String,
+) -> Result<(), String> {
+    backend_shared::load_artifact_bytes(&**backend, id, &kind, &data, &format)
+}
+
+#[tauri::command]
+fn load_artifact_path(
+    backend: Ctx<'_>,
+    id: String,
+    kind: String,
+    path: String,
+) -> Result<(), String> {
+    backend_shared::load_artifact_path(&**backend, id, &kind, &path)
+}
+
+#[tauri::command]
+fn list_artifacts(backend: Ctx<'_>) -> Result<Vec<backend_shared::ObjectInfo>, String> {
+    backend_shared::list_artifacts(&**backend)
+}
+
+#[tauri::command]
+fn get_artifact(backend: Ctx<'_>, id: String) -> Result<Value, String> {
+    backend_shared::get_artifact(&**backend, &id)
+}
+
+#[tauri::command]
+fn unload_artifact(backend: Ctx<'_>, id: String) -> Result<(), String> {
+    backend_shared::unload_artifact(&**backend, id)
+}
+
+#[tauri::command]
+fn export_artifact(backend: Ctx<'_>, id: String, format: String) -> Result<String, String> {
+    backend_shared::export_artifact(&**backend, &id, &format).map(|b| to_base64(&b))
+}
+
+/// Paths the app was launched with via an OS file association ("Open with OCPQ") or CLI args.
+#[tauri::command]
+fn get_initial_files(backend: Ctx<'_>) -> Result<Vec<String>, String> {
+    Ok(backend
+        .initial_files
+        .lock()
+        .map_err(|e| e.to_string())?
+        .take()
+        .unwrap_or_default())
+}
+
+#[tauri::command(async)]
+async fn hpc_login(backend: Ctx<'_>, config: ConnectionConfig) -> Result<(), String> {
+    let client = login_on_hpc(&config).await.map_err(|e| e.to_string())?;
+    *backend.hpc_client.write().map_err(|e| e.to_string())? = Some(client);
     Ok(())
 }
 
 #[tauri::command(async)]
-async fn start_hpc_job_tauri(
-    options: OCPQJobOptions,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    let x = state.client.write().await.clone().unwrap();
-    let c = Arc::new(x);
-    let c2 = Arc::clone(&c);
-    let port: u16 = options.port.parse::<u16>().map_err(|e| e.to_string())?;
-    let (_folder_id, job_id) = submit_hpc_job(c, options)
+async fn hpc_start(backend: Ctx<'_>, options: OCPQJobOptions) -> Result<String, String> {
+    let client = backend
+        .hpc_client
+        .read()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| "Not logged in to HPC".to_string())?;
+    let port: u16 = options.port.parse().map_err(|e: std::num::ParseIntError| e.to_string())?;
+    let client = Arc::new(client);
+    let (_folder_id, job_id) = submit_hpc_job(Arc::clone(&client), options)
         .await
-        .map_err(|er| er.to_string())?;
-    let p = start_port_forwarding(
-        c2,
+        .map_err(|e| e.to_string())?;
+    let forward = start_port_forwarding(
+        client,
         &format!("127.0.0.1:{port}"),
         &format!("127.0.0.1:{port}"),
     )
     .await
-    .map_err(|er| er.to_string())?;
-
-    state.jobs.write().await.push((
-        job_id.clone(),
-        port,
-        tauri::async_runtime::JoinHandle::Tokio(p),
-    ));
+    .map_err(|e| e.to_string())?;
+    backend.hpc_jobs.insert(job_id.clone(), port, forward);
     Ok(job_id)
 }
 
 #[tauri::command(async)]
-async fn get_hpc_job_status_tauri(
-    job_id: String,
-    state: State<'_, AppState>,
-) -> Result<JobStatus, String> {
-    let x = state.client.write().await.clone().unwrap();
-    let c = Arc::new(x);
-    let status = get_job_status(c, job_id).await;
-    let status = status.map_err(|er| er.to_string())?;
+async fn hpc_job_status(backend: Ctx<'_>, job_id: String) -> Result<JobStatus, String> {
+    let client = backend
+        .hpc_client
+        .read()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| "Not logged in to HPC".to_string())?;
+    let status = get_job_status(Arc::new(client), job_id.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+    // Polling this is the only signal either target gets that a job is done, so it is where the
+    // forward is closed; otherwise the task keeps holding its local port for the process lifetime.
+    if job_is_over(&status) {
+        backend.hpc_jobs.release(&job_id);
+    }
     Ok(status)
 }
 
-#[tauri::command]
-fn get_initial_files(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let mut ret = state.initial_files.lock().unwrap();
-    if let Some(ret) = ret.take() {
-        Ok(ret)
-    } else {
-        Ok(Vec::default())
+#[cfg(test)]
+mod base64_tests {
+    use super::to_base64;
+
+    /// RFC 4648 section 10, which is what the webview's `atob` implements.
+    #[test]
+    fn matches_the_reference_vectors_at_every_padding_length() {
+        for (input, expected) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(to_base64(input.as_bytes()), expected, "input {input:?}");
+        }
     }
-}
 
-#[tauri::command(async)]
-async fn unload_ocel(state: State<'_, AppState>) -> Result<(), String> {
-    *state.ocel.write().await = None;
-    clear_eval_res(&state).await;
-    Ok(())
-}
+    /// An export is arbitrary bytes -- gzip and sqlite are not text -- so the high bits and the
+    /// last two alphabet entries have to survive.
+    #[test]
+    fn encodes_bytes_that_are_not_valid_utf8() {
+        assert_eq!(to_base64(&[0xff, 0xfe, 0xfd]), "//79");
+        assert_eq!(to_base64(&[0x00]), "AA==");
+        assert_eq!(to_base64(&[0x00, 0xff]), "AP8=");
+        assert_eq!(to_base64(&[0xfb, 0xef, 0xbe]), "++++");
+    }
 
-#[tauri::command(async)]
-async fn connect_data_source(req: ConnectDataSourceRequest) -> Result<DataSourceMetadata, String> {
-    connect_and_get_metadata(req)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command(async)]
-async fn execute_extraction(
-    req: ExecuteExtractionRequest,
-    state: State<'_, AppState>,
-) -> Result<ExecuteExtractionResponse, String> {
-    let (locel, response) = execute_extraction_slim_with_dbcon(&req.blueprint)
-        .await
-        .map_err(|e| e.to_string())?;
-    *state.ocel.write().await = Some(locel);
-    clear_eval_res(&state).await;
-    Ok(response)
+    #[test]
+    fn output_is_four_characters_per_three_input_bytes() {
+        for len in 0..64usize {
+            let encoded = to_base64(&vec![0xa5; len]);
+            assert_eq!(encoded.len(), len.div_ceil(3) * 4, "length {len}");
+        }
+    }
 }
 
 fn main() {
@@ -555,86 +341,58 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState::default())
         .setup(
             #[allow(unused_variables)]
-            // might be unused, depending on the platform
+            // `initial_files` is only populated on the platforms that pass them as CLI args.
             |app| {
-                log::info!("Setup!");
+                let mut files: Vec<String> = Vec::new();
                 #[cfg(any(windows, target_os = "linux"))]
                 {
-                    let state = app.state::<AppState>();
-                    let mut files = Vec::new();
-
-                    // NOTICE: `args` may include URL protocol (`your-app-protocol://`)
-                    // or arguments (`--`) if your app supports them.
-                    // files may also be passed as `file://path/to/file`
+                    // NOTICE: `args` may include a URL protocol (`your-app-protocol://`) or flags
+                    // (`--`) if the app supports them; paths may also arrive as `file://`.
                     for maybe_file in std::env::args().skip(1) {
-                        // skip flags like -f or --flag
-                        log::info!("Args: {maybe_file}");
-                        use std::path::PathBuf;
                         if maybe_file.starts_with('-') {
                             continue;
                         }
-
-                        // handle `file://` path urls and fallback for other urls
-                        if let Ok(url) = url::Url::parse(&maybe_file) {
-                            if let Ok(path) = url.to_file_path() {
-                                files.push(path);
-                            } else {
-                                log::info!(
-                                    "Url file path failed. Using directly as PathBuf instead."
-                                );
-                                files.push(maybe_file.into());
-                            }
-                        } else {
-                            files.push(PathBuf::from(maybe_file))
+                        match url::Url::parse(&maybe_file).ok().and_then(|u| u.to_file_path().ok()) {
+                            Some(path) => files.push(path.to_string_lossy().to_string()),
+                            None => files.push(maybe_file),
                         }
                     }
-                    let mut init_files_guard = state.initial_files.lock().unwrap();
-                    *init_files_guard = Some(
-                        files
-                            .into_iter()
-                            .map(|f| f.to_string_lossy().to_string())
-                            .collect(),
-                    );
                 }
+                app.manage(Arc::new(TauriBackend {
+                    state: ExtendedAppState::default(),
+                    app: app.handle().clone(),
+                    hpc_client: RwLock::new(None),
+                    hpc_jobs: JobForwards::default(),
+                    initial_files: Mutex::new(Some(files)),
+                }));
                 Ok(())
             },
         )
         .invoke_handler(tauri::generate_handler![
-            import_ocel,
-            import_ocel_slice,
-            import_xes_path_as_ocel,
-            import_xes_slice_as_ocel,
-            get_current_ocel_info,
-            get_sample_ids,
-            export_ocel,
-            export_filter_box,
-            check_with_box_tree,
-            get_eval_result_page,
-            auto_discover_constraints,
+            execute_binding,
+            list_functions,
+            get_all_item_kinds,
+            get_all_objects_with_type,
+            set_object_label,
+            rename_object,
+            unload_object,
+            load_item_bytes,
+            load_item_path,
+            export_object,
+            export_object_to_path,
             export_bindings_table,
-            ocel_graph,
-            path_type_graph_cmd,
-            enumerate_path_schemas_cmd,
-            discover_path_schemas_cmd,
-            schema_detail_cmd,
-            get_event,
-            get_object,
-            login_to_hpc_tauri,
-            start_hpc_job_tauri,
-            get_hpc_job_status_tauri,
+            load_artifact_bytes,
+            load_artifact_path,
+            list_artifacts,
+            get_artifact,
+            unload_artifact,
+            export_artifact,
             get_initial_files,
-            auto_discover_oc_declare,
-            evaluate_oc_declare_arcs,
-            get_oc_declare_edge_statistics,
-            get_oc_declare_activity_statistics,
-            get_oc_declare_template_string,
-            create_db_query,
-            connect_data_source,
-            execute_extraction,
-            unload_ocel
+            hpc_login,
+            hpc_start,
+            hpc_job_status,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
@@ -643,17 +401,16 @@ fn main() {
             |app, event| {
                 #[cfg(any(target_os = "macos", target_os = "ios"))]
                 if let tauri::RunEvent::Opened { urls } = event {
-                    let state = app.state::<AppState>();
-                    let files = urls
+                    let backend = app.state::<Arc<TauriBackend>>();
+                    let files: Vec<String> = urls
                         .into_iter()
-                        .filter_map(|url| url.to_file_path().ok())
-                        .collect::<Vec<_>>();
-                    let strs: Vec<_> = files
-                        .into_iter()
-                        .map(|f| f.to_string_lossy().to_string())
+                        .filter_map(|u| u.to_file_path().ok())
+                        .map(|p| p.to_string_lossy().to_string())
                         .collect();
-                    let mut initial_files = state.initial_files.lock().unwrap();
-                    *initial_files = Some(strs);
+                    if let Ok(mut guard) = backend.initial_files.lock() {
+                        guard.get_or_insert_with(Vec::new).extend(files);
+                    }
+                    let _ = backend.emit("initial-files-changed", ());
                 }
             },
         );

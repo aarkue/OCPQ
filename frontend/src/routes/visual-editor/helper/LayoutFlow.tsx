@@ -17,7 +17,7 @@ const defaultOptions = {
 	"elk.direction": "DOWN",
 
 	"elk.algorithm": "mrtree",
-	"elk.spacing.nodeNode": "100",
+	"elk.spacing.nodeNode": "65",
 };
 
 export const useLayoutedElements = () => {
@@ -67,8 +67,8 @@ export async function applyLayoutToNodes(
 						];
 			return {
 				id: n.id,
-				width: n.width ?? ("box" in n.data ? 240 : 128),
-				height: n.height ?? ("box" in n.data ? 180 : 80),
+				width: n.measured?.width ?? n.width ?? ("box" in n.data ? 240 : 128),
+				height: n.measured?.height ?? n.height ?? ("box" in n.data ? 180 : 80),
 				properties: { "org.eclipse.elk.portConstraints": "FIXED_SIDE" },
 				//  also pass plain id to handle edges without a sourceHandle or targetHandle
 				ports: [{ id: n.id, properties: { side: "EAST" } }, ...targetPorts, ...sourcePorts],

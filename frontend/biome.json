@@ -54,6 +54,12 @@
 		}
 	},
 	"files": {
-		"includes": ["src/**", "!**/generated", "!**/*.css"]
+		"includes": [
+			"src/**",
+			"!**/generated",
+			"!src/bindings/generated.ts",
+			"!src/bindings/bindings-meta.json",
+			"!**/*.css"
+		]
 	}
 }

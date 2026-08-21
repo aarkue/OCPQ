@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "react-hot-toast";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import App from "./App.tsx";
@@ -11,6 +12,23 @@ import OCDeclareViewer from "./routes/oc-declare/OCDeclareViewer.tsx";
 import OcelInfoViewer from "./routes/ocel-info/OcelInfoViewer.tsx";
 import PathSchemasViewer from "./routes/path-schemas/PathSchemasViewer.tsx";
 import OuterVisualEditor from "./routes/visual-editor/outer-visual-editor/OuterVisualEditor.tsx";
+
+/** Dev-only smoke page for the propel components. Lazy plus a `DEV` guard keeps it out of the
+ *  production bundle. */
+const ComponentsSmoke = lazy(() => import("./routes/_smoke/ComponentsSmoke.tsx"));
+
+const smokeRoutes = import.meta.env.DEV
+	? [
+			{
+				path: "/_smoke",
+				element: (
+					<Suspense fallback={null}>
+						<ComponentsSmoke />
+					</Suspense>
+				),
+			},
+		]
+	: [];
 
 const router = createBrowserRouter([
 	{
@@ -30,6 +48,7 @@ const router = createBrowserRouter([
 				path: "/data-extraction/:id",
 				element: <DataExtractionBlueprintEditor />,
 			},
+			...smokeRoutes,
 		],
 	},
 ]);

@@ -2,35 +2,6 @@ import type { PathTypeEdge } from "@/types/generated/PathTypeEdge";
 import type { PathTypeNode } from "@/types/generated/PathTypeNode";
 import type { PathTypeRef } from "@/types/generated/PathTypeRef";
 
-/** Deterministic hash of a string to a positive integer. */
-export function hashString(s: string): number {
-	let h = 0;
-	for (let i = 0; i < s.length; i++) {
-		h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-	}
-	return Math.abs(h);
-}
-
-/** Hue for a type name. Events use cool hues (200-280), objects warm (0-50, 90-180). */
-export function typeHue(name: string, kind: "event" | "object"): number {
-	const h = hashString(name);
-	if (kind === "event") {
-		return 200 + (h % 80);
-	}
-	const deg = h % 140;
-	return deg < 50 ? deg : 90 + (deg - 50);
-}
-
-export function typeColor(name: string, kind: "event" | "object") {
-	const hue = typeHue(name, kind);
-	return {
-		hue,
-		border: `hsl(${hue}, 55%, 42%)`,
-		bg: `hsl(${hue}, 40%, 88%)`,
-		text: `hsl(${hue}, 55%, 30%)`,
-	};
-}
-
 /** Stable composite key for a typed reference. Event and object type names are not
  *  disjoint in OCEL, so identity must include the kind. */
 export function typeKey(t: PathTypeRef): string {
@@ -50,13 +21,6 @@ export function typeRefEq(
 export const SMALL_LOG_TYPE_LIMIT = 30;
 /** Default scope size for large logs. */
 export const DEFAULT_AUTO_K = 15;
-/** Upper bound enforced by the bounded bulk actions (grow neighbors, select all), so the
- *  graph and enumeration stay responsive on logs with hundreds of types. */
-export const MAX_SCOPE_TYPES = 50;
-/** When growing the scope, a single scope type that would pull in more than this many new
- *  neighbors is treated as a hub and skipped, so one densely-connected type cannot blow up
- *  the whole scope. */
-export const DEFAULT_EXPANSION_PER_TYPE = 10;
 
 const nodeRef = (n: PathTypeNode): PathTypeRef => ({ name: n.name, is_event: n.is_event });
 
@@ -113,64 +77,6 @@ export function connectedTopK(
 		add(next);
 	}
 	return picked;
-}
-
-export interface ScopeExpansion {
-	scope: PathTypeRef[];
-	/** Names of scope types skipped because expanding them would add too many neighbors. */
-	skippedHubs: string[];
-	/** Whether the hard scope cap was reached before all neighbors could be added. */
-	hitCap: boolean;
-}
-
-/** Grow the scope by one hop: add types directly connected to the current scope, but skip
- *  any single scope type that would pull in more than `perTypeLimit` new neighbors (a hub),
- *  and never exceed `maxScope` total. Higher-frequency scope types expand first so the cap
- *  favours the more relevant neighbors. */
-export function expandScope(
-	shown: PathTypeRef[],
-	nodes: PathTypeNode[],
-	edges: PathTypeEdge[],
-	perTypeLimit = DEFAULT_EXPANSION_PER_TYPE,
-	maxScope = MAX_SCOPE_TYPES,
-): ScopeExpansion {
-	const adj = buildAdjacency(edges);
-	const countByKey = new Map(nodes.map((n) => [typeKey(n), n.count]));
-	const nameByKey = new Map(nodes.map((n) => [typeKey(n), n.name]));
-	const inScope = new Set(shown.map(typeKey));
-	const skippedHubs: string[] = [];
-	let hitCap = false;
-
-	const byCountDesc = (a: string, b: string) => (countByKey.get(b) ?? 0) - (countByKey.get(a) ?? 0);
-	// Snapshot the seeds (only the original scope expands; new neighbors are not re-expanded).
-	const seeds = [...inScope].sort(byCountDesc);
-	for (const seedKey of seeds) {
-		if (inScope.size >= maxScope) {
-			hitCap = true;
-			break;
-		}
-		const nbrs = adj.get(seedKey);
-		if (!nbrs) continue;
-		const fresh = [...nbrs].filter((n) => !inScope.has(n));
-		if (fresh.length === 0) continue;
-		if (fresh.length > perTypeLimit) {
-			skippedHubs.push(nameByKey.get(seedKey) ?? seedKey);
-			continue;
-		}
-		fresh.sort(byCountDesc);
-		for (const k of fresh) {
-			if (inScope.size >= maxScope) {
-				hitCap = true;
-				break;
-			}
-			inScope.add(k);
-		}
-	}
-	return {
-		scope: nodes.filter((n) => inScope.has(typeKey(n))).map(nodeRef),
-		skippedHubs,
-		hitCap,
-	};
 }
 
 /** Human-readable duration from a number of seconds. */

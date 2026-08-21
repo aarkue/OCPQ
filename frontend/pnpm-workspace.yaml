@@ -1,3 +1,7 @@
 allowBuilds:
-  esbuild: false
   es5-ext: false
+  esbuild: false
+
+ignoredBuiltDependencies:
+  - es5-ext
+  - esbuild

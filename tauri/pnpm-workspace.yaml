@@ -1,0 +1,6 @@
+allowBuilds:
+  es5-ext: false
+  esbuild: false
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - '@r4pm/components'

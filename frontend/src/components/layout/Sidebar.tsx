@@ -19,7 +19,7 @@ export function Sidebar({ ocelInfo, backendAvailable, children }: SidebarProps) 
 	const isAtRoot = location.pathname === "/";
 
 	return (
-		<div className="border-r border-r-slate-300 px-2 overflow-auto">
+		<div className="border-r border-r-slate-300 px-2 overflow-auto text-center">
 			<img src="/favicon.png" className="w-28 h-28 mx-auto mt-4 mb-2" alt="OCPQ Logo" />
 			<h2 className="font-black text-3xl bg-clip-text text-transparent bg-linear-to-r from-slate-800 to-sky-600 tracking-tighter">
 				OCPQ
@@ -65,9 +65,6 @@ function NavigationLinks({ ocelInfo }: { ocelInfo: OCELInfo | undefined }) {
 				to="/data-extraction"
 				classNames="bg-sky-300/20 border-sky-300/30 hover:bg-sky-300/60 [.active]:border-sky-400 [.active]:bg-sky-300/70 mb-2 relative"
 			>
-				<div className="absolute -top-4 text-xs font-semibold text-pink-900 bg-pink-300 p-0.5 px-1 right-1 rounded-md border border-pink-400">
-					Beta
-				</div>
 				Extraction Blueprints
 				<BsDatabase className="ml-2" />
 			</MenuLink>
