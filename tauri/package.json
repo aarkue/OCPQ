@@ -71,7 +71,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
-    "@tauri-apps/cli": "^2.10.1",
+    "@tauri-apps/cli": "^2.12.1",
     "@types/node": "^20.19.39",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
