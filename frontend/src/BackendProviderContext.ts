@@ -2,6 +2,7 @@ import type {
 	Blueprint as ExtractionBlueprint,
 	ExtractionCatalog,
 	ExtractionReport,
+	TablePreview as ExtractionTablePreview,
 	ValidationError as ExtractionValidationError,
 } from "@r4pm/components/extraction-blueprint";
 import { createContext } from "react";
@@ -166,6 +167,13 @@ export type BackendProvider = {
 		table: string,
 		column: string,
 	) => Promise<string[]>;
+	/** The first few rows of one table, for display only (never a column's full domain). */
+	"data-extraction/table-preview": (
+		connections: ExtractionConnections,
+		sourceId: string,
+		table: string,
+		limit?: number,
+	) => Promise<ExtractionTablePreview>;
 	/** Check a blueprint against a catalog. Touches no connection. */
 	"data-extraction/validate": (
 		blueprint: ExtractionBlueprint,
@@ -218,6 +226,7 @@ export const ErrorBackendContext: BackendProvider = {
 	"data-extraction/connection-kinds": warnForNoBackendProvider,
 	"data-extraction/discover-catalog": warnForNoBackendProvider,
 	"data-extraction/column-domain": warnForNoBackendProvider,
+	"data-extraction/table-preview": warnForNoBackendProvider,
 	"data-extraction/validate": warnForNoBackendProvider,
 	"data-extraction/execute": warnForNoBackendProvider,
 };
@@ -479,6 +488,13 @@ export function createBackendProvider(backend: BackendContext): BackendProvider 
 				source_id: sourceId,
 				table,
 				column,
+			}),
+		"data-extraction/table-preview": async (connections, sourceId, table, limit) =>
+			await call("process_mining::bindings::extraction_dbcon_bindings::extraction_table_preview", {
+				connections,
+				source_id: sourceId,
+				table,
+				limit,
 			}),
 		"data-extraction/validate": async (blueprint, catalog) =>
 			twin(

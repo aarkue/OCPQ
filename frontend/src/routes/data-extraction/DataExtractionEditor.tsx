@@ -50,6 +50,8 @@ export default function DataExtractionEditor({
 			onDiscoverCatalog: (conns) => backend["data-extraction/discover-catalog"](conns),
 			onColumnDomain: (conns, sourceId, table, column) =>
 				backend["data-extraction/column-domain"](conns, sourceId, table, column),
+			onTablePreview: (conns, sourceId, table, limit) =>
+				backend["data-extraction/table-preview"](conns, sourceId, table, limit),
 			// Native "Browse..." for file-backed sources (sqlite/csv/parquet/xlsx)
 			onPickFile: backend["pick-file"]
 				? async (extensions) => {
