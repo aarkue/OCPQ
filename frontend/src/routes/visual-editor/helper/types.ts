@@ -8,6 +8,8 @@ export type EvaluationResPerNodes = {
 	evalVersion: number;
 	evalNodes: Record<string, BindingBoxTreeNode>;
 	nodeIdtoIndex: Record<string, number>;
+	/** The named child sets of each box, by box node id. */
+	childSets: Record<string, { name: string; nodeId: string }[]>;
 };
 
 export type EvaluationRes = NodeSummary;
@@ -57,4 +59,9 @@ export type DiscoverConstraintsResponse = {
 	constraints: [string, BindingBoxTree][];
 };
 
-export type ConstraintInfo = { name: string; description: string };
+export type ConstraintInfo = {
+	name: string;
+	description: string;
+	/** Saves from before tags existed have none. Left out instead of empty, see `withTags`. */
+	tags?: string[];
+};

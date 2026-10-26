@@ -27,6 +27,8 @@ mod tests {
             "app_bindings::ocel::ocel_sample_ids",
             "app_bindings::ocel::ocel_get_object",
             "app_bindings::ocel::ocel_get_event",
+            "app_bindings::ocel::ocel_search_elements",
+            "app_bindings::ocel::ocel_element_relations",
             "app_bindings::ocel::ocel_graph",
             "app_bindings::query::check_constraints_box",
             "app_bindings::query::discover_constraints",

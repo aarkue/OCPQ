@@ -82,12 +82,18 @@ fn linspace_hist(vals: &[f64], nbins: usize) -> (Vec<f64>, Vec<usize>) {
         // Single distinct value: one degenerate bin.
         return (vec![min, min + 1.0], vec![vals.len()]);
     }
+    // Interpolated and divided before subtracting, so values near opposite limits do not
+    // overflow to infinity.
+    let step = max / nbins as f64 - min / nbins as f64;
     let edges: Vec<f64> = (0..=nbins)
-        .map(|i| min + (max - min) * (i as f64) / (nbins as f64))
+        .map(|i| {
+            let t = i as f64 / nbins as f64;
+            min * (1.0 - t) + max * t
+        })
         .collect();
     let mut counts = vec![0usize; nbins];
     for &v in vals {
-        let mut idx = (((v - min) / (max - min)) * (nbins as f64)).floor() as isize;
+        let mut idx = (v / step - min / step).floor() as isize;
         if idx < 0 {
             idx = 0;
         }
@@ -110,7 +116,11 @@ fn value_to_string(v: &OCELAttributeValue) -> String {
     }
 }
 
-fn numeric_stats(vals: &[&OCELAttributeValue], null_count: usize, integer: bool) -> OcelAttributeStats {
+fn numeric_stats(
+    vals: &[&OCELAttributeValue],
+    null_count: usize,
+    integer: bool,
+) -> OcelAttributeStats {
     let nums: Vec<f64> = vals
         .iter()
         .filter_map(|v| match v {
@@ -119,13 +129,20 @@ fn numeric_stats(vals: &[&OCELAttributeValue], null_count: usize, integer: bool)
             _ => None,
         })
         .collect();
+    // `get_ocel_attribute_stats` counts NaN and infinities as missing. Other callers get them
+    // left out here, as a histogram has no place for them and JSON has no number for them.
+    let nums: Vec<f64> = nums.into_iter().filter(|f| f.is_finite()).collect();
     if nums.is_empty() {
         return OcelAttributeStats::Empty;
     }
     let count = nums.len();
     let min = nums.iter().cloned().fold(f64::INFINITY, f64::min);
     let max = nums.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let mean = nums.iter().sum::<f64>() / (count as f64);
+    // A running mean stays finite where the sum of large values would overflow. Dividing before
+    // subtracting keeps it finite for values of opposite sign near the limits, too.
+    let mean = nums.iter().enumerate().fold(0.0, |mean, (i, x)| {
+        mean + (x / (i + 1) as f64 - mean / (i + 1) as f64)
+    });
     let (edges, counts) = linspace_hist(&nums, NBINS);
     if integer {
         OcelAttributeStats::Integer {
@@ -244,13 +261,19 @@ pub fn get_ocel_attribute_stats(
     .and_then(|t| t.attributes.iter().find(|a| a.name == attr))
     .map(|a| a.value_type.to_lowercase());
 
+    // NaN and infinities count as missing, since they cannot be charted or written as JSON numbers.
+    let has_value = |v: &OCELAttributeValue| match v {
+        OCELAttributeValue::Null => false,
+        OCELAttributeValue::Float(f) => f.is_finite(),
+        _ => true,
+    };
     let mut vals: Vec<&OCELAttributeValue> = Vec::new();
     let mut null_count = 0usize;
     match scope {
         AttrScope::Event => {
             for ev in ocel.get_evs_of_type(type_name) {
                 match ocel.get_ev_attr_val(ev, attr) {
-                    Some(v) if !matches!(v, OCELAttributeValue::Null) => vals.push(v),
+                    Some(v) if has_value(v) => vals.push(v),
                     _ => null_count += 1,
                 }
             }
@@ -259,7 +282,7 @@ pub fn get_ocel_attribute_stats(
             for ob in ocel.get_obs_of_type(type_name) {
                 let before = vals.len();
                 for (_t, v) in ocel.get_ob_attr_vals(ob, attr) {
-                    if !matches!(v, OCELAttributeValue::Null) {
+                    if has_value(v) {
                         vals.push(v);
                     }
                 }
@@ -278,5 +301,68 @@ pub fn get_ocel_attribute_stats(
         Some("string") => categorical_stats(&vals, null_count),
         _ if vals.is_empty() => OcelAttributeStats::Empty,
         _ => categorical_stats(&vals, null_count),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn floats(vals: &[f64]) -> Vec<OCELAttributeValue> {
+        vals.iter().map(|f| OCELAttributeValue::Float(*f)).collect()
+    }
+
+    #[test]
+    fn numeric_stats_leave_out_nan_and_infinity() {
+        let vals = floats(&[1.0, f64::NAN, 3.0, f64::INFINITY]);
+        let refs: Vec<&OCELAttributeValue> = vals.iter().collect();
+        let stats = numeric_stats(&refs, 2, false);
+        let OcelAttributeStats::Float {
+            min,
+            max,
+            mean,
+            count,
+            null_count,
+            ..
+        } = stats
+        else {
+            panic!("expected float stats, got {stats:?}");
+        };
+        assert_eq!((min, max, mean, count, null_count), (1.0, 3.0, 2.0, 2, 2));
+        // JSON has no NaN, so serde writes `null`, which the UI cannot format.
+        let json = serde_json::to_string(&numeric_stats(&refs, 0, false)).unwrap();
+        assert!(!json.contains(":null"), "{json}");
+    }
+
+    #[test]
+    fn numeric_stats_mean_stays_finite_for_huge_values() {
+        let vals = floats(&[f64::MAX, f64::MAX]);
+        let refs: Vec<&OCELAttributeValue> = vals.iter().collect();
+        let OcelAttributeStats::Float { mean, .. } = numeric_stats(&refs, 0, false) else {
+            panic!("expected float stats");
+        };
+        assert_eq!(mean, f64::MAX);
+    }
+
+    #[test]
+    fn numeric_stats_stay_finite_for_values_near_opposite_limits() {
+        let vals = floats(&[f64::MAX, -f64::MAX]);
+        let refs: Vec<&OCELAttributeValue> = vals.iter().collect();
+        let stats = numeric_stats(&refs, 0, false);
+        let OcelAttributeStats::Float {
+            mean,
+            hist_bin_edges,
+            hist_counts,
+            ..
+        } = &stats
+        else {
+            panic!("expected float stats, got {stats:?}");
+        };
+        assert_eq!(*mean, 0.0);
+        assert!(
+            hist_bin_edges.iter().all(|e| e.is_finite()),
+            "{hist_bin_edges:?}"
+        );
+        assert_eq!((hist_counts[0], hist_counts[NBINS - 1]), (1, 1));
     }
 }

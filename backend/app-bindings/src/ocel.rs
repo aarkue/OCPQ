@@ -1,6 +1,7 @@
 //! Inspection of the loaded OCEL: type/attribute statistics, single event/object lookup and the
 //! neighbourhood graph. Every binding takes the OCEL as a registry handle.
 use ocpq_core::{
+    element_lookup::{get_element_relations, search_elements, ElementRelations, ElementSearchHit},
     get_event_info, get_object_info, get_sample_ids,
     ocel_graph::{get_ocel_graph, OCELGraph, OCELGraphOptions},
     ocel_stats::{get_ocel_attribute_stats, AttrScope, OcelAttributeStats},
@@ -36,6 +37,30 @@ pub fn ocel_attribute_stats(
 #[register_binding]
 pub fn ocel_sample_ids(ocel: &SlimLinkedOCEL, limit: usize) -> SampleIds {
     get_sample_ids(ocel, limit)
+}
+
+/// Events and objects whose id contains `query`, ignoring case. Exact and prefix matches come
+/// first. Returns at most `min(limit, 1000)` hits.
+#[register_binding]
+pub fn ocel_search_elements(
+    ocel: &SlimLinkedOCEL,
+    query: String,
+    limit: usize,
+) -> Vec<ElementSearchHit> {
+    search_elements(ocel, &query, limit.min(1000))
+}
+
+/// The objects an event or object relates to, and for an object also the objects and events
+/// (oldest first) relating to it. Each list holds at most `min(limit, 1000)` entries and comes
+/// with its full count. `None` when no element of that kind has this id.
+#[register_binding]
+pub fn ocel_element_relations(
+    ocel: &SlimLinkedOCEL,
+    is_object: bool,
+    id: String,
+    limit: usize,
+) -> Option<ElementRelations> {
+    get_element_relations(ocel, is_object, &id, limit.min(1000))
 }
 
 /// One object by id or by index, with the index it is stored under.

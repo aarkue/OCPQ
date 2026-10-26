@@ -9,6 +9,7 @@ packages:
 # as `@esbuild/linux-x64`, but without the approval every `pnpm install` and `pnpm exec` fails its
 # dependency-status precheck.
 allowBuilds:
+  es5-ext: false
   esbuild: true
 
 minimumReleaseAge: 1440

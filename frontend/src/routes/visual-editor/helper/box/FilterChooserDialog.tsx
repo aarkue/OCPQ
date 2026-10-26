@@ -1,4 +1,5 @@
 import { type Edge, type Node, useEdges, useReactFlow } from "@xyflow/react";
+import clsx from "clsx";
 import type { ReactNode } from "react";
 import { useCallback, useContext, useMemo, useState } from "react";
 import {
@@ -8,6 +9,7 @@ import {
 	LuCheckCheck,
 	LuClock,
 	LuHash,
+	LuInfo,
 	LuLink,
 	LuPlus,
 	LuTags,
@@ -20,7 +22,6 @@ import {
 	AlertDialogCancel,
 	AlertDialogContent,
 	AlertDialogDescription,
-	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -187,12 +188,37 @@ const FILTER_TYPE_INFO: Record<
 	},
 };
 
-type AlertState = (
-	| { type: "filter"; value?: Filter | SizeFilter | Constraint }
-	| { type: "sizeFilter"; value?: Filter | SizeFilter | Constraint }
-	| { type: "constraint"; value?: Filter | SizeFilter | Constraint }
-) &
-	({ mode: "add" } | { mode: "edit"; editIndex: number; wasSizeFilter: boolean });
+type Role = "filter" | "constraint";
+type Predicate = Filter | SizeFilter | Constraint;
+
+const SIZE_FILTER_TYPES: AllFilterTypes[] = [
+	"NumChilds",
+	"BindingSetEqual",
+	"BindingSetProjectionEqual",
+	"NumChildsProj",
+	"AdvancedCEL",
+];
+const LOGIC_TYPES: AllFilterTypes[] = ["SAT", "ANY", "NOT", "OR", "AND"];
+
+const ROLE_EFFECT: Record<Role, string> = {
+	filter: "Bindings that do not match are removed.",
+	constraint: "Bindings stay, and the ones that do not match count as violations.",
+};
+
+type AlertState = {
+	/** The section the dialog was opened from. */
+	openedAs: Role;
+	role: Role;
+	value?: Predicate;
+	/** The entry being edited, absent while adding. */
+	origin?: { list: "filters" | "sizeFilters" | "constraints"; index: number };
+	showTypes: boolean;
+};
+
+/** Constraints wrap plain filters. The editor works on the unwrapped filter. */
+function unwrap(c: Predicate): Predicate {
+	return c.type === "Filter" || c.type === "SizeFilter" ? c.filter : c;
+}
 
 interface FilterChooserDialogProps {
 	id: string;
@@ -235,30 +261,11 @@ export default function FilterChooserDialog({
 
 	const [alertState, setAlertState] = useState<AlertState | undefined>();
 
-	// Get available filter types based on context
-	const availableTypes = useMemo(() => {
-		return ALL_FILTER_TYPES.filter((filterType) => {
-			// Logic constraints only available for constraints
-			if (["SAT", "ANY", "NOT", "OR", "AND"].includes(filterType)) {
-				return type === "constraint";
-			}
-			// Size filters only in certain contexts
-			if (
-				[
-					"NumChilds",
-					"BindingSetEqual",
-					"NumChildsProj",
-					"BindingSetProjectionEqual",
-					"AdvancedCEL",
-				].includes(filterType)
-			) {
-				if (type === "filter" && alertState?.mode === "edit" && !alertState.wasSizeFilter) {
-					return false;
-				}
-			}
-			return true;
-		});
-	}, [type, alertState]);
+	const role = alertState?.role;
+	const availableTypes = useMemo(
+		() => ALL_FILTER_TYPES.filter((t) => role === "constraint" || !LOGIC_TYPES.includes(t)),
+		[role],
+	);
 
 	// Check if a filter type has the required variables to be useful
 	const hasRequiredVariables = useCallback(
@@ -381,9 +388,9 @@ export default function FilterChooserDialog({
 			case "TimeBetweenEvents":
 				return {
 					type: "TimeBetweenEvents",
-					from_event: 0,
-					to_event: 1,
-					min_seconds: null,
+					from_event: eventVariables[0] ?? 0,
+					to_event: eventVariables[1] ?? eventVariables[0] ?? 1,
+					min_seconds: 0,
 					max_seconds: null,
 				};
 			case "NotEqual":
@@ -463,80 +470,39 @@ export default function FilterChooserDialog({
 		}
 	};
 
-	// Handle save
 	const handleSave = () => {
-		if (!alertState?.value) return;
+		if (alertState?.value === undefined) return;
+		const value = unwrap(alertState.value);
+		const isSize = SIZE_FILTER_TYPES.includes(value.type);
+		const target =
+			alertState.role === "constraint" ? "constraints" : isSize ? "sizeFilters" : "filters";
+		const lists = {
+			filters: [...box.filters],
+			sizeFilters: [...box.sizeFilters],
+			constraints: [...box.constraints],
+		};
+		const { origin } = alertState;
+		const at = origin?.list === target ? origin.index : undefined;
+		if (origin !== undefined && at === undefined) lists[origin.list].splice(origin.index, 1);
+		const place = <T,>(list: T[], item: T) => {
+			if (at === undefined) list.push(item);
+			else list[at] = item;
+		};
+		if (target === "filters") place(lists.filters, value as Filter);
+		else if (target === "sizeFilters") place(lists.sizeFilters, value as SizeFilter);
+		else if (LOGIC_TYPES.includes(value.type)) place(lists.constraints, value as Constraint);
+		else if (isSize) place(lists.constraints, { type: "SizeFilter", filter: value as SizeFilter });
+		else place(lists.constraints, { type: "Filter", filter: value as Filter });
+		updateBox({ ...box, ...lists });
+		setAlertState(undefined);
+	};
 
-		const newBox = { ...box };
-		let localAlertType = alertState.type;
-
-		// Determine if this is a sizeFilter
-		if (
-			localAlertType !== "constraint" &&
-			[
-				"NumChilds",
-				"BindingSetEqual",
-				"BindingSetProjectionEqual",
-				"NumChildsProj",
-				"AdvancedCEL",
-			].includes(alertState.value.type)
-		) {
-			localAlertType = "sizeFilter";
-		}
-
-		const index =
-			alertState.mode === "edit"
-				? alertState.editIndex
-				: (localAlertType === "filter"
-						? newBox.filters
-						: localAlertType === "sizeFilter"
-							? newBox.sizeFilters
-							: newBox.constraints
-					).length;
-
-		if (localAlertType === "filter") {
-			newBox.filters[index] = alertState.value as Filter;
-		} else if (localAlertType === "sizeFilter") {
-			newBox.sizeFilters[index] = alertState.value as SizeFilter;
-		} else if (localAlertType === "constraint") {
-			if (
-				[
-					"NumChilds",
-					"BindingSetEqual",
-					"BindingSetProjectionEqual",
-					"NumChildsProj",
-					"AdvancedCEL",
-				].includes(alertState.value.type)
-			) {
-				newBox.constraints[index] = {
-					type: "SizeFilter",
-					filter: alertState.value as SizeFilter,
-				};
-			} else if (
-				["SAT", "ANY", "NOT", "AND", "OR", "Filter", "SizeFilter"].includes(alertState.value.type)
-			) {
-				newBox.constraints[index] = alertState.value as Constraint;
-			} else if (
-				[
-					"O2E",
-					"O2O",
-					"TimeBetweenEvents",
-					"NotEqual",
-					"BasicFilterCEL",
-					"ObjectAttributeValueFilter",
-					"EventAttributeValueFilter",
-				].includes(alertState.value.type)
-			) {
-				newBox.constraints[index] = {
-					type: "Filter",
-					filter: alertState.value as Filter,
-				};
-			} else {
-				newBox.constraints[index] = alertState.value as Constraint;
-			}
-		}
-
-		updateBox(newBox);
+	const handleDelete = () => {
+		const origin = alertState?.origin;
+		if (origin === undefined) return;
+		const list = [...box[origin.list]];
+		list.splice(origin.index, 1);
+		updateBox({ ...box, [origin.list]: list });
 		setAlertState(undefined);
 	};
 
@@ -570,7 +536,7 @@ export default function FilterChooserDialog({
 					size="icon"
 					variant="ghost"
 					className="h-4 w-4 hover:bg-blue-400/50 hover:border-blue-500/50 mt-1 rounded-full"
-					onClick={() => setAlertState({ mode: "add", type })}
+					onClick={() => setAlertState({ openedAs: type, role: type, showTypes: true })}
 				>
 					<LuPlus size={10} />
 				</Button>
@@ -603,11 +569,11 @@ export default function FilterChooserDialog({
 								onContextMenuCapture={(ev) => ev.stopPropagation()}
 								onClick={() =>
 									setAlertState({
-										editIndex: i,
-										mode: "edit",
-										type: "filter",
-										value: JSON.parse(JSON.stringify(fc)),
-										wasSizeFilter: false,
+										openedAs: "filter",
+										role: "filter",
+										value: structuredClone(fc),
+										origin: { list: "filters", index: i },
+										showTypes: false,
 									})
 								}
 							>
@@ -624,11 +590,11 @@ export default function FilterChooserDialog({
 								onContextMenuCapture={(ev) => ev.stopPropagation()}
 								onClick={() =>
 									setAlertState({
-										editIndex: i,
-										mode: "edit",
-										type: "filter",
-										value: JSON.parse(JSON.stringify(sf)),
-										wasSizeFilter: true,
+										openedAs: "filter",
+										role: "filter",
+										value: structuredClone(sf),
+										origin: { list: "sizeFilters", index: i },
+										showTypes: false,
 									})
 								}
 							>
@@ -645,11 +611,11 @@ export default function FilterChooserDialog({
 								className="hover:bg-blue-200/50 rounded-sm text-left w-fit max-w-full"
 								onClick={() =>
 									setAlertState({
-										editIndex: i,
-										mode: "edit",
-										type: "constraint",
-										value: JSON.parse(JSON.stringify(c)),
-										wasSizeFilter: false,
+										openedAs: "constraint",
+										role: "constraint",
+										value: unwrap(structuredClone(c)),
+										origin: { list: "constraints", index: i },
+										showTypes: false,
 									})
 								}
 							>
@@ -671,25 +637,47 @@ export default function FilterChooserDialog({
 					>
 						<AlertDialogHeader>
 							<AlertDialogTitle>
-								{alertState.mode === "add" ? "Add " : "Edit "}
-								{alertState.type !== "constraint" ? "Filter" : "Constraint"}
+								{alertState.origin === undefined
+									? `Add ${alertState.role}`
+									: `Edit ${alertState.openedAs}`}
 							</AlertDialogTitle>
 							<AlertDialogDescription className="hidden">
-								{alertState.mode === "add" ? "Add " : "Edit "}
-								{alertState.type !== "constraint" ? "Filter" : "Constraint"}
+								{ROLE_EFFECT[alertState.role]}
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<div className="space-y-4">
-							<Label className="block">Type</Label>
-							<CardTypeSelector
-								className="max-h-46 px-2 overflow-auto"
-								options={typeOptions}
-								value={currentType ?? ""}
-								onValueChange={handleTypeChange}
-								columns={3}
-							/>
+							{!alertState.showTypes && currentType !== undefined ? (
+								<div className="flex items-center gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm">
+									<span className="text-sky-700">{FILTER_TYPE_INFO[currentType].icon}</span>
+									<span className="font-semibold text-slate-900">
+										{FILTER_TYPE_INFO[currentType].label}
+									</span>
+									<span className="min-w-0 truncate text-slate-600">
+										{FILTER_TYPE_INFO[currentType].description}
+									</span>
+									<span className="flex-1" />
+									<Button
+										variant="link"
+										size="sm"
+										className="h-auto p-0 text-sky-700"
+										onClick={() => setAlertState({ ...alertState, showTypes: true })}
+									>
+										Change
+									</Button>
+								</div>
+							) : (
+								<>
+									<Label className="block">Type</Label>
+									<CardTypeSelector
+										className="max-h-64 px-2 overflow-auto"
+										options={typeOptions}
+										value={currentType ?? ""}
+										onValueChange={handleTypeChange}
+										columns={3}
+									/>
+								</>
+							)}
 
-							{/* Configuration Editor */}
 							{alertState.value !== undefined && (
 								<div>
 									<Label className="mb-2 block">Configuration</Label>
@@ -699,7 +687,7 @@ export default function FilterChooserDialog({
 											updateValue={(val) =>
 												setAlertState({
 													...alertState,
-													value: val as Filter | SizeFilter | Constraint,
+													value: val as Predicate,
 												})
 											}
 											availableEventVars={availableEventVars}
@@ -713,39 +701,73 @@ export default function FilterChooserDialog({
 							)}
 						</div>
 
-						<AlertDialogFooter>
-							{alertState.mode === "edit" && (
-								<Button
-									className="mr-auto"
-									variant="destructive"
-									onClick={() => {
-										const newBox = { ...box };
-										if (alertState.type === "filter") {
-											if (alertState.wasSizeFilter) {
-												newBox.sizeFilters.splice(alertState.editIndex, 1);
-											} else {
-												newBox.filters.splice(alertState.editIndex, 1);
-											}
-										} else {
-											newBox.constraints.splice(alertState.editIndex, 1);
-										}
-										updateBox(newBox);
-										setAlertState(undefined);
-									}}
-								>
-									Delete
-								</Button>
+						{alertState.role !== alertState.openedAs && (
+							<p className="flex items-start gap-2 text-sm text-slate-600">
+								<LuInfo className="mt-0.5 shrink-0 text-slate-500" aria-hidden="true" />
+								<span>
+									{alertState.origin === undefined ? "Adding puts it in " : "Saving moves it to "}
+									{alertState.role === "constraint" ? "Constraints" : "Filters"}.{" "}
+									{ROLE_EFFECT[alertState.role]}
+								</span>
+							</p>
+						)}
+						<div className="flex flex-wrap items-center gap-2">
+							{alertState.origin !== undefined && (
+								<>
+									<Button variant="destructive" onClick={handleDelete}>
+										Delete
+									</Button>
+									<span aria-hidden="true" className="mx-1 h-6 w-px bg-slate-200" />
+								</>
 							)}
-							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<span className="text-sm font-semibold text-slate-600">Use as</span>
+							<div role="group" aria-label="Use as" className="flex rounded-md bg-slate-100 p-0.5">
+								{(["filter", "constraint"] as const).map((r) => {
+									const blocked =
+										r === "filter" &&
+										alertState.value !== undefined &&
+										LOGIC_TYPES.includes(alertState.value.type);
+									return (
+										<button
+											key={r}
+											type="button"
+											aria-pressed={alertState.role === r}
+											disabled={blocked}
+											title={
+												blocked
+													? "Combining child results only works as a constraint."
+													: ROLE_EFFECT[r]
+											}
+											onClick={() => setAlertState({ ...alertState, role: r })}
+											className={clsx(
+												"h-7 rounded px-2.5 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50",
+												alertState.role === r
+													? "bg-white text-slate-900 shadow-sm"
+													: "text-slate-600 hover:text-slate-900",
+											)}
+										>
+											{r === "filter" ? "Filter" : "Constraint"}
+										</button>
+									);
+								})}
+							</div>
+							<span className="flex-1" />
+							<AlertDialogCancel className="mt-0">Cancel</AlertDialogCancel>
 							<AlertDialogAction disabled={isSaveDisabled()} onClick={handleSave}>
-								{alertState.mode === "add" ? "Add" : "Save"}
+								{submitLabel(alertState)}
 							</AlertDialogAction>
-						</AlertDialogFooter>
+						</div>
 					</AlertDialogContent>
 				)}
 			</AlertDialog>
 		</div>
 	);
+}
+
+function submitLabel({ origin, role, openedAs }: AlertState) {
+	if (role === openedAs) return origin === undefined ? "Add" : "Save";
+	if (origin === undefined) return role === "constraint" ? "Add as constraint" : "Add as filter";
+	return role === "constraint" ? "Move to constraints" : "Move to filters";
 }
 
 // Re-export selectors for use in filter editors

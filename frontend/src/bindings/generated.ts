@@ -65,6 +65,38 @@ count: number
 value: string
 }
 
+export interface ElementRelations {
+/**
+ * Events relating to this object through E2O, oldest first. Empty for an event.
+ */
+events: RelatedEvent[]
+/**
+ * Objects relating to this object through O2O. Empty for an event.
+ */
+incoming_objects: RelatedElement[]
+num_events: number
+num_incoming_objects: number
+num_objects: number
+/**
+ * Objects the element relates to through E2O (for an event) or O2O (for an object), in OCEL
+ * order.
+ */
+objects: RelatedElement[]
+}
+
+export interface RelatedEvent {
+id: string
+qualifier: string
+time: string
+type_name: string
+}
+
+export interface RelatedElement {
+id: string
+qualifier: string
+type_name: string
+}
+
 export interface EventWithIndex {
 event: OCELEvent
 index: number
@@ -177,8 +209,16 @@ value: (number | boolean | string | null)
 export type GraphNode = (OCELEvent | OCELObject)
 
 export interface OCELGraph {
+/**
+ * Ids of the nodes whose relations are all in the graph. The others can be expanded further.
+ */
+expanded: string[]
 links: GraphLink[]
 nodes: GraphNode[]
+/**
+ * Whether nodes within `max_distance` were left out to stay within `max_nodes`.
+ */
+truncated: boolean
 }
 
 export interface GraphLink {
@@ -561,6 +601,11 @@ eventTypes: string[]
 objectTypes: string[]
 }
 
+export interface ParentRow {
+events: [EventVariable, string][]
+objects: [ObjectVariable, string][]
+}
+
 export type LabelValue = ({
 type: "string"
 value: string
@@ -586,6 +631,11 @@ ConstraintNotSatisfied: number
 })
 
 export interface BindingRow {
+/**
+ * For each node of [`EvalPageRequest::child_nodes`], the number of its rows that extend this
+ * row.
+ */
+childCounts?: (number[] | null)
 events: [EventVariable, string][]
 labels: [string, LabelValue][]
 objects: [ObjectVariable, string][]
@@ -1316,9 +1366,9 @@ index: number
  */
 label?: (string | null)
 /**
- * The JSON path of the authored entry this mapping came from -- see
- * `desugar_with_paths` -- so a diagnostic points at
- * what the author wrote rather than a position in the flattened list.
+ * The JSON path of the authored entry this mapping came from (see `desugar_with_paths`), so
+ * a diagnostic points at what the author wrote rather than a position in the flattened
+ * list.
  */
 path: string
 }
@@ -1770,9 +1820,9 @@ index: number
  */
 label?: (string | null)
 /**
- * The JSON path of the authored entry this mapping came from -- see
- * `desugar_with_paths` -- so a diagnostic points at
- * what the author wrote rather than a position in the flattened list.
+ * The JSON path of the authored entry this mapping came from (see `desugar_with_paths`), so
+ * a diagnostic points at what the author wrote rather than a position in the flattened
+ * list.
  */
 path: string
 }
@@ -1795,9 +1845,9 @@ index: number
  */
 label?: (string | null)
 /**
- * The JSON path of the authored entry this mapping came from -- see
- * `desugar_with_paths` -- so a diagnostic points at
- * what the author wrote rather than a position in the flattened list.
+ * The JSON path of the authored entry this mapping came from (see `desugar_with_paths`), so
+ * a diagnostic points at what the author wrote rather than a position in the flattened
+ * list.
  */
 path: string
 }
@@ -1811,7 +1861,7 @@ path: string
 
 export interface FinalizeReport {
 /**
- * Repeated entity ids removed at finalize -- a deferring sink's share of
+ * Repeated entity ids removed at finalize: a deferring sink's share of
  * [`MappingStats::deduplicated`](super::report::MappingStats::deduplicated).
  */
 duplicates_removed: number
@@ -1837,7 +1887,7 @@ unresolved_endpoints: number
 
 export interface MappingStats {
 /**
- * Rows that tried to create an entity **the sink already had**. Not a loss: an object mapping
+ * Rows that tried to create an entity the sink already had. Not a loss: an object mapping
  * at event grain names the same object on every row by design. See
  * [`DuplicateObjectPolicy::Error`](super::blueprint::DuplicateObjectPolicy::Error) for what
  * turns a repeat into a loss instead.
@@ -1845,7 +1895,7 @@ export interface MappingStats {
  * One increment per row whose entity-creating call found the entity already present, across
  * mappings, since the sink is what answers.
  * 
- * **Resolving a relation endpoint is never counted**, so an `E2O`/`O2O` mapping reports zero
+ * Resolving a relation endpoint is never counted, so an `E2O`/`O2O` mapping reports zero
  * however often its rows repeat an id: finding an existing endpoint is the normal successful
  * case. A blueprint that wants its inline references' repeats counted can name the objects
  * with their own [`Target::Object`](super::blueprint::Target::Object) mapping.
@@ -1859,7 +1909,7 @@ dropped: {
 [k: string]: number
 }
 /**
- * Entities or relations this mapping *handed to the sink*, which is not the same as
+ * Entities or relations this mapping handed to the sink, which is not the same as
  * "survived the run" for a sink that defers resolution.
  * 
  * An eager sink refuses a dangling relation at the call site, so it lands in
@@ -1900,9 +1950,9 @@ index: number
  */
 label?: (string | null)
 /**
- * The JSON path of the authored entry this mapping came from -- see
- * `desugar_with_paths` -- so a diagnostic points at
- * what the author wrote rather than a position in the flattened list.
+ * The JSON path of the authored entry this mapping came from (see `desugar_with_paths`), so
+ * a diagnostic points at what the author wrote rather than a position in the flattened
+ * list.
  */
 path: string
 }
@@ -2713,6 +2763,13 @@ kind: "Empty"
  * One distinct categorical value + how often it occurs.
  */
 
+export type Nullable_ElementRelations = (ElementRelations | null)
+
+/**
+ * The relations of one event or object. Each list holds at most `limit` entries. The `num_`
+ * fields count all of them.
+ */
+
 export type IndexOrID = ({
 id: string
 } | {
@@ -2725,6 +2782,10 @@ export type Nullable_ObjectWithIndex = (ObjectWithIndex | null)
 
 export interface OCELGraphOptions {
 maxDistance: number
+/**
+ * Stop adding nodes once the graph has this many. Defaults to [`DEFAULT_MAX_GRAPH_NODES`].
+ */
+maxNodes?: (number | null)
 relsSizeIgnoreThreshold: number
 root: string
 rootIsObject: boolean
@@ -2776,6 +2837,12 @@ object_types: OCELType[]
 export interface SampleIds {
 event_ids: string[]
 object_ids: string[]
+}
+
+export interface ElementSearchHit {
+id: string
+is_event: boolean
+type_name: string
 }
 
 export interface OCELTypeStats {
@@ -2913,15 +2980,28 @@ constraints: [string, BindingBoxTree][]
 }
 
 export interface EvalPageRequest {
+/**
+ * For each returned row, count the rows of these child nodes that extend it into
+ * [`BindingRow::child_counts`].
+ */
+childNodes?: (number[] | null)
 evalVersion: number
 limit: number
 nodeIndex: number
 offset: number
 /**
+ * Only the rows that extend this row of the parent box.
+ */
+parent?: (ParentRow | null)
+/**
  * None = both; Some(true) = only violated; Some(false) = only satisfied.
  */
 violated?: (boolean | null)
 }
+/**
+ * A row of a parent box, given by the id of the element bound to each variable. A row of a child
+ * box extends it when it binds each of these variables to the same element.
+ */
 
 export interface EvalPageResponse {
 /**
@@ -3249,8 +3329,8 @@ errors: ExtractionError[]
 errors_suppressed: number
 finalize: FinalizeReport
 /**
- * One entry per mapping executed, in **desugared blueprint order** -- the order the author
- * wrote the mappings in, with each ordered group expanded in place. Not execution order,
+ * One entry per mapping executed, in desugared blueprint order: the order the author wrote
+ * the mappings in, with each ordered group expanded in place. Not execution order,
  * which is multi-pass and grouped by node. Each entry's [`MappingRef::path`] names the
  * authored entry.
  */
@@ -3270,7 +3350,7 @@ pushdown_declined: PushdownDeclined[]
  * materialisation is counted once, when computed.
  * 
  * Zero when no mapping's node graph contains a `Join` or `Union`, since a pure
- * `Source -> Filter` chain streams -- which makes zero a witness that the run streamed.
+ * `Source -> Filter` chain streams. Zero is therefore a witness that the run streamed.
  */
 rows_materialized: number
 /**
@@ -3663,6 +3743,12 @@ export interface Bindings {
     "type_name": string;
     "attribute": string;
     }; ret: OcelAttributeStats };
+  "app_bindings::ocel::ocel_element_relations": { args: {
+    "ocel": SlimLinkedOCELHandle;
+    "is_object": boolean;
+    "id": string;
+    "limit": number;
+    }; ret: Nullable_ElementRelations };
   "app_bindings::ocel::ocel_get_event": { args: {
     "ocel": SlimLinkedOCELHandle;
     "specifier": IndexOrID;
@@ -3682,6 +3768,11 @@ export interface Bindings {
     "ocel": SlimLinkedOCELHandle;
     "limit": number;
     }; ret: SampleIds };
+  "app_bindings::ocel::ocel_search_elements": { args: {
+    "ocel": SlimLinkedOCELHandle;
+    "query": string;
+    "limit": number;
+    }; ret: ElementSearchHit[] };
   "app_bindings::ocel::ocel_stats": { args: {
     "ocel": SlimLinkedOCELHandle;
     }; ret: OCELTypeStats };
@@ -4122,6 +4213,15 @@ export interface Bindings {
     "locel": SlimLinkedOCELHandle;
     "options"?: OCDeclareDiscoveryOptions;
     }; ret: OCDeclareArc[] };
+  "process_mining::discovery::object_centric::oc_declare::project_oc_arcs": { args: {
+    "arcs": OCDeclareArc[];
+    "activities": string[];
+    "reduction": OCDeclareReductionMode;
+    }; ret: OCDeclareArc[] };
+  "process_mining::discovery::object_centric::oc_declare::reduce_oc_arcs": { args: {
+    "arcs": OCDeclareArc[];
+    "lossless": boolean;
+    }; ret: OCDeclareArc[] };
   "process_mining::discovery::object_centric::variants::get_variants_of_object_type": { args: {
     "ocel": SlimLinkedOCELHandle;
     "ob_type": string;
@@ -4149,6 +4249,7 @@ export const RETURN_TYPES = {
   "ActivityStatistics": "ActivityStatistics",
   "AggregatedEventTimestamps": "AggregatedEventTimestamps",
   "AlignmentResult": "AlignmentResult",
+  "Array_of_ElementSearchHit": "Array_of_ElementSearchHit",
   "Array_of_EventIndex": "Array_of_EventIndex",
   "Array_of_OCDeclareArc": "Array_of_OCDeclareArc",
   "Array_of_ObjectIndex": "Array_of_ObjectIndex",
@@ -4183,6 +4284,7 @@ export const RETURN_TYPES = {
   "FitnessResult": "FitnessResult",
   "IndexLinkedOCEL": "IndexLinkedOCEL",
   "Nullable_Array_of_string": "Nullable_Array_of_string",
+  "Nullable_ElementRelations": "Nullable_ElementRelations",
   "Nullable_EventIndex": "Nullable_EventIndex",
   "Nullable_EventWithIndex": "Nullable_EventWithIndex",
   "Nullable_OCELAttributeValue": "Nullable_OCELAttributeValue",
@@ -4226,6 +4328,7 @@ export interface ReturnTypeShape {
   "ActivityStatistics": ActivityStatistics;
   "AggregatedEventTimestamps": AggregatedEventTimestamps;
   "AlignmentResult": AlignmentResult;
+  "Array_of_ElementSearchHit": ElementSearchHit[];
   "Array_of_EventIndex": number[];
   "Array_of_OCDeclareArc": OCDeclareArc[];
   "Array_of_ObjectIndex": number[];
@@ -4260,6 +4363,7 @@ export interface ReturnTypeShape {
   "FitnessResult": FitnessResult;
   "IndexLinkedOCEL": IndexLinkedOCELHandle;
   "Nullable_Array_of_string": Nullable_Array_of_string;
+  "Nullable_ElementRelations": Nullable_ElementRelations;
   "Nullable_EventIndex": Nullable_EventIndex;
   "Nullable_EventWithIndex": Nullable_EventWithIndex;
   "Nullable_OCELAttributeValue": Nullable_OCELAttributeValue;
@@ -4304,11 +4408,13 @@ export const BINDING_RETURN_TYPE: Record<BindingId, ReturnTypeTitle | null> = {
   "app_bindings::oc_declare::oc_declare_project_arcs": "Array_of_OCDeclareArc",
   "app_bindings::oc_declare::oc_declare_template_string": "string",
   "app_bindings::ocel::ocel_attribute_stats": "OcelAttributeStats",
+  "app_bindings::ocel::ocel_element_relations": "Nullable_ElementRelations",
   "app_bindings::ocel::ocel_get_event": "Nullable_EventWithIndex",
   "app_bindings::ocel::ocel_get_object": "Nullable_ObjectWithIndex",
   "app_bindings::ocel::ocel_graph": "Nullable_OCELGraph",
   "app_bindings::ocel::ocel_info": "OCELInfo",
   "app_bindings::ocel::ocel_sample_ids": "SampleIds",
+  "app_bindings::ocel::ocel_search_elements": "Array_of_ElementSearchHit",
   "app_bindings::ocel::ocel_stats": "OCELTypeStats",
   "app_bindings::path_schemas::ocpq_path_schema_detail": "Nullable_PathSchemaDetail",
   "app_bindings::path_schemas::ocpq_path_schema_discover": "PathSchemaResult",
@@ -4412,5 +4518,7 @@ export const BINDING_RETURN_TYPE: Record<BindingId, ReturnTypeTitle | null> = {
   "process_mining::discovery::case_centric::dfg::discover_dfg": "DirectlyFollowsGraph",
   "process_mining::discovery::object_centric::dfg::get_dfg_of_object_type": "Array_of_Tuple_of_Tuple_of_string_and_string_and_uint",
   "process_mining::discovery::object_centric::oc_declare::discover_behavior_constraints": "Array_of_OCDeclareArc",
+  "process_mining::discovery::object_centric::oc_declare::project_oc_arcs": "Array_of_OCDeclareArc",
+  "process_mining::discovery::object_centric::oc_declare::reduce_oc_arcs": "Array_of_OCDeclareArc",
   "process_mining::discovery::object_centric::variants::get_variants_of_object_type": "Array_of_Tuple_of_Array_of_string_and_uint",
 };

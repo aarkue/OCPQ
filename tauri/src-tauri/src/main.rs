@@ -331,6 +331,37 @@ mod base64_tests {
     }
 }
 
+/// WebKitGTK zooms the whole view on a touchpad pinch and never shows the gesture to the page.
+/// GTK runs that zoom gesture only when the view's `event` signal leaves the pinch unhandled, so
+/// this takes every pinch and hands it to the page as an `ocpq:pinch` event instead.
+#[cfg(target_os = "linux")]
+fn forward_touchpad_pinch(window: tauri::WebviewWindow) {
+    use gtk::gdk::ffi::{GDK_TOUCHPAD_GESTURE_PHASE_BEGIN, GDK_TOUCHPAD_GESTURE_PHASE_UPDATE};
+    use gtk::prelude::WidgetExt;
+
+    let target = window.clone();
+    let _ = window.with_webview(move |webview| {
+        webview.inner().connect_event(move |_, event| {
+            let Some(pinch) = event.downcast_ref::<gtk::gdk::EventTouchpadPinch>() else {
+                return gtk::glib::Propagation::Proceed;
+            };
+            // gdk's `is_phase` turns the phase into a bool, so it is read from the raw event.
+            let raw: &gtk::gdk::ffi::GdkEventTouchpadPinch = pinch.as_ref();
+            let phase = match i32::from(raw.phase) {
+                GDK_TOUCHPAD_GESTURE_PHASE_BEGIN => "begin",
+                GDK_TOUCHPAD_GESTURE_PHASE_UPDATE => "update",
+                _ => "end",
+            };
+            let (x, y) = pinch.position();
+            let _ = target.eval(format!(
+                "window.dispatchEvent(new CustomEvent('ocpq:pinch',{{detail:{{phase:'{phase}',scale:{},x:{x},y:{y}}}}}))",
+                pinch.scale()
+            ));
+            gtk::glib::Propagation::Stop
+        });
+    });
+}
+
 fn main() {
     // The wdio plugins install a `log` logger of their own, so they have to come after
     // `tauri_plugin_log`, which panics if anything claimed the global logger first.
@@ -366,6 +397,10 @@ fn main() {
                             None => files.push(maybe_file),
                         }
                     }
+                }
+                #[cfg(target_os = "linux")]
+                if let Some(window) = app.get_webview_window("main") {
+                    forward_touchpad_pinch(window);
                 }
                 app.manage(Arc::new(TauriBackend {
                     state: ExtendedAppState::default(),

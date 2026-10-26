@@ -1,15 +1,18 @@
 import clsx from "clsx";
 import { type ComponentType, lazy, Suspense, useContext } from "react";
-import { LuArrowRight, LuEqual, LuLink, LuTrash } from "react-icons/lu";
+import { LuEqual, LuLink, LuTrash } from "react-icons/lu";
 import { MdSwapHoriz } from "react-icons/md";
 import { PiCodeFill } from "react-icons/pi";
 import Spinner from "@/components/Spinner";
-import TimeDurationInput, { formatSeconds } from "@/components/TimeDurationInput";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { useAttributeStats } from "@/hooks";
-import { deDupe, getNodeRelationshipSupport } from "@/lib/variable-hints";
+import {
+	deDupe,
+	getNodeRelationshipQualifiers,
+	getNodeRelationshipSupport,
+} from "@/lib/variable-hints";
 import type { Constraint } from "@/types/generated/Constraint";
 import type { Filter } from "@/types/generated/Filter";
 import type { SizeFilter } from "@/types/generated/SizeFilter";
@@ -25,8 +28,10 @@ import {
 	ChildSetSelector,
 	defaultTimeValueFilter,
 	MinMaxDisplayWithSugar,
+	QualifierSelector,
 } from "../filter-helpers";
 import { EvOrObVarName, EvVarName, ObVarName } from "../variable-names";
+import { TimeBetweenEventsDisplay, TimeBetweenEventsEditor } from "./TimeBetweenEvents";
 import type { FilterDisplayProps, FilterEditorProps } from "./types";
 
 // Derive a default ValueFilter from the OCEL attribute type (lowercase)
@@ -124,11 +129,21 @@ registerEditor<Filter & { type: "O2E" }>(
 					value={value.object}
 					onChange={(newV) => newV !== undefined && updateValue({ ...value, object: newV })}
 				/>
-				<Input
-					className="w-full"
-					placeholder="Qualifier"
-					value={value.qualifier ?? ""}
-					onChange={(ev) => updateValue({ ...value, qualifier: ev.currentTarget.value || null })}
+				<QualifierSelector
+					value={value.qualifier}
+					onChange={(qualifier) => updateValue({ ...value, qualifier })}
+					getSuggestions={() =>
+						ocelInfo !== undefined
+							? getNodeRelationshipQualifiers(
+									ocelInfo,
+									getTypesForVariable,
+									nodeID,
+									value.event,
+									value.object,
+									true,
+								)
+							: []
+					}
 				/>
 			</div>
 		);
@@ -206,11 +221,21 @@ registerEditor<Filter & { type: "O2O" }>(
 					value={value.other_object}
 					onChange={(newV) => newV !== undefined && updateValue({ ...value, other_object: newV })}
 				/>
-				<Input
-					className="w-full"
-					placeholder="Qualifier"
-					value={value.qualifier ?? ""}
-					onChange={(ev) => updateValue({ ...value, qualifier: ev.currentTarget.value || null })}
+				<QualifierSelector
+					value={value.qualifier}
+					onChange={(qualifier) => updateValue({ ...value, qualifier })}
+					getSuggestions={() =>
+						ocelInfo !== undefined
+							? getNodeRelationshipQualifiers(
+									ocelInfo,
+									getTypesForVariable,
+									nodeID,
+									value.object,
+									value.other_object,
+									false,
+								)
+							: []
+					}
 				/>
 			</div>
 		);
@@ -349,55 +374,8 @@ registerEditor<SizeFilter & { type: "AdvancedCEL" }>(
 // TimeBetweenEvents
 registerEditor<Filter & { type: "TimeBetweenEvents" }>(
 	"TimeBetweenEvents",
-	function TimeBetweenEventsEditor({ value, updateValue, availableEventVars }) {
-		return (
-			<>
-				<EventVarSelector
-					eventVars={availableEventVars}
-					value={value.from_event}
-					onChange={(newV) => newV !== undefined && updateValue({ ...value, from_event: newV })}
-				/>
-				<EventVarSelector
-					eventVars={availableEventVars}
-					value={value.to_event}
-					onChange={(newV) => newV !== undefined && updateValue({ ...value, to_event: newV })}
-				/>
-				<TimeDurationInput
-					placeholder="Minimum Duration/Delay (Optional)"
-					durationSeconds={value.min_seconds ?? Number.NEGATIVE_INFINITY}
-					onChange={(newVal) =>
-						updateValue({
-							...value,
-							min_seconds: newVal !== undefined && Number.isFinite(newVal) ? newVal : null,
-						})
-					}
-				/>
-				<TimeDurationInput
-					placeholder="Maximum Duration/Delay (Optional)"
-					durationSeconds={value.max_seconds ?? Number.POSITIVE_INFINITY}
-					onChange={(newVal) =>
-						updateValue({
-							...value,
-							max_seconds: newVal !== undefined && Number.isFinite(newVal) ? newVal : null,
-						})
-					}
-				/>
-			</>
-		);
-	},
-	function TimeBetweenEventsDisplay({ value }) {
-		return (
-			<div className="flex items-center gap-x-1 font-normal text-sm whitespace-nowrap">
-				<EvVarName eventVar={value.from_event} /> <LuArrowRight />{" "}
-				<EvVarName eventVar={value.to_event} />
-				<div className="ml-2 flex items-center gap-x-1 text-xs w-fit">
-					{formatSeconds(value.min_seconds ?? Number.NEGATIVE_INFINITY)}{" "}
-					<span className="mx-1">-</span>{" "}
-					{formatSeconds(value.max_seconds ?? Number.POSITIVE_INFINITY)}
-				</div>
-			</div>
-		);
-	},
+	TimeBetweenEventsEditor,
+	TimeBetweenEventsDisplay,
 );
 
 // NumChilds

@@ -1,11 +1,9 @@
-import clsx from "clsx";
 import { useCallback, useEffect, useState } from "react";
-import { RxPlusCircled } from "react-icons/rx";
-import { TbTrash } from "react-icons/tb";
-import { Link, useNavigate } from "react-router-dom";
-import AutoSizer from "react-virtualized-auto-sizer";
-import { FixedSizeList, type ListChildComponentProps } from "react-window";
+import { LuPlus } from "react-icons/lu";
+import { useNavigate } from "react-router-dom";
 import { v4 } from "uuid";
+import { AreaEmptyState, AreaPageHeader } from "@/components/layout/AreaPage";
+import { areaFor } from "@/components/layout/areas";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -17,12 +15,23 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { useOcelInfo } from "@/hooks";
 import {
 	OC_DECLARE_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META,
 	OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA,
 	parseLocalStorageValue,
 } from "@/lib/local-storage";
+import { QueryList } from "@/routes/visual-editor/outer-visual-editor/QueryList";
+import {
+	fitOf,
+	type QueryItem,
+	type QueryTypes,
+	tagsOf,
+} from "@/routes/visual-editor/outer-visual-editor/query-list";
 import type { OCDeclareMetaData } from "./flow/oc-declare-flow-data";
+import type { PersistedFlow } from "./OCDeclareEditor";
+import { removeOrphanedOCDeclareData } from "./oc-declare-storage";
+import { typesOfOCDeclareFlow } from "./oc-declare-types";
 
 export default function OCDeclareListPage() {
 	const [constraints, setConstraints] = useState<OCDeclareMetaData[]>(
@@ -47,38 +56,50 @@ export default function OCDeclareListPage() {
 	}, [saveData]);
 
 	const navigate = useNavigate();
+	const area = areaFor("/oc-declare");
+	const ocelInfo = useOcelInfo();
+	const items: QueryItem[] = constraints.map((c, index) => {
+		let types: QueryTypes = { events: [], objects: [] };
+		// One unreadable save must not take the whole list down. Its model shows without types.
+		try {
+			const flow = parseLocalStorageValue<{ flowJson?: PersistedFlow }>(
+				localStorage.getItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + c.id) ?? "{}",
+			);
+			types = typesOfOCDeclareFlow(flow?.flowJson);
+		} catch (e) {
+			console.warn(`Could not read the types of OC-DECLARE model ${c.id}`, e);
+		}
+		return {
+			index,
+			name: c.name !== "" ? c.name : `Constraint ${index + 1}`,
+			description: c.description ?? "",
+			tags: tagsOf(c),
+			types,
+			fit: fitOf(types, ocelInfo),
+		};
+	});
+	const addConstraint = () => {
+		const newID = v4();
+		let n = constraints.length + 1;
+		while (constraints.some((c) => c.name === `Constraint ${n}`)) n++;
+		const next = [...constraints, { name: `Constraint ${n}`, id: newID }];
+		saveData(next);
+		removeOrphanedOCDeclareData(next.map((c) => c.id));
+		navigate(`/oc-declare/${newID}`);
+	};
+	const newButton = (
+		<Button className={area.buttonClass} onClick={addConstraint}>
+			<LuPlus className="mr-1.5" />
+			New constraint
+		</Button>
+	);
 
 	return (
-		<div className="text-left h-full overflow-hidden flex flex-col">
-			<h2 className="text-4xl font-black bg-clip-text text-transparent tracking-tighter bg-linear-to-t from-orange-400 to-pink-600">
-				OC-DECLARE
-			</h2>
-			<h4 className="font-semibold text-lg tracking-tight">
-				Object-Centric Declarative Constraints
-			</h4>
-			<div className="flex justify-between items-center my-1">
-				<Button
-					className="cursor-pointer"
-					// size="lg"
-					onClick={() => {
-						const newID = v4();
-						saveData([
-							...constraints,
-							{
-								name: `New Constraint (${constraints.length + 1})`,
-								id: newID,
-							},
-						]);
-						navigate(`/oc-declare/${newID}`);
-					}}
-				>
-					<RxPlusCircled className="mr-1" />
-					Add
-				</Button>
-				<Button variant="destructive" onClick={() => setDeletePromptForIndex("ALL")}>
-					Delete All...
-				</Button>
-			</div>
+		<div className="text-left h-full w-full overflow-hidden flex flex-col">
+			<AreaPageHeader
+				description="Object-Centric Declarative Constraints"
+				actions={constraints.length > 0 ? newButton : undefined}
+			/>
 			<AlertDialog
 				open={deletePromptForIndex !== undefined}
 				onOpenChange={(o) => {
@@ -90,8 +111,9 @@ export default function OCDeclareListPage() {
 				<AlertDialogContent className="flex flex-col max-h-full justify-between">
 					<AlertDialogHeader>
 						<AlertDialogTitle>
-							Delete {deletePromptForIndex === "ALL" ? "all" : ""} OC-DECLARE Constraint
-							{deletePromptForIndex === "ALL" ? "s" : ""}
+							{deletePromptForIndex === "ALL"
+								? "Delete all OC-DECLARE constraints"
+								: "Delete OC-DECLARE constraint"}
 						</AlertDialogTitle>
 						<AlertDialogDescription className="hidden">
 							Are you sure you want to delete {deletePromptForIndex === "ALL" ? "all " : ""}the
@@ -121,20 +143,12 @@ export default function OCDeclareListPage() {
 						<AlertDialogAction
 							onClick={() => {
 								if (deletePromptForIndex === undefined) return;
-								if (deletePromptForIndex === "ALL") {
-									for (const c of constraints) {
-										localStorage.removeItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + c.id);
-									}
-									setConstraints([]);
-									return;
-								}
-								const deleteId = constraints[deletePromptForIndex.index];
-								setConstraints((constraints) => {
-									const newConstraints = [...constraints];
-									newConstraints.splice(deletePromptForIndex.index, 1);
-									return newConstraints;
-								});
-								localStorage.removeItem(OC_DECLARE_LOCALSTORAGE_SAVE_KEY_DATA + deleteId);
+								const next =
+									deletePromptForIndex === "ALL"
+										? []
+										: constraints.filter((_, i) => i !== deletePromptForIndex.index);
+								setConstraints(next);
+								removeOrphanedOCDeclareData(next.map((c) => c.id));
 							}}
 						>
 							Delete
@@ -142,79 +156,37 @@ export default function OCDeclareListPage() {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-			<div className="h-full overflow-auto">
-				<AutoSizer>
-					{({ height, width }) => (
-						<FixedSizeList
-							height={height}
-							itemCount={constraints.length}
-							itemSize={45}
-							width={width}
-						>
-							{({ index, style }: ListChildComponentProps) => {
-								const c = constraints[index];
-								if (c === undefined) {
-									return null;
-								}
-								return (
-									<div style={style} className="pb-1">
-										<ConstraintMetaInfo
-											constraint={c}
-											index={index}
-											onDelete={() => setDeletePromptForIndex({ index })}
-										/>
-									</div>
-								);
-							}}
-						</FixedSizeList>
-					)}
-				</AutoSizer>
-			</div>
-		</div>
-	);
-}
-
-function ConstraintMetaInfo({
-	constraint,
-	index,
-	onDelete,
-}: {
-	constraint: OCDeclareMetaData;
-	index: number;
-	onDelete: () => unknown;
-}) {
-	return (
-		<div
-			className={clsx(
-				"flex justify-between border rounded h-full w-full items-center",
-				"bg-gray-50 border-gray-300",
-				"bg-blue-200 border-blue-300 font-semibold",
+			{constraints.length === 0 ? (
+				<AreaEmptyState area={area} title="No constraints yet" action={newButton}>
+					OC-DECLARE constraints describe how activities relate through shared objects, e.g., that
+					every order is paid after it was placed. Discover them from the loaded log or draw them by
+					hand.
+				</AreaEmptyState>
+			) : (
+				<QueryList
+					area={area}
+					items={items}
+					tone="emerald"
+					groupingKey="ocpq-ocdeclare-list-grouping"
+					noMatch="No constraint matches."
+					onOpen={(index) => navigate(`/oc-declare/${constraints[index].id}`)}
+					onDelete={(index) => setDeletePromptForIndex({ index })}
+					footer={
+						<>
+							<span>
+								{constraints.length} {constraints.length === 1 ? "constraint" : "constraints"}
+							</span>
+							<button
+								type="button"
+								className="font-medium hover:text-red-700 underline-offset-4 hover:underline"
+								onClick={() => setDeletePromptForIndex("ALL")}
+							>
+								Delete all…
+							</button>
+						</>
+					}
+				/>
 			)}
-		>
-			<Link
-				to={`/oc-declare/${constraint.id}`}
-				className={clsx(
-					"w-full h-full block whitespace-nowrap overflow-hidden text-ellipsis px-2 text-left",
-				)}
-			>
-				<h4
-					className="text-sm"
-					title={constraint.name !== "" ? constraint.name : `Constraint ${index + 1}`}
-				>
-					{constraint.name !== "" ? constraint.name : `Constraint ${index + 1}`}
-				</h4>
-				<p className="text-xs font-light text-gray-700">
-					{constraint.description ? constraint.description : "No description"}
-				</p>
-			</Link>
-
-			<button
-				type="button"
-				className="text-red-700 px-2 block hover:bg-red-300 h-full"
-				onClick={() => onDelete()}
-			>
-				<TbTrash />
-			</button>
 		</div>
 	);
 }

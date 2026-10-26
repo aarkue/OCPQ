@@ -1,11 +1,14 @@
-import clsx from "clsx";
 import { useState } from "react";
-import { BsPlusCircle } from "react-icons/bs";
-import { TbTrash } from "react-icons/tb";
-import { Link, useNavigate } from "react-router-dom";
-import AutoSizer from "react-virtualized-auto-sizer";
-import { FixedSizeList, type ListChildComponentProps } from "react-window";
+import { LuPlus } from "react-icons/lu";
+import { useNavigate } from "react-router-dom";
 import { v4 } from "uuid";
+import {
+	AreaEmptyState,
+	AreaList,
+	AreaListRow,
+	AreaPageHeader,
+} from "@/components/layout/AreaPage";
+import { areaFor } from "@/components/layout/areas";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -38,43 +41,34 @@ export default function DataExtractionRoot() {
 
 	const navigate = useNavigate();
 
+	const area = areaFor("/data-extraction");
+	const addBlueprint = () => {
+		const newID = v4();
+		const newBlueprints: DataExtractionBlueprintMeta[] = [
+			...blueprints,
+			{
+				name: `Blueprint ${blueprints.length + 1}`,
+				id: newID,
+				createdAt: new Date().toISOString(),
+			},
+		];
+		saveData(newBlueprints);
+		setBlueprints(newBlueprints);
+		navigate(`/data-extraction/${newID}`);
+	};
+	const newButton = (
+		<Button className={area.buttonClass} onClick={addBlueprint}>
+			<LuPlus className="mr-1.5" />
+			New blueprint
+		</Button>
+	);
+
 	return (
-		<div className="text-left h-full overflow-hidden flex flex-col">
-			<h2 className="text-4xl font-black bg-clip-text text-transparent tracking-tighter bg-linear-to-t from-blue-400 to-sky-600">
-				Data Extraction Blueprints
-			</h2>
-			<h4 className="font-semibold text-lg tracking-tight">Manage Data Extraction Blueprints</h4>
-			<p>
-				Extract object-centric event data from databases (SQLite, PostgresSQL, DuckDB) or files
-				(CSV, XLSX, Parquet).
-			</p>
-			<div className="flex justify-between items-center mt-2 mb-3">
-				<Button
-					className="cursor-pointer"
-					onClick={() => {
-						const newID = v4();
-						const newBlueprints: DataExtractionBlueprintMeta[] = [
-							...blueprints,
-							{
-								name: `Blueprint ${blueprints.length + 1}`,
-								id: newID,
-								createdAt: new Date().toISOString(),
-							},
-						];
-						saveData(newBlueprints);
-						setBlueprints(newBlueprints);
-						navigate(`/data-extraction/${newID}`);
-					}}
-				>
-					<BsPlusCircle className="mr-1.5 stroke-1" />
-					New Blueprint
-				</Button>
-				{blueprints.length > 0 && (
-					<Button variant="destructive" onClick={() => setDeletePromptFor("ALL")}>
-						Delete All...
-					</Button>
-				)}
-			</div>
+		<div className="text-left h-full w-full overflow-hidden flex flex-col">
+			<AreaPageHeader
+				description="Extract OCEL from databases or files"
+				actions={blueprints.length > 0 ? newButton : undefined}
+			/>
 			<AlertDialog
 				open={deletePromptFor !== undefined}
 				onOpenChange={(o) => {
@@ -136,78 +130,50 @@ export default function DataExtractionRoot() {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-			<div className="h-full overflow-auto">
-				{blueprints.length === 0 && (
-					<div className="text-center text-muted-foreground py-12">
-						<p className="text-lg">No blueprints yet.</p>
-						<p className="text-sm mt-1">Click "New Blueprint" to get started.</p>
-					</div>
-				)}
-				{blueprints.length > 0 && (
-					<AutoSizer>
-						{({ height, width }) => (
-							<FixedSizeList
-								height={height}
-								itemCount={blueprints.length}
-								itemSize={45}
-								width={width}
+			{blueprints.length === 0 ? (
+				<AreaEmptyState area={area} title="No blueprints yet" action={newButton}>
+					A blueprint maps tables from databases (SQLite, PostgreSQL, DuckDB) or files (CSV, XLSX,
+					Parquet) to events, objects and their relations, and builds an OCEL from them that you can
+					query here.
+				</AreaEmptyState>
+			) : (
+				<AreaList
+					itemCount={blueprints.length}
+					renderRow={(index) => {
+						const p = blueprints[index];
+						return (
+							<AreaListRow
+								area={area}
+								title={p.name || `Blueprint ${index + 1}`}
+								description={p.description}
+								meta={formatCreated(p.createdAt)}
+								to={`/data-extraction/${p.id}`}
+								onDelete={() => setDeletePromptFor({ index })}
+							/>
+						);
+					}}
+					footer={
+						<>
+							<span>
+								{blueprints.length} {blueprints.length === 1 ? "blueprint" : "blueprints"}
+							</span>
+							<button
+								type="button"
+								className="font-medium hover:text-red-700 underline-offset-4 hover:underline"
+								onClick={() => setDeletePromptFor("ALL")}
 							>
-								{({ index, style }: ListChildComponentProps) => {
-									const p = blueprints[index];
-									if (p === undefined) return null;
-									return (
-										<div style={style} className="pb-1">
-											<BlueprintMetaInfo
-												blueprint={p}
-												index={index}
-												onDelete={() => setDeletePromptFor({ index })}
-											/>
-										</div>
-									);
-								}}
-							</FixedSizeList>
-						)}
-					</AutoSizer>
-				)}
-			</div>
+								Delete all…
+							</button>
+						</>
+					}
+				/>
+			)}
 		</div>
 	);
 }
 
-function BlueprintMetaInfo({
-	blueprint,
-	index,
-	onDelete,
-}: {
-	blueprint: DataExtractionBlueprintMeta;
-	index: number;
-	onDelete: () => unknown;
-}) {
-	return (
-		<div
-			className={clsx(
-				"flex justify-between border rounded h-full w-full items-center",
-				"bg-blue-50 border-blue-300 font-semibold",
-			)}
-		>
-			<Link
-				to={`/data-extraction/${blueprint.id}`}
-				className="w-full h-full block whitespace-nowrap overflow-hidden text-ellipsis px-2 text-left"
-			>
-				<h4 className="text-sm" title={blueprint.name || `Blueprint ${index + 1}`}>
-					{blueprint.name || `Blueprint ${index + 1}`}
-				</h4>
-				<p className="text-xs font-light text-gray-700">
-					{blueprint.description || "No description"}
-				</p>
-			</Link>
-			<button
-				type="button"
-				className="text-red-700 px-2 block hover:bg-red-300 h-full"
-				onClick={() => onDelete()}
-			>
-				<TbTrash />
-			</button>
-		</div>
-	);
+function formatCreated(createdAt: string | undefined) {
+	const date = createdAt !== undefined ? new Date(createdAt) : undefined;
+	if (date === undefined || Number.isNaN(date.getTime())) return undefined;
+	return `Created ${date.toLocaleDateString(undefined, { dateStyle: "medium" })}`;
 }

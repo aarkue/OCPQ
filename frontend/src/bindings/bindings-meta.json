@@ -7,7 +7,7 @@
     ],
     "module": "app_bindings",
     "source_path": "backend/app-bindings/src/lib.rs",
-    "source_line": 14,
+    "source_line": 10,
     "args": [],
     "required_args": [],
     "return_type": {
@@ -24,7 +24,7 @@
     ],
     "module": "app_bindings::oc_declare",
     "source_path": "backend/app-bindings/src/oc_declare.rs",
-    "source_line": 55,
+    "source_line": 52,
     "args": [
       [
         "ocel",
@@ -474,7 +474,7 @@
     ],
     "module": "app_bindings::oc_declare",
     "source_path": "backend/app-bindings/src/oc_declare.rs",
-    "source_line": 64,
+    "source_line": 61,
     "args": [
       [
         "ocel",
@@ -727,14 +727,12 @@
     "id": "app_bindings::oc_declare::oc_declare_evaluate_arcs",
     "name": "oc_declare_evaluate_arcs",
     "docs": [
-      "Violated fraction of each arc, from 0.0 (every source event satisfies it) to 1.0 (none does).",
-      "The violated fraction, not conformance: the editor renders this value directly as an arc's",
-      "violation percentage and colours it against violation thresholds. Upstream's",
-      "`oc_declare_conformance` is `1.0 - violation_fraction`, so returning that inverts every badge."
+      "Violated fraction of each arc (0.0 = fully satisfied, 1.0 = never). Not upstream's",
+      "`oc_declare_conformance`, which is the inverse (`1.0 - violation_fraction`)."
     ],
     "module": "app_bindings::oc_declare",
     "source_path": "backend/app-bindings/src/oc_declare.rs",
-    "source_line": 28,
+    "source_line": 25,
     "args": [
       [
         "ocel",
@@ -952,7 +950,7 @@
     ],
     "module": "app_bindings::oc_declare",
     "source_path": "backend/app-bindings/src/oc_declare.rs",
-    "source_line": 35,
+    "source_line": 32,
     "args": [
       [
         "arcs",
@@ -1367,7 +1365,7 @@
     ],
     "module": "app_bindings::oc_declare",
     "source_path": "backend/app-bindings/src/oc_declare.rs",
-    "source_line": 46,
+    "source_line": 43,
     "args": [
       [
         "arcs",
@@ -1570,7 +1568,7 @@
     ],
     "module": "app_bindings::ocel",
     "source_path": "backend/app-bindings/src/ocel.rs",
-    "source_line": 25,
+    "source_line": 26,
     "args": [
       [
         "ocel",
@@ -1886,6 +1884,168 @@
     }
   },
   {
+    "id": "app_bindings::ocel::ocel_element_relations",
+    "name": "ocel_element_relations",
+    "docs": [
+      "The objects an event or object relates to, and for an object also the objects and events",
+      "(oldest first) relating to it. Each list holds at most `min(limit, 1000)` entries and comes",
+      "with its full count. `None` when no element of that kind has this id."
+    ],
+    "module": "app_bindings::ocel",
+    "source_path": "backend/app-bindings/src/ocel.rs",
+    "source_line": 56,
+    "args": [
+      [
+        "ocel",
+        {
+          "title": "SlimLinkedOCEL",
+          "type": "string",
+          "x-registry-ref": "SlimLinkedOCEL",
+          "x-widget": "entity-selector"
+        }
+      ],
+      [
+        "is_object",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "boolean",
+          "type": "boolean"
+        }
+      ],
+      [
+        "id",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "string",
+          "type": "string"
+        }
+      ],
+      [
+        "limit",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "format": "uint",
+          "minimum": 0,
+          "title": "uint",
+          "type": "integer"
+        }
+      ]
+    ],
+    "required_args": [
+      "ocel",
+      "is_object",
+      "id",
+      "limit"
+    ],
+    "return_type": {
+      "$defs": {
+        "ElementRelations": {
+          "description": "The relations of one event or object. Each list holds at most `limit` entries. The `num_`\nfields count all of them.",
+          "properties": {
+            "events": {
+              "description": "Events relating to this object through E2O, oldest first. Empty for an event.",
+              "items": {
+                "$ref": "#/$defs/RelatedEvent"
+              },
+              "type": "array"
+            },
+            "incoming_objects": {
+              "description": "Objects relating to this object through O2O. Empty for an event.",
+              "items": {
+                "$ref": "#/$defs/RelatedElement"
+              },
+              "type": "array"
+            },
+            "num_events": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "num_incoming_objects": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "num_objects": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "objects": {
+              "description": "Objects the element relates to through E2O (for an event) or O2O (for an object), in OCEL\norder.",
+              "items": {
+                "$ref": "#/$defs/RelatedElement"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "objects",
+            "num_objects",
+            "incoming_objects",
+            "num_incoming_objects",
+            "events",
+            "num_events"
+          ],
+          "type": "object"
+        },
+        "RelatedElement": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "qualifier": {
+              "type": "string"
+            },
+            "type_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "type_name",
+            "qualifier"
+          ],
+          "type": "object"
+        },
+        "RelatedEvent": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "qualifier": {
+              "type": "string"
+            },
+            "time": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "type_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "type_name",
+            "qualifier",
+            "time"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ElementRelations"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Nullable_ElementRelations"
+    }
+  },
+  {
     "id": "app_bindings::ocel::ocel_get_event",
     "name": "ocel_get_event",
     "docs": [
@@ -1893,7 +2053,7 @@
     ],
     "module": "app_bindings::ocel",
     "source_path": "backend/app-bindings/src/ocel.rs",
-    "source_line": 48,
+    "source_line": 73,
     "args": [
       [
         "ocel",
@@ -2092,7 +2252,7 @@
     ],
     "module": "app_bindings::ocel",
     "source_path": "backend/app-bindings/src/ocel.rs",
-    "source_line": 42,
+    "source_line": 67,
     "args": [
       [
         "ocel",
@@ -2292,7 +2452,7 @@
     ],
     "module": "app_bindings::ocel",
     "source_path": "backend/app-bindings/src/ocel.rs",
-    "source_line": 56,
+    "source_line": 81,
     "args": [
       [
         "ocel",
@@ -2312,6 +2472,16 @@
               "format": "uint",
               "minimum": 0,
               "type": "integer"
+            },
+            "maxNodes": {
+              "default": null,
+              "description": "Stop adding nodes once the graph has this many. Defaults to [`DEFAULT_MAX_GRAPH_NODES`].",
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
             },
             "relsSizeIgnoreThreshold": {
               "format": "uint",
@@ -2467,6 +2637,13 @@
         },
         "OCELGraph": {
           "properties": {
+            "expanded": {
+              "description": "Ids of the nodes whose relations are all in the graph. The others can be expanded further.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
             "links": {
               "items": {
                 "$ref": "#/$defs/GraphLink"
@@ -2478,11 +2655,17 @@
                 "$ref": "#/$defs/GraphNode"
               },
               "type": "array"
+            },
+            "truncated": {
+              "description": "Whether nodes within `max_distance` were left out to stay within `max_nodes`.",
+              "type": "boolean"
             }
           },
           "required": [
             "nodes",
-            "links"
+            "links",
+            "truncated",
+            "expanded"
           ],
           "type": "object"
         },
@@ -2583,7 +2766,7 @@
     ],
     "module": "app_bindings::ocel",
     "source_path": "backend/app-bindings/src/ocel.rs",
-    "source_line": 13,
+    "source_line": 14,
     "args": [
       [
         "ocel",
@@ -2760,7 +2943,7 @@
     ],
     "module": "app_bindings::ocel",
     "source_path": "backend/app-bindings/src/ocel.rs",
-    "source_line": 36,
+    "source_line": 37,
     "args": [
       [
         "ocel",
@@ -2811,6 +2994,80 @@
     }
   },
   {
+    "id": "app_bindings::ocel::ocel_search_elements",
+    "name": "ocel_search_elements",
+    "docs": [
+      "Events and objects whose id contains `query`, ignoring case. Exact and prefix matches come",
+      "first. Returns at most `min(limit, 1000)` hits."
+    ],
+    "module": "app_bindings::ocel",
+    "source_path": "backend/app-bindings/src/ocel.rs",
+    "source_line": 44,
+    "args": [
+      [
+        "ocel",
+        {
+          "title": "SlimLinkedOCEL",
+          "type": "string",
+          "x-registry-ref": "SlimLinkedOCEL",
+          "x-widget": "entity-selector"
+        }
+      ],
+      [
+        "query",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "string",
+          "type": "string"
+        }
+      ],
+      [
+        "limit",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "format": "uint",
+          "minimum": 0,
+          "title": "uint",
+          "type": "integer"
+        }
+      ]
+    ],
+    "required_args": [
+      "ocel",
+      "query",
+      "limit"
+    ],
+    "return_type": {
+      "$defs": {
+        "ElementSearchHit": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "is_event": {
+              "type": "boolean"
+            },
+            "type_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "is_event",
+            "type_name"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "items": {
+        "$ref": "#/$defs/ElementSearchHit"
+      },
+      "title": "Array_of_ElementSearchHit",
+      "type": "array"
+    }
+  },
+  {
     "id": "app_bindings::ocel::ocel_stats",
     "name": "ocel_stats",
     "docs": [
@@ -2818,7 +3075,7 @@
     ],
     "module": "app_bindings::ocel",
     "source_path": "backend/app-bindings/src/ocel.rs",
-    "source_line": 19,
+    "source_line": 20,
     "args": [
       [
         "ocel",
@@ -2870,7 +3127,7 @@
     ],
     "module": "app_bindings::path_schemas",
     "source_path": "backend/app-bindings/src/path_schemas.rs",
-    "source_line": 42,
+    "source_line": 37,
     "args": [
       [
         "ocel",
@@ -3173,7 +3430,7 @@
     ],
     "module": "app_bindings::path_schemas",
     "source_path": "backend/app-bindings/src/path_schemas.rs",
-    "source_line": 32,
+    "source_line": 27,
     "args": [
       [
         "ocel",
@@ -3494,7 +3751,7 @@
     ],
     "module": "app_bindings::path_schemas",
     "source_path": "backend/app-bindings/src/path_schemas.rs",
-    "source_line": 23,
+    "source_line": 18,
     "args": [
       [
         "ocel",
@@ -3669,7 +3926,7 @@
     ],
     "module": "app_bindings::path_schemas",
     "source_path": "backend/app-bindings/src/path_schemas.rs",
-    "source_line": 17,
+    "source_line": 12,
     "args": [
       [
         "ocel",
@@ -3774,14 +4031,12 @@
     "id": "app_bindings::query::check_constraints_box",
     "name": "check_constraints_box",
     "docs": [
-      "Evaluate `tree` and keep the result, returning it as a registry handle.",
-      "A handle rather than a value: the situations of a large tree run to millions of rows and the",
-      "frontend reads one page at a time. Ask [`eval_summary`] for the counts and [`eval_results_page`]",
-      "for the rows."
+      "Evaluate `tree` and store the result, returning a handle: a large tree's situations run to",
+      "millions of rows, so the frontend pages through [`eval_results_page`] instead of getting them all."
     ],
     "module": "app_bindings::query",
     "source_path": "backend/app-bindings/src/query.rs",
-    "source_line": 29,
+    "source_line": 25,
     "args": [
       [
         "ocel",
@@ -4755,7 +5010,7 @@
     ],
     "module": "app_bindings::query",
     "source_path": "backend/app-bindings/src/query.rs",
-    "source_line": 105,
+    "source_line": 90,
     "args": [
       [
         "input",
@@ -5754,7 +6009,7 @@
     ],
     "module": "app_bindings::query",
     "source_path": "backend/app-bindings/src/query.rs",
-    "source_line": 84,
+    "source_line": 71,
     "args": [
       [
         "ocel",
@@ -6837,7 +7092,7 @@
     ],
     "module": "app_bindings::query",
     "source_path": "backend/app-bindings/src/query.rs",
-    "source_line": 73,
+    "source_line": 60,
     "args": [
       [
         "ocel",
@@ -6860,8 +7115,75 @@
       [
         "request",
         {
+          "$defs": {
+            "EventVariable": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "ObjectVariable": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "ParentRow": {
+              "description": "A row of a parent box, given by the id of the element bound to each variable. A row of a child\nbox extends it when it binds each of these variables to the same element.",
+              "properties": {
+                "events": {
+                  "items": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "$ref": "#/$defs/EventVariable"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "type": "array"
+                },
+                "objects": {
+                  "items": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "$ref": "#/$defs/ObjectVariable"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "objects",
+                "events"
+              ],
+              "type": "object"
+            }
+          },
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "properties": {
+            "childNodes": {
+              "default": null,
+              "description": "For each returned row, count the rows of these child nodes that extend it into\n[`BindingRow::child_counts`].",
+              "items": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "evalVersion": {
               "format": "uint64",
               "minimum": 0,
@@ -6881,6 +7203,18 @@
               "format": "uint",
               "minimum": 0,
               "type": "integer"
+            },
+            "parent": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ParentRow"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Only the rows that extend this row of the parent box."
             },
             "violated": {
               "description": "None = both; Some(true) = only violated; Some(false) = only satisfied.",
@@ -6910,6 +7244,18 @@
       "$defs": {
         "BindingRow": {
           "properties": {
+            "childCounts": {
+              "description": "For each node of [`EvalPageRequest::child_nodes`], the number of its rows that extend this\nrow.",
+              "items": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "events": {
               "items": {
                 "maxItems": 2,
@@ -7154,13 +7500,12 @@
     "id": "app_bindings::query::eval_summary",
     "name": "eval_summary",
     "docs": [
-      "Per-node situation and violation counts of a stored evaluation, plus its `eval_version`.",
-      "Takes the OCEL only to refuse an evaluation of a different one: counts that belong to a log no",
-      "longer loaded are worse than an error, because the UI presents them as this log's."
+      "Per-node situation and violation counts of a stored evaluation, plus its `eval_version`. Takes",
+      "the OCEL only to refuse an evaluation of a different one."
     ],
     "module": "app_bindings::query",
     "source_path": "backend/app-bindings/src/query.rs",
-    "source_line": 63,
+    "source_line": 50,
     "args": [
       [
         "ocel",
@@ -7239,13 +7584,12 @@
     "id": "app_bindings::query::export_filter_box",
     "name": "export_filter_box",
     "docs": [
-      "Filter the OCEL down to what the tree's INCLUDED/EXCLUDED labels select, and store the result.",
-      "Stored as a `SlimLinkedOCEL`, the kind the rest of the app works on, so the caller can export it",
-      "or keep using it without a follow-up link step."
+      "Filter the OCEL down to what the tree's INCLUDED/EXCLUDED labels select, returned as a",
+      "`SlimLinkedOCEL` so the caller can keep using it without a follow-up link step."
     ],
     "module": "app_bindings::query",
     "source_path": "backend/app-bindings/src/query.rs",
-    "source_line": 96,
+    "source_line": 81,
     "args": [
       [
         "ocel",
@@ -8212,7 +8556,7 @@
       "produces one dot with coordinates determined by the configured axes."
     ],
     "module": "process_mining::analysis::case_centric::dotted_chart",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/analysis/case_centric/dotted_chart.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/analysis/case_centric/dotted_chart.rs",
     "source_line": 199,
     "args": [
       [
@@ -8440,7 +8784,7 @@
       "activity are counted under `\"UNKNOWN\"`."
     ],
     "module": "process_mining::analysis::case_centric::event_timestamp_histogram",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/analysis/case_centric/event_timestamp_histogram.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/analysis/case_centric/event_timestamp_histogram.rs",
     "source_line": 58,
     "args": [
       [
@@ -8537,7 +8881,7 @@
       "is not found."
     ],
     "module": "process_mining::analysis::object_centric::object_attribute_changes",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/analysis/object_centric/object_attribute_changes.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/analysis/object_centric/object_attribute_changes.rs",
     "source_line": 37,
     "args": [
       [
@@ -8649,7 +8993,7 @@
       "ascending event id, sorted descending. `None` returns every qualifying event."
     ],
     "module": "process_mining::analysis::object_centric::oc_performance",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/analysis/object_centric/oc_performance.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/analysis/object_centric/oc_performance.rs",
     "source_line": 120,
     "args": [
       [
@@ -8712,7 +9056,7 @@
       "ascending event id, sorted descending. `None` returns every qualifying event."
     ],
     "module": "process_mining::analysis::object_centric::oc_performance",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/analysis/object_centric/oc_performance.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/analysis/object_centric/oc_performance.rs",
     "source_line": 59,
     "args": [
       [
@@ -8774,7 +9118,7 @@
       "if no `source_type` objects exist."
     ],
     "module": "process_mining::analysis::object_centric::oc_statistics",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/analysis/object_centric/oc_statistics.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/analysis/object_centric/oc_statistics.rs",
     "source_line": 45,
     "args": [
       [
@@ -8834,7 +9178,7 @@
       "Result row order is unspecified."
     ],
     "module": "process_mining::analysis::object_centric::oc_statistics",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/analysis/object_centric/oc_statistics.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/analysis/object_centric/oc_statistics.rs",
     "source_line": 18,
     "args": [
       [
@@ -8881,12 +9225,12 @@
       "The registry counterpart of `extraction_column_domain`: same answer, for a source whose bytes",
       "the host already holds rather than one reachable by connection string. Without it a dropped",
       "file could be extracted from but never inspected, so the editor could not offer the example",
-      "values a dynamic type name needs -- on wasm, where every source is byte-held, not at all.",
+      "values a dynamic type name needs, and on wasm, where every source is byte-held, not at all.",
       "`sources` maps source id to registry item id. Every entry other than `source_id` is ignored."
     ],
     "module": "process_mining::bindings::extraction_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_bindings.rs",
-    "source_line": 268,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_bindings.rs",
+    "source_line": 266,
     "args": [
       [
         "sources",
@@ -8952,8 +9296,8 @@
       "whole compile."
     ],
     "module": "process_mining::bindings::extraction_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_bindings.rs",
-    "source_line": 69,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_bindings.rs",
+    "source_line": 67,
     "args": [
       [
         "blueprint",
@@ -9350,7 +9694,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column *names*, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
+                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column names, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
                   "properties": {
                     "inputs": {
                       "description": "Input node ids.",
@@ -9611,7 +9955,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "The column's text -- see [`Value::display_string`] -- matches the regular expression.",
+                  "description": "The column's text (see [`Value::display_string`]) matches the regular expression.",
                   "properties": {
                     "column": {
                       "description": "Column name.",
@@ -10047,7 +10391,7 @@
               ]
             },
             "ValueExpression": {
-              "description": "Produces one text value from a row.\n\nEvery position that becomes an identity -- entity ids, relation endpoints, type names,\nqualifiers -- uses this, and every variant propagates absence: if any input has no\n[`Value::canonical_string`], the whole expression is `None` and the caller drops the row.",
+              "description": "Produces one text value from a row.\n\nUsed by every position that becomes an identity: entity ids, relation endpoints, type names\nand qualifiers. Every variant propagates absence, so if any input has no\n[`Value::canonical_string`] the whole expression is `None` and the caller drops the row.",
               "oneOf": [
                 {
                   "description": "The value in a column.",
@@ -10311,12 +10655,12 @@
           "oneOf": [
             {
               "const": "PerType",
-              "description": "One `event_<T>` / `object_<T>` view per declared type, plus `event`, `object`,\n`event_object`, `object_object` and the two type maps -- the OCEL 2.0 layout external\ntooling reads.",
+              "description": "One `event_<T>` / `object_<T>` view per declared type, plus `event`, `object`,\n`event_object`, `object_object` and the two type maps: the OCEL 2.0 layout external tooling\nreads.",
               "type": "string"
             },
             {
               "const": "Consolidated",
-              "description": "The `events`/`objects`/`e2o`/`o2o`/`object_attribute_changes`/`event_attr_meta` layout\n`rust4pm`'s own reader (`DuckDbLinkedOCEL`) consumes. A type is stored as a column *value*\nrather than encoded into a view name, so no\n[`Catalog::column_domain`] lookup is needed and\n[`RejectReason::DynamicTypeName`] never fires.",
+              "description": "The `events`/`objects`/`e2o`/`o2o`/`object_attribute_changes`/`event_attr_meta` layout\n`rust4pm`'s own reader (`DuckDbLinkedOCEL`) consumes. A type is stored as a column value\nrather than encoded into a view name, so no\n[`Catalog::column_domain`] lookup is needed and\n[`RejectReason::DynamicTypeName`] never fires.",
               "type": "string"
             }
           ],
@@ -10327,7 +10671,7 @@
         "dialect",
         {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "description": "Which SQL engine the emitted statements target.\n\nThe two are **not** equally evidenced: `DuckDb` is checked row-for-row against the extractor by\nthe differential suite, while `Postgres` is only covered by unit tests over the emitted text.",
+          "description": "Which SQL engine the emitted statements target.\n\nThe two are not equally evidenced: `DuckDb` is checked row-for-row against the extractor by\nthe differential suite, while `Postgres` is only covered by unit tests over the emitted text.",
           "oneOf": [
             {
               "const": "DuckDb",
@@ -10336,7 +10680,7 @@
             },
             {
               "const": "Postgres",
-              "description": "`PostgreSQL` 12+. Emitted from the same fragments as `DuckDb` -- see the type-level note.",
+              "description": "`PostgreSQL` 12+. Emitted from the same fragments as `DuckDb`, see the type-level note.",
               "type": "string"
             }
           ],
@@ -10380,12 +10724,12 @@
           "oneOf": [
             {
               "const": "PerType",
-              "description": "One `event_<T>` / `object_<T>` view per declared type, plus `event`, `object`,\n`event_object`, `object_object` and the two type maps -- the OCEL 2.0 layout external\ntooling reads.",
+              "description": "One `event_<T>` / `object_<T>` view per declared type, plus `event`, `object`,\n`event_object`, `object_object` and the two type maps: the OCEL 2.0 layout external tooling\nreads.",
               "type": "string"
             },
             {
               "const": "Consolidated",
-              "description": "The `events`/`objects`/`e2o`/`o2o`/`object_attribute_changes`/`event_attr_meta` layout\n`rust4pm`'s own reader (`DuckDbLinkedOCEL`) consumes. A type is stored as a column *value*\nrather than encoded into a view name, so no\n[`Catalog::column_domain`] lookup is needed and\n[`RejectReason::DynamicTypeName`] never fires.",
+              "description": "The `events`/`objects`/`e2o`/`o2o`/`object_attribute_changes`/`event_attr_meta` layout\n`rust4pm`'s own reader (`DuckDbLinkedOCEL`) consumes. A type is stored as a column value\nrather than encoded into a view name, so no\n[`Catalog::column_domain`] lookup is needed and\n[`RejectReason::DynamicTypeName`] never fires.",
               "type": "string"
             }
           ]
@@ -10411,7 +10755,7 @@
               ]
             },
             "path": {
-              "description": "The JSON path of the authored entry this mapping came from -- see\n`desugar_with_paths` -- so a diagnostic points at\nwhat the author wrote rather than a position in the flattened list.",
+              "description": "The JSON path of the authored entry this mapping came from (see `desugar_with_paths`), so\na diagnostic points at what the author wrote rather than a position in the flattened\nlist.",
               "type": "string"
             }
           },
@@ -10466,7 +10810,7 @@
             },
             {
               "const": "AmbiguousStaticObjectAttributes",
-              "description": "Two rows of one mapping give one object id different static attribute values. The\nextractor writes the mapping's *first* row for an id and ignores later repeats. SQL rows\nare unordered, so the views agree only when the repeats carry the same values.",
+              "description": "Two rows of one mapping give one object id different static attribute values. The\nextractor writes the mapping's first row for an id and ignores later repeats. SQL rows\nare unordered, so the views agree only when the repeats carry the same values.",
               "type": "string"
             },
             {
@@ -10627,7 +10971,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "A node's column shape could not be resolved -- typically an unknown source table.",
+              "description": "A node's column shape could not be resolved, typically because of an unknown source table.",
               "properties": {
                 "UnresolvedNodeSchema": {
                   "properties": {
@@ -10774,7 +11118,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "A column with no [`Value::canonical_string`](super::value::Value::canonical_string) --\n`Float` or `Timestamp` -- is used at an identity position, where it makes the expression\n`None` for every row.",
+              "description": "A `Float` or `Timestamp` column, which has no\n[`Value::canonical_string`](super::value::Value::canonical_string), is used at an identity\nposition, where it makes the expression `None` for every row.",
               "properties": {
                 "UnstableIdentityRendering": {
                   "properties": {
@@ -10806,7 +11150,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "A column whose [`Value::display_string`](super::value::Value::display_string) a SQL cast\ndoes not reproduce -- Rust writes `1` where `DuckDB` writes `1.0`, and keeps a\ntimestamp's original offset -- feeds a position that reads it as text.",
+              "description": "A column whose [`Value::display_string`](super::value::Value::display_string) a SQL cast\ndoes not reproduce feeds a position that reads it as text. Rust writes `1` where `DuckDB`\nwrites `1.0`, and keeps a timestamp's original offset.",
               "properties": {
                 "UnstableDisplayRendering": {
                   "properties": {
@@ -10951,7 +11295,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "An attribute's declared type is not the source column's kind, and the coercion\n`attribute_value` applies is not one a typed SQL column can reproduce -- its fallback on\nfailure is the cell's own natural value, which has a different type.",
+              "description": "An attribute's declared type is not the source column's kind, and the coercion\n`attribute_value` applies is not one a typed SQL column can reproduce: its fallback on\nfailure is the cell's own natural value, which has a different type.",
               "properties": {
                 "AttributeCoercion": {
                   "properties": {
@@ -11055,7 +11399,7 @@
           ]
         },
         "SqlDialect": {
-          "description": "Which SQL engine the emitted statements target.\n\nThe two are **not** equally evidenced: `DuckDb` is checked row-for-row against the extractor by\nthe differential suite, while `Postgres` is only covered by unit tests over the emitted text.",
+          "description": "Which SQL engine the emitted statements target.\n\nThe two are not equally evidenced: `DuckDb` is checked row-for-row against the extractor by\nthe differential suite, while `Postgres` is only covered by unit tests over the emitted text.",
           "oneOf": [
             {
               "const": "DuckDb",
@@ -11064,7 +11408,7 @@
             },
             {
               "const": "Postgres",
-              "description": "`PostgreSQL` 12+. Emitted from the same fragments as `DuckDb` -- see the type-level note.",
+              "description": "`PostgreSQL` 12+. Emitted from the same fragments as `DuckDb`, see the type-level note.",
               "type": "string"
             }
           ]
@@ -11138,8 +11482,8 @@
       "imported source file."
     ],
     "module": "process_mining::bindings::extraction_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_bindings.rs",
-    "source_line": 251,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_bindings.rs",
+    "source_line": 249,
     "args": [
       [
         "sources",
@@ -11290,14 +11634,14 @@
       "Returns a fresh `SlimLinkedOCEL` rather than filling one given by `&mut`, because a binding",
       "cannot both take a `&mut` big type and read the registry: the `&mut` borrow of the state guard",
       "is live across the call, so lending the same guard out as a [`StateRef`] would not borrow-check.",
-      "The [`ExtractionReport`] -- drop reasons, per-mapping counts -- is not returned, because a",
-      "binding returns either a big type or plain data, never both. A run whose report carries errors",
+      "The [`ExtractionReport`] (drop reasons, per-mapping counts) is not returned, because a binding",
+      "returns either a big type or plain data, never both. A run whose report carries errors",
       "therefore fails with them rather than handing back a log that silently lost rows. Validate",
       "first with [`extraction_validate`] to catch what a report would otherwise tell you."
     ],
     "module": "process_mining::bindings::extraction_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_bindings.rs",
-    "source_line": 324,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_bindings.rs",
+    "source_line": 322,
     "args": [
       [
         "blueprint",
@@ -11694,7 +12038,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column *names*, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
+                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column names, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
                   "properties": {
                     "inputs": {
                       "description": "Input node ids.",
@@ -11955,7 +12299,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "The column's text -- see [`Value::display_string`] -- matches the regular expression.",
+                  "description": "The column's text (see [`Value::display_string`]) matches the regular expression.",
                   "properties": {
                     "column": {
                       "description": "Column name.",
@@ -12391,7 +12735,7 @@
               ]
             },
             "ValueExpression": {
-              "description": "Produces one text value from a row.\n\nEvery position that becomes an identity -- entity ids, relation endpoints, type names,\nqualifiers -- uses this, and every variant propagates absence: if any input has no\n[`Value::canonical_string`], the whole expression is `None` and the caller drops the row.",
+              "description": "Produces one text value from a row.\n\nUsed by every position that becomes an identity: entity ids, relation endpoints, type names\nand qualifiers. Every variant propagates absence, so if any input has no\n[`Value::canonical_string`] the whole expression is `None` and the caller drops the row.",
               "oneOf": [
                 {
                   "description": "The value in a column.",
@@ -12702,8 +13046,8 @@
       "`sources` maps source id to registry item id. Every entry other than `source_id` is ignored."
     ],
     "module": "process_mining::bindings::extraction_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_bindings.rs",
-    "source_line": 290,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_bindings.rs",
+    "source_line": 288,
     "args": [
       [
         "sources",
@@ -12788,9 +13132,9 @@
     "id": "process_mining::bindings::extraction_bindings::extraction_validate",
     "name": "extraction_validate",
     "docs": [
-      "Check `blueprint` against `catalog` for problems decidable from the schema alone -- an",
-      "unknown source or table, a node graph cycle, a type-rendering rule the blueprint's own",
-      "`id_rendering` setting cannot satisfy, and the like.",
+      "Check `blueprint` against `catalog` for problems decidable from the schema alone, such as an",
+      "unknown source or table, a node graph cycle, or a type-rendering rule the blueprint's own",
+      "`id_rendering` setting cannot satisfy.",
       "An empty result means `blueprint` is safe to pass to [`extraction_run`],",
       "[`extraction_run_to_duckdb`] or [`extraction_compile`]. All three call this internally and",
       "refuse to run an invalid blueprint, so calling it first is for surfacing errors to a user",
@@ -12798,13 +13142,13 @@
       "The two report a refusal differently, because they fail differently: the running bindings",
       "return an error string, while [`extraction_compile`] always returns a [`CompiledOcel`] and",
       "puts one entry per validation error in its `errors` array, with no relations emitted. This is",
-      "also the only place a blueprint's `version` is checked -- the bindings deserialize a",
+      "also the only place a blueprint's `version` is checked: the bindings deserialize a",
       "[`Blueprint`] with plain serde, not `Blueprint::from_json`, so a blueprint from a newer model",
       "version is caught here and nowhere else."
     ],
     "module": "process_mining::bindings::extraction_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_bindings.rs",
-    "source_line": 56,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_bindings.rs",
+    "source_line": 54,
     "args": [
       [
         "blueprint",
@@ -13201,7 +13545,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column *names*, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
+                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column names, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
                   "properties": {
                     "inputs": {
                       "description": "Input node ids.",
@@ -13462,7 +13806,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "The column's text -- see [`Value::display_string`] -- matches the regular expression.",
+                  "description": "The column's text (see [`Value::display_string`]) matches the regular expression.",
                   "properties": {
                     "column": {
                       "description": "Column name.",
@@ -13898,7 +14242,7 @@
               ]
             },
             "ValueExpression": {
-              "description": "Produces one text value from a row.\n\nEvery position that becomes an identity -- entity ids, relation endpoints, type names,\nqualifiers -- uses this, and every variant propagates absence: if any input has no\n[`Value::canonical_string`], the whole expression is `None` and the caller drops the row.",
+              "description": "Produces one text value from a row.\n\nUsed by every position that becomes an identity: entity ids, relation endpoints, type names\nand qualifiers. Every variant propagates absence, so if any input has no\n[`Value::canonical_string`] the whole expression is `None` and the caller drops the row.",
               "oneOf": [
                 {
                   "description": "The value in a column.",
@@ -14486,7 +14830,7 @@
               "type": "object"
             },
             {
-              "description": "A comparison's two operands -- both columns, or both literals -- have different,\nstatically known kinds that [`Value::compare`](super::value::Value::compare) has no rule\nfor (only `integer`/`float` compare across kinds), so it matches no row at all.",
+              "description": "A comparison's two operands (both columns, or both literals) have different, statically\nknown kinds that [`Value::compare`](super::value::Value::compare) has no rule for (only\n`integer`/`float` compare across kinds), so it matches no row at all.",
               "properties": {
                 "left_kind": {
                   "description": "The left operand's declared kind: `text`, `integer`, `float`, `boolean` or `timestamp`.",
@@ -14529,13 +14873,13 @@
     "name": "extraction_column_domain",
     "docs": [
       "The distinct values `table.column` holds in the source named `source_id`, for compiling a",
-      "dynamic type name (one read from a column rather than written in the blueprint) to SQL --",
-      "see `ExtractionCatalog::with_domain`.",
+      "dynamic type name (one read from a column rather than written in the blueprint) to SQL. See",
+      "`ExtractionCatalog::with_domain`.",
       "`connections` must contain an entry for `source_id`. Every other entry is ignored."
     ],
     "module": "process_mining::bindings::extraction_dbcon_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_dbcon_bindings.rs",
-    "source_line": 198,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_dbcon_bindings.rs",
+    "source_line": 190,
     "args": [
       [
         "connections",
@@ -14592,19 +14936,16 @@
     "id": "process_mining::bindings::extraction_dbcon_bindings::extraction_connection_kinds",
     "name": "extraction_connection_kinds",
     "docs": [
-      "Connect to every source in `connections` and discover its schema, returning one merged",
-      "[`ExtractionCatalog`] a caller can `extraction_validate` or `extraction_compile` a blueprint",
-      "against, or edit further with `ExtractionCatalog::with_domain` entries from",
-      "[`extraction_column_domain`].",
       "The source kinds *this build's* connector can open, as `dbcon` backend ids (`\"csv\"`,",
       "`\"parquet\"`, `\"xlsx\"`, `\"sqlite\"`, `\"duckdb\"`, `\"postgres\"`). Lets a UI offer exactly the",
       "kinds the running binary supports instead of hardcoding a per-build list.",
-      "Derived from this crate's own `extraction-dbcon*` features, which enable exactly the",
-      "corresponding `dbcon` backends (see `Cargo.toml`)."
+      "Asked of `dbcon` itself rather than derived from this crate's `extraction-dbcon*` features:",
+      "under Cargo feature unification another crate in the graph can enable a `dbcon` backend",
+      "those features do not name."
     ],
     "module": "process_mining::bindings::extraction_dbcon_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_dbcon_bindings.rs",
-    "source_line": 169,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_dbcon_bindings.rs",
+    "source_line": 163,
     "args": [],
     "required_args": [],
     "return_type": {
@@ -14620,12 +14961,16 @@
     "id": "process_mining::bindings::extraction_dbcon_bindings::extraction_discover_catalog",
     "name": "extraction_discover_catalog",
     "docs": [
+      "Connect to every source in `connections` and discover its schema, returning one merged",
+      "[`ExtractionCatalog`] a caller can `extraction_validate` or `extraction_compile` a blueprint",
+      "against, or edit further with `ExtractionCatalog::with_domain` entries from",
+      "[`extraction_column_domain`].",
       "`connections` maps each source id a blueprint's nodes name to a `dbcon` connection string",
       "(`postgres://...`, `postgresql://...`, `sqlite:...`, or a bare path ending in `.csv`)."
     ],
     "module": "process_mining::bindings::extraction_dbcon_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_dbcon_bindings.rs",
-    "source_line": 186,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_dbcon_bindings.rs",
+    "source_line": 178,
     "args": [
       [
         "connections",
@@ -14774,15 +15119,15 @@
     "docs": [
       "Run `blueprint` against `connections`, filling `ocel` in place and returning the",
       "`ExtractionReport`.",
-      "`ocel` must be an empty log -- get one from `locel_new` -- since this overwrites it wholesale",
+      "`ocel` must be an empty log (get one from `locel_new`), since this overwrites it wholesale",
       "rather than merging into whatever it already held. `connections` maps each source id",
       "`blueprint`'s nodes name to a `dbcon` connection string. The blueprint itself carries no",
       "connection details, so the same blueprint can run against different connections (a staging",
       "database, then production) with no edit."
     ],
     "module": "process_mining::bindings::extraction_dbcon_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_dbcon_bindings.rs",
-    "source_line": 253,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_dbcon_bindings.rs",
+    "source_line": 245,
     "args": [
       [
         "ocel",
@@ -15188,7 +15533,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column *names*, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
+                  "description": "Concatenate the rows of several nodes, aligning columns by name.\n\n`UNION ALL`, not `UNION`: dropping duplicates would drop the entities they produce. Output\ncolumns are the union of the inputs' column names, and an input lacking one contributes\n`Null`. Both are model semantics a compiler must reproduce.",
                   "properties": {
                     "inputs": {
                       "description": "Input node ids.",
@@ -15449,7 +15794,7 @@
                   "type": "object"
                 },
                 {
-                  "description": "The column's text -- see [`Value::display_string`] -- matches the regular expression.",
+                  "description": "The column's text (see [`Value::display_string`]) matches the regular expression.",
                   "properties": {
                     "column": {
                       "description": "Column name.",
@@ -15885,7 +16230,7 @@
               ]
             },
             "ValueExpression": {
-              "description": "Produces one text value from a row.\n\nEvery position that becomes an identity -- entity ids, relation endpoints, type names,\nqualifiers -- uses this, and every variant propagates absence: if any input has no\n[`Value::canonical_string`], the whole expression is `None` and the caller drops the row.",
+              "description": "Produces one text value from a row.\n\nUsed by every position that becomes an identity: entity ids, relation endpoints, type names\nand qualifiers. Every variant propagates absence, so if any input has no\n[`Value::canonical_string`] the whole expression is `None` and the caller drops the row.",
               "oneOf": [
                 {
                   "description": "The value in a column.",
@@ -16326,7 +16671,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "Two mappings, or two rows, produced the same rendered id under two *different* types.\nOnly reachable under [`IdRendering::Raw`](super::blueprint::IdRendering::Raw). Non-fatal:\nthe row is dropped (see [`DropReason::IdTypeCollision`]) and the run continues, since\nmerging the two would fold two distinct entities into one.",
+              "description": "Two mappings, or two rows, produced the same rendered id under two different types.\nOnly reachable under [`IdRendering::Raw`](super::blueprint::IdRendering::Raw). Non-fatal:\nthe row is dropped (see [`DropReason::IdTypeCollision`]) and the run continues, since\nmerging the two would fold two distinct entities into one.",
               "properties": {
                 "IdTypeCollision": {
                   "properties": {
@@ -16509,7 +16854,7 @@
           "description": "What a sink did during [`ExtractionSink::finalize`], folded into\n[`ExtractionReport::finalize`](super::report::ExtractionReport::finalize).\n\nAll zero for a sink that resolves eagerly. Nonzero entries carry a deferring sink's share of\nthe per-mapping counters.",
           "properties": {
             "duplicates_removed": {
-              "description": "Repeated entity ids removed at finalize -- a deferring sink's share of\n[`MappingStats::deduplicated`](super::report::MappingStats::deduplicated).",
+              "description": "Repeated entity ids removed at finalize: a deferring sink's share of\n[`MappingStats::deduplicated`](super::report::MappingStats::deduplicated).",
               "format": "uint64",
               "minimum": 0,
               "type": "integer"
@@ -16562,7 +16907,7 @@
               ]
             },
             "path": {
-              "description": "The JSON path of the authored entry this mapping came from -- see\n`desugar_with_paths` -- so a diagnostic points at\nwhat the author wrote rather than a position in the flattened list.",
+              "description": "The JSON path of the authored entry this mapping came from (see `desugar_with_paths`), so\na diagnostic points at what the author wrote rather than a position in the flattened\nlist.",
               "type": "string"
             }
           },
@@ -16577,7 +16922,7 @@
           "description": "Counts for one mapping's run.",
           "properties": {
             "deduplicated": {
-              "description": "Rows that tried to create an entity **the sink already had**. Not a loss: an object mapping\nat event grain names the same object on every row by design. See\n[`DuplicateObjectPolicy::Error`](super::blueprint::DuplicateObjectPolicy::Error) for what\nturns a repeat into a loss instead.\n\nOne increment per row whose entity-creating call found the entity already present, across\nmappings, since the sink is what answers.\n\n**Resolving a relation endpoint is never counted**, so an `E2O`/`O2O` mapping reports zero\nhowever often its rows repeat an id: finding an existing endpoint is the normal successful\ncase. A blueprint that wants its inline references' repeats counted can name the objects\nwith their own [`Target::Object`](super::blueprint::Target::Object) mapping.",
+              "description": "Rows that tried to create an entity the sink already had. Not a loss: an object mapping\nat event grain names the same object on every row by design. See\n[`DuplicateObjectPolicy::Error`](super::blueprint::DuplicateObjectPolicy::Error) for what\nturns a repeat into a loss instead.\n\nOne increment per row whose entity-creating call found the entity already present, across\nmappings, since the sink is what answers.\n\nResolving a relation endpoint is never counted, so an `E2O`/`O2O` mapping reports zero\nhowever often its rows repeat an id: finding an existing endpoint is the normal successful\ncase. A blueprint that wants its inline references' repeats counted can name the objects\nwith their own [`Target::Object`](super::blueprint::Target::Object) mapping.",
               "format": "uint64",
               "minimum": 0,
               "type": "integer"
@@ -16592,7 +16937,7 @@
               "type": "object"
             },
             "entities_emitted": {
-              "description": "Entities or relations this mapping *handed to the sink*, which is not the same as\n\"survived the run\" for a sink that defers resolution.\n\nAn eager sink refuses a dangling relation at the call site, so it lands in\n[`DropReason::UnresolvedEndpoint`] and never here. A deferring sink writes it, counts it\nhere, and deletes it at [`finalize`](super::sink::ExtractionSink::finalize), reporting it\nin [`FinalizeReport::unresolved_endpoints`](super::sink::FinalizeReport) instead. To count\nwhat a run produced, subtract `ExtractionReport::finalize.unresolved_endpoints` from the\ntotal.",
+              "description": "Entities or relations this mapping handed to the sink, which is not the same as\n\"survived the run\" for a sink that defers resolution.\n\nAn eager sink refuses a dangling relation at the call site, so it lands in\n[`DropReason::UnresolvedEndpoint`] and never here. A deferring sink writes it, counts it\nhere, and deletes it at [`finalize`](super::sink::ExtractionSink::finalize), reporting it\nin [`FinalizeReport::unresolved_endpoints`](super::sink::FinalizeReport) instead. To count\nwhat a run produced, subtract `ExtractionReport::finalize.unresolved_endpoints` from the\ntotal.",
               "format": "uint64",
               "minimum": 0,
               "type": "integer"
@@ -16713,7 +17058,7 @@
             },
             {
               "const": "QueryUnsupported",
-              "description": "This provider cannot execute SQL: it reports no [`RowProvider::query_dialect`], or the\nquery it was handed is one it cannot run. Never fatal on its own -- the caller falls back\nto executing the node row by row.",
+              "description": "This provider cannot execute SQL: it reports no [`RowProvider::query_dialect`], or the\nquery it was handed is one it cannot run. Not fatal: the caller falls back to executing\nthe node row by row.",
               "type": "string"
             },
             {
@@ -16897,7 +17242,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "A node's column shape could not be resolved -- typically an unknown source table.",
+              "description": "A node's column shape could not be resolved, typically because of an unknown source table.",
               "properties": {
                 "UnresolvedNodeSchema": {
                   "properties": {
@@ -17044,7 +17389,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "A column with no [`Value::canonical_string`](super::value::Value::canonical_string) --\n`Float` or `Timestamp` -- is used at an identity position, where it makes the expression\n`None` for every row.",
+              "description": "A `Float` or `Timestamp` column, which has no\n[`Value::canonical_string`](super::value::Value::canonical_string), is used at an identity\nposition, where it makes the expression `None` for every row.",
               "properties": {
                 "UnstableIdentityRendering": {
                   "properties": {
@@ -17076,7 +17421,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "A column whose [`Value::display_string`](super::value::Value::display_string) a SQL cast\ndoes not reproduce -- Rust writes `1` where `DuckDB` writes `1.0`, and keeps a\ntimestamp's original offset -- feeds a position that reads it as text.",
+              "description": "A column whose [`Value::display_string`](super::value::Value::display_string) a SQL cast\ndoes not reproduce feeds a position that reads it as text. Rust writes `1` where `DuckDB`\nwrites `1.0`, and keeps a timestamp's original offset.",
               "properties": {
                 "UnstableDisplayRendering": {
                   "properties": {
@@ -17221,7 +17566,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "An attribute's declared type is not the source column's kind, and the coercion\n`attribute_value` applies is not one a typed SQL column can reproduce -- its fallback on\nfailure is the cell's own natural value, which has a different type.",
+              "description": "An attribute's declared type is not the source column's kind, and the coercion\n`attribute_value` applies is not one a typed SQL column can reproduce: its fallback on\nfailure is the cell's own natural value, which has a different type.",
               "properties": {
                 "AttributeCoercion": {
                   "properties": {
@@ -17373,7 +17718,7 @@
             },
             {
               "additionalProperties": false,
-              "description": "[`ExtractionSink::add_object`] was called for `id`, but `id` is already present under a\n*different* object type -- two distinct entities collided on one id, rather than the plain\nrepeat [`SinkError::DuplicateObject`] reports. Only reachable under\n[`IdRendering::Raw`](super::blueprint::IdRendering::Raw). A deferring sink cannot make that\ndistinction at [`resolve_object`](ExtractionSink::resolve_object) time and reports it\nhere.",
+              "description": "[`ExtractionSink::add_object`] was called for `id`, but `id` is already present under a\ndifferent object type, i.e. two distinct entities collided on one id rather than the plain\nrepeat [`SinkError::DuplicateObject`] reports. Only reachable under\n[`IdRendering::Raw`](super::blueprint::IdRendering::Raw). A deferring sink cannot make that\ndistinction at [`resolve_object`](ExtractionSink::resolve_object) time and reports it\nhere.",
               "properties": {
                 "IdTypeCollision": {
                   "properties": {
@@ -17765,7 +18110,7 @@
               "type": "object"
             },
             {
-              "description": "A comparison's two operands -- both columns, or both literals -- have different,\nstatically known kinds that [`Value::compare`](super::value::Value::compare) has no rule\nfor (only `integer`/`float` compare across kinds), so it matches no row at all.",
+              "description": "A comparison's two operands (both columns, or both literals) have different, statically\nknown kinds that [`Value::compare`](super::value::Value::compare) has no rule for (only\n`integer`/`float` compare across kinds), so it matches no row at all.",
               "properties": {
                 "left_kind": {
                   "description": "The left operand's declared kind: `text`, `integer`, `float`, `boolean` or `timestamp`.",
@@ -17816,7 +18161,7 @@
           "description": "What the sink did at [`ExtractionSink::finalize`](super::sink::ExtractionSink::finalize).\n\nAll zero for a sink that resolves relation endpoints eagerly, which reports everything\nthrough [`per_mapping`](Self::per_mapping) instead. See\n[`Resolution`](super::sink::Resolution)."
         },
         "per_mapping": {
-          "description": "One entry per mapping executed, in **desugared blueprint order** -- the order the author\nwrote the mappings in, with each ordered group expanded in place. Not execution order,\nwhich is multi-pass and grouped by node. Each entry's [`MappingRef::path`] names the\nauthored entry.",
+          "description": "One entry per mapping executed, in desugared blueprint order: the order the author wrote\nthe mappings in, with each ordered group expanded in place. Not execution order,\nwhich is multi-pass and grouped by node. Each entry's [`MappingRef::path`] names the\nauthored entry.",
           "items": {
             "$ref": "#/$defs/MappingStats"
           },
@@ -17830,7 +18175,7 @@
           "type": "array"
         },
         "rows_materialized": {
-          "description": "Rows every `Join`/`Union` materialisation this run performed produced, summed across\nmaterialisations rather than peaked: an upper bound on peak buffered rows. A cached\nmaterialisation is counted once, when computed.\n\nZero when no mapping's node graph contains a `Join` or `Union`, since a pure\n`Source -> Filter` chain streams -- which makes zero a witness that the run streamed.",
+          "description": "Rows every `Join`/`Union` materialisation this run performed produced, summed across\nmaterialisations rather than peaked: an upper bound on peak buffered rows. A cached\nmaterialisation is counted once, when computed.\n\nZero when no mapping's node graph contains a `Join` or `Union`, since a pure\n`Source -> Filter` chain streams. Zero is therefore a witness that the run streamed.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -17870,8 +18215,8 @@
       "`connections` must contain an entry for `source_id`. Every other entry is ignored."
     ],
     "module": "process_mining::bindings::extraction_dbcon_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/extraction_dbcon_bindings.rs",
-    "source_line": 219,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/extraction_dbcon_bindings.rs",
+    "source_line": 211,
     "args": [
       [
         "connections",
@@ -17959,8 +18304,8 @@
       "Convert an [`OCEL`] to an [`IndexLinkedOCEL`]"
     ],
     "module": "process_mining::bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/mod.rs",
-    "source_line": 1316,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/mod.rs",
+    "source_line": 1388,
     "args": [
       [
         "ocel",
@@ -18000,8 +18345,8 @@
       "Get the number of events in an [`OCEL`]"
     ],
     "module": "process_mining::bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/mod.rs",
-    "source_line": 1286,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/mod.rs",
+    "source_line": 1358,
     "args": [
       [
         "ocel",
@@ -18031,8 +18376,8 @@
       "Get the number of objects in an [`OCEL`]"
     ],
     "module": "process_mining::bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/mod.rs",
-    "source_line": 1281,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/mod.rs",
+    "source_line": 1353,
     "args": [
       [
         "ocel",
@@ -18062,8 +18407,8 @@
       "Compute statistics on object/event types in the OCEL"
     ],
     "module": "process_mining::bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/mod.rs",
-    "source_line": 1300,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/mod.rs",
+    "source_line": 1372,
     "args": [
       [
         "ocel",
@@ -18117,7 +18462,7 @@
       "throughput. Entities are referenced by their compact OCEL index."
     ],
     "module": "process_mining::bindings::path_schema_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/path_schema_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/path_schema_bindings.rs",
     "source_line": 113,
     "args": [
       [
@@ -18583,7 +18928,7 @@
       "selectivity / reach / exclusivity and throughput."
     ],
     "module": "process_mining::bindings::path_schema_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/path_schema_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/path_schema_bindings.rs",
     "source_line": 106,
     "args": [
       [
@@ -19072,7 +19417,7 @@
       "instance traversal. Each schema is self-contained ([`ResolvedPathSchema`])."
     ],
     "module": "process_mining::bindings::path_schema_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/path_schema_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/path_schema_bindings.rs",
     "source_line": 80,
     "args": [
       [
@@ -19355,7 +19700,7 @@
       "Build the OCEL type graph (typed nodes with entity counts, plus relationship edges)."
     ],
     "module": "process_mining::bindings::path_schema_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/path_schema_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/path_schema_bindings.rs",
     "source_line": 53,
     "args": [
       [
@@ -19486,8 +19831,8 @@
       "Convert an [`OCEL`] to an [`SlimLinkedOCEL`]"
     ],
     "module": "process_mining::bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/mod.rs",
-    "source_line": 1322,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/mod.rs",
+    "source_line": 1394,
     "args": [
       [
         "ocel",
@@ -19529,7 +19874,7 @@
       "object's timestamp-ordered activity trace. Result order is unspecified."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 289,
     "args": [
       [
@@ -19590,7 +19935,7 @@
     "name": "get_e2o_ids",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 419,
     "args": [
       [
@@ -19632,7 +19977,7 @@
     "name": "get_e2o_rev_ids",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 410,
     "args": [
       [
@@ -19674,7 +20019,7 @@
     "name": "get_event_ids_of_type",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 397,
     "args": [
       [
@@ -19713,7 +20058,7 @@
     "name": "get_event_timestamp_of_id",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 443,
     "args": [
       [
@@ -19752,7 +20097,7 @@
     "name": "get_event_type_of_id",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 437,
     "args": [
       [
@@ -19791,7 +20136,7 @@
     "name": "get_o2o_ids",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 428,
     "args": [
       [
@@ -19835,7 +20180,7 @@
       "Get the activity trace of an object (i.e., the sequence of event types connected to the object, ordered by event timestamp)"
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 233,
     "args": [
       [
@@ -19877,7 +20222,7 @@
     "name": "get_object_ids_of_type",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 390,
     "args": [
       [
@@ -19916,7 +20261,7 @@
     "name": "get_object_type_of_id",
     "docs": [],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 404,
     "args": [
       [
@@ -19960,7 +20305,7 @@
       "requested type that share that exact trace."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 257,
     "args": [
       [
@@ -20019,7 +20364,7 @@
       "either index is out of bounds (with a stderr warning)."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 97,
     "args": [
       [
@@ -20086,7 +20431,7 @@
       "`relationships`: E2O relationships as `(qualifier, object_index)` pairs (can also be added later via [`locel_add_e2o`])."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 61,
     "args": [
       [
@@ -20235,7 +20580,7 @@
       "No-op if the event type already exists."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 32,
     "args": [
       [
@@ -20307,7 +20652,7 @@
       "either index is out of bounds (with a stderr warning)."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 112,
     "args": [
       [
@@ -20374,7 +20719,7 @@
       "`relationships`: Outgoing O2O relationships as `(qualifier, object_index)` pairs (can also be added later via [`locel_add_o2o`])."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 81,
     "args": [
       [
@@ -20527,7 +20872,7 @@
       "No-op if the object type already exists."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 44,
     "args": [
       [
@@ -20596,7 +20941,7 @@
       "Reconstruct a full [`OCEL`] from a [`SlimLinkedOCEL`]. Can be expensive for large logs."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 385,
     "args": [
       [
@@ -20642,7 +20987,7 @@
       "declared, so a rate of `0.0` cannot mean a misspelled name."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 484,
     "args": [
       [
@@ -20700,7 +21045,7 @@
       "Returns `true` on success, `false` if either index is out of bounds (with a stderr warning)."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 125,
     "args": [
       [
@@ -20754,7 +21099,7 @@
       "Returns `true` on success, `false` if either index is out of bounds (with a stderr warning)."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 133,
     "args": [
       [
@@ -20810,7 +21155,7 @@
       "Result row order is unspecified."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 454,
     "args": [
       [
@@ -20856,7 +21201,7 @@
       "Get the E2O relationships of an event as `(qualifier, object_index)` pairs."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 217,
     "args": [
       [
@@ -20918,7 +21263,7 @@
       "Get the reverse E2O relationships of an object (events relating to it) as `(qualifier, event_index)` pairs."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 225,
     "args": [
       [
@@ -20981,7 +21326,7 @@
       "Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 361,
     "args": [
       [
@@ -21072,7 +21417,7 @@
       "Look up an event by its ID string. `None` if not found."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 175,
     "args": [
       [
@@ -21125,7 +21470,7 @@
       "Get the ID string of an event. Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 187,
     "args": [
       [
@@ -21166,7 +21511,7 @@
       "Get the timestamp of an event. Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 211,
     "args": [
       [
@@ -21208,7 +21553,7 @@
       "Get the event type specification (name + attributes), or `None` if unknown."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 151,
     "args": [
       [
@@ -21294,7 +21639,7 @@
       "Get the event type (activity) of an event. Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 199,
     "args": [
       [
@@ -21335,7 +21680,7 @@
       "Get all declared event type names, in declaration order."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 139,
     "args": [
       [
@@ -21367,7 +21712,7 @@
       "Get all event indices of the given event type. Empty if unknown."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 163,
     "args": [
       [
@@ -21418,7 +21763,7 @@
       "Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 344,
     "args": [
       [
@@ -21568,7 +21913,7 @@
       "Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 353,
     "args": [
       [
@@ -21716,7 +22061,7 @@
       "Get the outgoing O2O relationships of an object as `(qualifier, object_index)` pairs."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 325,
     "args": [
       [
@@ -21778,7 +22123,7 @@
       "Get the reverse O2O relationships of an object (objects with an O2O to it) as `(qualifier, object_index)` pairs."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 333,
     "args": [
       [
@@ -21841,7 +22186,7 @@
       "Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 373,
     "args": [
       [
@@ -21939,7 +22284,7 @@
       "Look up an object by its ID string. `None` if not found."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 181,
     "args": [
       [
@@ -21992,7 +22337,7 @@
       "Get the ID string of an object. Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 193,
     "args": [
       [
@@ -22033,7 +22378,7 @@
       "Get the object type specification (name + attributes), or `None` if unknown."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 157,
     "args": [
       [
@@ -22119,7 +22464,7 @@
       "Get the object type of an object. Panics if the index is out of bounds."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 205,
     "args": [
       [
@@ -22160,7 +22505,7 @@
       "Get all declared object type names, in declaration order."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 145,
     "args": [
       [
@@ -22192,7 +22537,7 @@
       "Get all object indices of the given object type. Empty if unknown."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 169,
     "args": [
       [
@@ -22245,7 +22590,7 @@
       "declared beforehand with an ordered list of attributes."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 24,
     "args": [
       [
@@ -22280,7 +22625,7 @@
       "ascending event id, sorted descending. `None` returns every qualifying event."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 641,
     "args": [
       [
@@ -22343,7 +22688,7 @@
       "ascending event id, sorted descending. `None` returns every qualifying event."
     ],
     "module": "process_mining::bindings::slim_ocel_bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/slim_ocel_bindings.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/slim_ocel_bindings.rs",
     "source_line": 585,
     "args": [
       [
@@ -22403,8 +22748,8 @@
       "**This should be bold**, *this is italic*, `and this code`."
     ],
     "module": "process_mining::bindings",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/bindings/mod.rs",
-    "source_line": 1327,
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/bindings/mod.rs",
+    "source_line": 1399,
     "args": [
       [
         "s",
@@ -22473,7 +22818,7 @@
       "Permits at most 255 ([`petri_net::TokenCount::MAX`]) tokens in each place."
     ],
     "module": "process_mining::conformance::case_centric::alignments",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/conformance/case_centric/alignments/mod.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/conformance/case_centric/alignments/mod.rs",
     "source_line": 174,
     "args": [
       [
@@ -22855,7 +23200,7 @@
       "Permits at most 255 ([`petri_net::TokenCount::MAX`]) tokens in each place."
     ],
     "module": "process_mining::conformance::case_centric::alignments",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/conformance/case_centric/alignments/mod.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/conformance/case_centric/alignments/mod.rs",
     "source_line": 160,
     "args": [
       [
@@ -23249,7 +23594,7 @@
       "Permits at most 255 ([`petri_net::TokenCount::MAX`]) tokens in each place."
     ],
     "module": "process_mining::conformance::case_centric::alignments",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/conformance/case_centric/alignments/mod.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/conformance/case_centric/alignments/mod.rs",
     "source_line": 101,
     "args": [
       [
@@ -23785,7 +24130,7 @@
       "Also constructs the empty-trace alignment (shortest path through model)"
     ],
     "module": "process_mining::conformance::case_centric::alignments",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/conformance/case_centric/alignments/mod.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/conformance/case_centric/alignments/mod.rs",
     "source_line": 204,
     "args": [
       [
@@ -24350,7 +24695,7 @@
       "Returns a value from 0.0 (all source events violate this constraint) to 1.0 (all source events satisfy this constraint)"
     ],
     "module": "process_mining::conformance::object_centric::oc_declare",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/conformance/object_centric/oc_declare.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/conformance/object_centric/oc_declare.rs",
     "source_line": 332,
     "args": [
       [
@@ -24558,7 +24903,7 @@
       "Get the total number of cases in the projection"
     ],
     "module": "process_mining::core::event_data::case_centric::utils::activity_projection",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
     "source_line": 199,
     "args": [
       [
@@ -24589,7 +24934,7 @@
       "Get the number of distinct trace variants in the projection"
     ],
     "module": "process_mining::core::event_data::case_centric::utils::activity_projection",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
     "source_line": 193,
     "args": [
       [
@@ -24620,7 +24965,7 @@
       "Get the list of all activity names in the projection"
     ],
     "module": "process_mining::core::event_data::case_centric::utils::activity_projection",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
     "source_line": 205,
     "args": [
       [
@@ -24657,7 +25002,7 @@
       "constructors."
     ],
     "module": "process_mining::core::event_data::case_centric::utils::activity_projection",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
     "source_line": 246,
     "args": [
       [
@@ -24734,7 +25079,7 @@
       "constructors."
     ],
     "module": "process_mining::core::event_data::case_centric::utils::activity_projection",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
     "source_line": 235,
     "args": [
       [
@@ -24799,7 +25144,7 @@
       "This effectively constructs all trace variants, with their count."
     ],
     "module": "process_mining::core::event_data::case_centric::utils::activity_projection",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/case_centric/utils/activity_projection.rs",
     "source_line": 95,
     "args": [
       [
@@ -24842,7 +25187,7 @@
       "ordered by their timestamp."
     ],
     "module": "process_mining::core::event_data::object_centric::utils::flatten",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/object_centric/utils/flatten.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/object_centric/utils/flatten.rs",
     "source_line": 14,
     "args": [
       [
@@ -24897,7 +25242,7 @@
       "This function remains, as it might be useful for other applications."
     ],
     "module": "process_mining::core::event_data::object_centric::utils::init_exit_events",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/event_data/object_centric/utils/init_exit_events.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/event_data/object_centric/utils/init_exit_events.rs",
     "source_line": 31,
     "args": [
       [
@@ -25181,7 +25526,7 @@
       "Construct an [`OCDirectlyFollowsGraph`] from an OCEL"
     ],
     "module": "process_mining::core::process_models::object_centric::ocdfg::object_centric_dfg_struct",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/core/process_models/object_centric/ocdfg/object_centric_dfg_struct.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/core/process_models/object_centric/ocdfg/object_centric_dfg_struct.rs",
     "source_line": 50,
     "args": [
       [
@@ -25291,7 +25636,7 @@
       "Discover a [`PetriNet`] using the Alpha+++ Process Discovery algorithm"
     ],
     "module": "process_mining::discovery::case_centric::alphappp::full",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/discovery/case_centric/alphappp/full.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/discovery/case_centric/alphappp/full.rs",
     "source_line": 109,
     "args": [
       [
@@ -25550,7 +25895,7 @@
       "Discover [`DirectlyFollowsGraph`] with default classifier"
     ],
     "module": "process_mining::discovery::case_centric::dfg",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/discovery/case_centric/dfg.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/discovery/case_centric/dfg.rs",
     "source_line": 41,
     "args": [
       [
@@ -25645,7 +25990,7 @@
       "`(from_activity, to_activity)`."
     ],
     "module": "process_mining::discovery::object_centric::dfg",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/discovery/object_centric/dfg.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/discovery/object_centric/dfg.rs",
     "source_line": 19,
     "args": [
       [
@@ -25708,7 +26053,7 @@
       "Discover behavioral OC-DECLARE constraints from the given OCEL"
     ],
     "module": "process_mining::discovery::object_centric::oc_declare",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/discovery/object_centric/oc_declare/mod.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/discovery/object_centric/oc_declare/mod.rs",
     "source_line": 96,
     "args": [
       [
@@ -26086,6 +26431,815 @@
     }
   },
   {
+    "id": "process_mining::discovery::object_centric::oc_declare::project_oc_arcs",
+    "name": "project_oc_arcs",
+    "docs": [
+      "Project OC-DECLARE arcs onto a subset of activities, preserving constraints",
+      "that reach a target via a chain through transitive activities.",
+      "BFSs from every target activity through non-target intermediaries, composing",
+      "arc types and labels along the way."
+    ],
+    "module": "process_mining::discovery::object_centric::oc_declare",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/discovery/object_centric/oc_declare/mod.rs",
+    "source_line": 814,
+    "args": [
+      [
+        "arcs",
+        {
+          "$defs": {
+            "OCDeclareArc": {
+              "description": "OC-DECLARE Constraint arc/edge between two nodes (i.e., activities)",
+              "properties": {
+                "arc_type": {
+                  "$ref": "#/$defs/OCDeclareArcType",
+                  "description": "Arc type, modeling temporal relation"
+                },
+                "counts": {
+                  "description": "First tuple element: min count (optional), Second: max count (optional)",
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "format": "uint",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    {
+                      "format": "uint",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  ],
+                  "type": "array"
+                },
+                "from": {
+                  "$ref": "#/$defs/OCDeclareNode",
+                  "description": "Source node (e.g., triggering activity)"
+                },
+                "label": {
+                  "$ref": "#/$defs/OCDeclareArcLabel",
+                  "description": "Arc label specifying object involvement criteria"
+                },
+                "to": {
+                  "$ref": "#/$defs/OCDeclareNode",
+                  "description": "Target node (e.g., target activity)"
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "arc_type",
+                "label",
+                "counts"
+              ],
+              "type": "object"
+            },
+            "OCDeclareArcLabel": {
+              "description": "Object Involvement Label of an OC-DECLARE arc",
+              "properties": {
+                "all": {
+                  "description": "All (there must be the specified number of relevant target events involving all of the objects of this type involved in the source event)",
+                  "items": {
+                    "$ref": "#/$defs/ObjectTypeAssociation"
+                  },
+                  "type": "array"
+                },
+                "any": {
+                  "description": "Any (there must be the specified number of relevant target events involving at least one of the objects of this type involved in the source event)",
+                  "items": {
+                    "$ref": "#/$defs/ObjectTypeAssociation"
+                  },
+                  "type": "array"
+                },
+                "each": {
+                  "description": "Each (for each object of that type separately, there must be the specified number of relevant target events)",
+                  "items": {
+                    "$ref": "#/$defs/ObjectTypeAssociation"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "each",
+                "any",
+                "all"
+              ],
+              "type": "object"
+            },
+            "OCDeclareArcType": {
+              "description": "OC-DECLARE Arc Direction/Type\n\nModels temporal relationships",
+              "oneOf": [
+                {
+                  "const": "AS",
+                  "description": "Association: No temporal restrictions",
+                  "type": "string"
+                },
+                {
+                  "const": "EF",
+                  "description": "Eventually-Follows: Target must occur after source event",
+                  "type": "string"
+                },
+                {
+                  "const": "EP",
+                  "description": "Eventually-Precedes: Target must occur before source event",
+                  "type": "string"
+                },
+                {
+                  "const": "DF",
+                  "description": "Directly-Follows: Target must occur directly after source event (considering events that involve all required objects)",
+                  "type": "string"
+                },
+                {
+                  "const": "DP",
+                  "description": "Directly-Precedes: Target must occur directly before source event (considering events that involve all required objects)",
+                  "type": "string"
+                }
+              ]
+            },
+            "OCDeclareNode": {
+              "description": "OC-DECLARE node (Activity or Object Init/Exit)",
+              "type": "string"
+            },
+            "ObjectTypeAssociation": {
+              "description": "Object Type Association: Direct or O2O Object Types",
+              "oneOf": [
+                {
+                  "description": "Simple: Direct Object Types involved with an Activity",
+                  "properties": {
+                    "object_type": {
+                      "description": "The object type",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "Simple",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "object_type"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "description": "Indirect: Object Association through an O2O relationship",
+                  "properties": {
+                    "first": {
+                      "description": "First object type (for source event)",
+                      "type": "string"
+                    },
+                    "reversed": {
+                      "description": "Specifies the direction of the O2O relationship.\n\nIf reversed is `False`, `(first,second)` is considered",
+                      "type": "boolean"
+                    },
+                    "second": {
+                      "description": "Second object type (for target event)",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "O2O",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "first",
+                    "second",
+                    "reversed"
+                  ],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "items": {
+            "$ref": "#/$defs/OCDeclareArc"
+          },
+          "title": "Array_of_OCDeclareArc",
+          "type": "array"
+        }
+      ],
+      [
+        "activities",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "items": {
+            "type": "string"
+          },
+          "title": "Set_of_string",
+          "type": "array",
+          "uniqueItems": true
+        }
+      ],
+      [
+        "reduction",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "description": "Mode for reducing OC-DECLARE constraints",
+          "oneOf": [
+            {
+              "const": "None",
+              "description": "Do not reduce constraints at all",
+              "type": "string"
+            },
+            {
+              "const": "Lossless",
+              "description": "Apply lossless reduction\n\ni.e., only removes constraints strictly implied by combining others",
+              "type": "string"
+            },
+            {
+              "const": "Lossy",
+              "description": "Apply lossy reduction\n\nMay also remove constraints which are not implied by others",
+              "type": "string"
+            }
+          ],
+          "title": "OCDeclareReductionMode"
+        }
+      ]
+    ],
+    "required_args": [
+      "arcs",
+      "activities",
+      "reduction"
+    ],
+    "return_type": {
+      "$defs": {
+        "OCDeclareArc": {
+          "description": "OC-DECLARE Constraint arc/edge between two nodes (i.e., activities)",
+          "properties": {
+            "arc_type": {
+              "$ref": "#/$defs/OCDeclareArcType",
+              "description": "Arc type, modeling temporal relation"
+            },
+            "counts": {
+              "description": "First tuple element: min count (optional), Second: max count (optional)",
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                {
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              ],
+              "type": "array"
+            },
+            "from": {
+              "$ref": "#/$defs/OCDeclareNode",
+              "description": "Source node (e.g., triggering activity)"
+            },
+            "label": {
+              "$ref": "#/$defs/OCDeclareArcLabel",
+              "description": "Arc label specifying object involvement criteria"
+            },
+            "to": {
+              "$ref": "#/$defs/OCDeclareNode",
+              "description": "Target node (e.g., target activity)"
+            }
+          },
+          "required": [
+            "from",
+            "to",
+            "arc_type",
+            "label",
+            "counts"
+          ],
+          "type": "object"
+        },
+        "OCDeclareArcLabel": {
+          "description": "Object Involvement Label of an OC-DECLARE arc",
+          "properties": {
+            "all": {
+              "description": "All (there must be the specified number of relevant target events involving all of the objects of this type involved in the source event)",
+              "items": {
+                "$ref": "#/$defs/ObjectTypeAssociation"
+              },
+              "type": "array"
+            },
+            "any": {
+              "description": "Any (there must be the specified number of relevant target events involving at least one of the objects of this type involved in the source event)",
+              "items": {
+                "$ref": "#/$defs/ObjectTypeAssociation"
+              },
+              "type": "array"
+            },
+            "each": {
+              "description": "Each (for each object of that type separately, there must be the specified number of relevant target events)",
+              "items": {
+                "$ref": "#/$defs/ObjectTypeAssociation"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "each",
+            "any",
+            "all"
+          ],
+          "type": "object"
+        },
+        "OCDeclareArcType": {
+          "description": "OC-DECLARE Arc Direction/Type\n\nModels temporal relationships",
+          "oneOf": [
+            {
+              "const": "AS",
+              "description": "Association: No temporal restrictions",
+              "type": "string"
+            },
+            {
+              "const": "EF",
+              "description": "Eventually-Follows: Target must occur after source event",
+              "type": "string"
+            },
+            {
+              "const": "EP",
+              "description": "Eventually-Precedes: Target must occur before source event",
+              "type": "string"
+            },
+            {
+              "const": "DF",
+              "description": "Directly-Follows: Target must occur directly after source event (considering events that involve all required objects)",
+              "type": "string"
+            },
+            {
+              "const": "DP",
+              "description": "Directly-Precedes: Target must occur directly before source event (considering events that involve all required objects)",
+              "type": "string"
+            }
+          ]
+        },
+        "OCDeclareNode": {
+          "description": "OC-DECLARE node (Activity or Object Init/Exit)",
+          "type": "string"
+        },
+        "ObjectTypeAssociation": {
+          "description": "Object Type Association: Direct or O2O Object Types",
+          "oneOf": [
+            {
+              "description": "Simple: Direct Object Types involved with an Activity",
+              "properties": {
+                "object_type": {
+                  "description": "The object type",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "Simple",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "object_type"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Indirect: Object Association through an O2O relationship",
+              "properties": {
+                "first": {
+                  "description": "First object type (for source event)",
+                  "type": "string"
+                },
+                "reversed": {
+                  "description": "Specifies the direction of the O2O relationship.\n\nIf reversed is `False`, `(first,second)` is considered",
+                  "type": "boolean"
+                },
+                "second": {
+                  "description": "Second object type (for target event)",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "O2O",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "first",
+                "second",
+                "reversed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "items": {
+        "$ref": "#/$defs/OCDeclareArc"
+      },
+      "title": "Array_of_OCDeclareArc",
+      "type": "array"
+    }
+  },
+  {
+    "id": "process_mining::discovery::object_centric::oc_declare::reduce_oc_arcs",
+    "name": "reduce_oc_arcs",
+    "docs": [
+      "Reduce OC-DECLARE arcs based on lossless/lossy transitive reduction",
+      "considering paths of arbitrary length.",
+      "Uses sequential processing to prevent mutual elimination in cycles."
+    ],
+    "module": "process_mining::discovery::object_centric::oc_declare",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/discovery/object_centric/oc_declare/mod.rs",
+    "source_line": 663,
+    "args": [
+      [
+        "arcs",
+        {
+          "$defs": {
+            "OCDeclareArc": {
+              "description": "OC-DECLARE Constraint arc/edge between two nodes (i.e., activities)",
+              "properties": {
+                "arc_type": {
+                  "$ref": "#/$defs/OCDeclareArcType",
+                  "description": "Arc type, modeling temporal relation"
+                },
+                "counts": {
+                  "description": "First tuple element: min count (optional), Second: max count (optional)",
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "format": "uint",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    {
+                      "format": "uint",
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  ],
+                  "type": "array"
+                },
+                "from": {
+                  "$ref": "#/$defs/OCDeclareNode",
+                  "description": "Source node (e.g., triggering activity)"
+                },
+                "label": {
+                  "$ref": "#/$defs/OCDeclareArcLabel",
+                  "description": "Arc label specifying object involvement criteria"
+                },
+                "to": {
+                  "$ref": "#/$defs/OCDeclareNode",
+                  "description": "Target node (e.g., target activity)"
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "arc_type",
+                "label",
+                "counts"
+              ],
+              "type": "object"
+            },
+            "OCDeclareArcLabel": {
+              "description": "Object Involvement Label of an OC-DECLARE arc",
+              "properties": {
+                "all": {
+                  "description": "All (there must be the specified number of relevant target events involving all of the objects of this type involved in the source event)",
+                  "items": {
+                    "$ref": "#/$defs/ObjectTypeAssociation"
+                  },
+                  "type": "array"
+                },
+                "any": {
+                  "description": "Any (there must be the specified number of relevant target events involving at least one of the objects of this type involved in the source event)",
+                  "items": {
+                    "$ref": "#/$defs/ObjectTypeAssociation"
+                  },
+                  "type": "array"
+                },
+                "each": {
+                  "description": "Each (for each object of that type separately, there must be the specified number of relevant target events)",
+                  "items": {
+                    "$ref": "#/$defs/ObjectTypeAssociation"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "each",
+                "any",
+                "all"
+              ],
+              "type": "object"
+            },
+            "OCDeclareArcType": {
+              "description": "OC-DECLARE Arc Direction/Type\n\nModels temporal relationships",
+              "oneOf": [
+                {
+                  "const": "AS",
+                  "description": "Association: No temporal restrictions",
+                  "type": "string"
+                },
+                {
+                  "const": "EF",
+                  "description": "Eventually-Follows: Target must occur after source event",
+                  "type": "string"
+                },
+                {
+                  "const": "EP",
+                  "description": "Eventually-Precedes: Target must occur before source event",
+                  "type": "string"
+                },
+                {
+                  "const": "DF",
+                  "description": "Directly-Follows: Target must occur directly after source event (considering events that involve all required objects)",
+                  "type": "string"
+                },
+                {
+                  "const": "DP",
+                  "description": "Directly-Precedes: Target must occur directly before source event (considering events that involve all required objects)",
+                  "type": "string"
+                }
+              ]
+            },
+            "OCDeclareNode": {
+              "description": "OC-DECLARE node (Activity or Object Init/Exit)",
+              "type": "string"
+            },
+            "ObjectTypeAssociation": {
+              "description": "Object Type Association: Direct or O2O Object Types",
+              "oneOf": [
+                {
+                  "description": "Simple: Direct Object Types involved with an Activity",
+                  "properties": {
+                    "object_type": {
+                      "description": "The object type",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "Simple",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "object_type"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "description": "Indirect: Object Association through an O2O relationship",
+                  "properties": {
+                    "first": {
+                      "description": "First object type (for source event)",
+                      "type": "string"
+                    },
+                    "reversed": {
+                      "description": "Specifies the direction of the O2O relationship.\n\nIf reversed is `False`, `(first,second)` is considered",
+                      "type": "boolean"
+                    },
+                    "second": {
+                      "description": "Second object type (for target event)",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "O2O",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "first",
+                    "second",
+                    "reversed"
+                  ],
+                  "type": "object"
+                }
+              ]
+            }
+          },
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "items": {
+            "$ref": "#/$defs/OCDeclareArc"
+          },
+          "title": "Array_of_OCDeclareArc",
+          "type": "array"
+        }
+      ],
+      [
+        "lossless",
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "boolean",
+          "type": "boolean"
+        }
+      ]
+    ],
+    "required_args": [
+      "arcs",
+      "lossless"
+    ],
+    "return_type": {
+      "$defs": {
+        "OCDeclareArc": {
+          "description": "OC-DECLARE Constraint arc/edge between two nodes (i.e., activities)",
+          "properties": {
+            "arc_type": {
+              "$ref": "#/$defs/OCDeclareArcType",
+              "description": "Arc type, modeling temporal relation"
+            },
+            "counts": {
+              "description": "First tuple element: min count (optional), Second: max count (optional)",
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                {
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              ],
+              "type": "array"
+            },
+            "from": {
+              "$ref": "#/$defs/OCDeclareNode",
+              "description": "Source node (e.g., triggering activity)"
+            },
+            "label": {
+              "$ref": "#/$defs/OCDeclareArcLabel",
+              "description": "Arc label specifying object involvement criteria"
+            },
+            "to": {
+              "$ref": "#/$defs/OCDeclareNode",
+              "description": "Target node (e.g., target activity)"
+            }
+          },
+          "required": [
+            "from",
+            "to",
+            "arc_type",
+            "label",
+            "counts"
+          ],
+          "type": "object"
+        },
+        "OCDeclareArcLabel": {
+          "description": "Object Involvement Label of an OC-DECLARE arc",
+          "properties": {
+            "all": {
+              "description": "All (there must be the specified number of relevant target events involving all of the objects of this type involved in the source event)",
+              "items": {
+                "$ref": "#/$defs/ObjectTypeAssociation"
+              },
+              "type": "array"
+            },
+            "any": {
+              "description": "Any (there must be the specified number of relevant target events involving at least one of the objects of this type involved in the source event)",
+              "items": {
+                "$ref": "#/$defs/ObjectTypeAssociation"
+              },
+              "type": "array"
+            },
+            "each": {
+              "description": "Each (for each object of that type separately, there must be the specified number of relevant target events)",
+              "items": {
+                "$ref": "#/$defs/ObjectTypeAssociation"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "each",
+            "any",
+            "all"
+          ],
+          "type": "object"
+        },
+        "OCDeclareArcType": {
+          "description": "OC-DECLARE Arc Direction/Type\n\nModels temporal relationships",
+          "oneOf": [
+            {
+              "const": "AS",
+              "description": "Association: No temporal restrictions",
+              "type": "string"
+            },
+            {
+              "const": "EF",
+              "description": "Eventually-Follows: Target must occur after source event",
+              "type": "string"
+            },
+            {
+              "const": "EP",
+              "description": "Eventually-Precedes: Target must occur before source event",
+              "type": "string"
+            },
+            {
+              "const": "DF",
+              "description": "Directly-Follows: Target must occur directly after source event (considering events that involve all required objects)",
+              "type": "string"
+            },
+            {
+              "const": "DP",
+              "description": "Directly-Precedes: Target must occur directly before source event (considering events that involve all required objects)",
+              "type": "string"
+            }
+          ]
+        },
+        "OCDeclareNode": {
+          "description": "OC-DECLARE node (Activity or Object Init/Exit)",
+          "type": "string"
+        },
+        "ObjectTypeAssociation": {
+          "description": "Object Type Association: Direct or O2O Object Types",
+          "oneOf": [
+            {
+              "description": "Simple: Direct Object Types involved with an Activity",
+              "properties": {
+                "object_type": {
+                  "description": "The object type",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "Simple",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "object_type"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Indirect: Object Association through an O2O relationship",
+              "properties": {
+                "first": {
+                  "description": "First object type (for source event)",
+                  "type": "string"
+                },
+                "reversed": {
+                  "description": "Specifies the direction of the O2O relationship.\n\nIf reversed is `False`, `(first,second)` is considered",
+                  "type": "boolean"
+                },
+                "second": {
+                  "description": "Second object type (for target event)",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "O2O",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "first",
+                "second",
+                "reversed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "items": {
+        "$ref": "#/$defs/OCDeclareArc"
+      },
+      "title": "Array_of_OCDeclareArc",
+      "type": "array"
+    }
+  },
+  {
     "id": "process_mining::discovery::object_centric::variants::get_variants_of_object_type",
     "name": "get_variants_of_object_type",
     "docs": [
@@ -26096,7 +27250,7 @@
       "activity trace."
     ],
     "module": "process_mining::discovery::object_centric::variants",
-    "source_path": "/home/aarkue/code/rust4pm/process_mining/src/discovery/object_centric/variants.rs",
+    "source_path": "/home/aarkue/.cargo/git/checkouts/rust4pm-ee491f322cb0e2e7/0a1738c/process_mining/src/discovery/object_centric/variants.rs",
     "source_line": 20,
     "args": [
       [

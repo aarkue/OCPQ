@@ -1,14 +1,19 @@
 import { AttributeValueStats } from "@r4pm/components";
 import { Cross2Icon } from "@radix-ui/react-icons";
 import clsx from "clsx";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import { RxCheck, RxChevronUp } from "react-icons/rx";
 import { R4pmIsland } from "@/components/r4pm/R4pmIsland";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox } from "@/components/ui/combobox";
+import { Command, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 import { DateTimeRangeInput } from "@/components/ui/date-time-range-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { matchQualifiers } from "@/lib/variable-hints";
 import type { OcelAttributeStats } from "@/types/generated/OcelAttributeStats";
 import type { ValueFilter } from "@/types/generated/ValueFilter";
 
@@ -36,6 +41,99 @@ export function ChildSetSelector({
 			title="Child Set"
 			value={value ?? ""}
 		/>
+	);
+}
+
+const MAX_SHOWN_QUALIFIERS = 50;
+
+/** `null` matches any qualifier. Free text stays possible because the suggestions only cover what
+ *  the OCEL records for the variables' current types. `getSuggestions` runs once per opening. */
+export function QualifierSelector({
+	value,
+	onChange,
+	getSuggestions,
+}: {
+	value: string | null;
+	onChange: (value: string | null) => unknown;
+	getSuggestions: () => string[];
+}) {
+	const [suggestions, setSuggestions] = useState<string[]>();
+	const [search, setSearch] = useState("");
+	const open = suggestions !== undefined;
+	const typed = search.trim();
+	const { matches, more } = useMemo(
+		() => matchQualifiers(suggestions ?? [], typed, MAX_SHOWN_QUALIFIERS),
+		[suggestions, typed],
+	);
+	const setOpen = (o: boolean) => {
+		if (o) {
+			const all = getSuggestions();
+			setSuggestions(value !== null && !all.includes(value) ? [...all, value] : all);
+		} else {
+			setSuggestions(undefined);
+		}
+		setSearch("");
+	};
+	const select = (qualifier: string | null) => {
+		onChange(qualifier);
+		setOpen(false);
+	};
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<Button
+					variant="outline"
+					role="combobox"
+					aria-expanded={open}
+					title="Qualifier"
+					className="w-full min-w-24 justify-between font-normal"
+				>
+					<span className={clsx("truncate", value === null && "text-muted-foreground")}>
+						{value ?? "Any qualifier"}
+					</span>
+					<RxChevronUp className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent
+				className="w-full min-w-fit p-0 max-h-[40vh] overflow-auto"
+				side="bottom"
+				align="start"
+			>
+				<Command shouldFilter={false}>
+					<CommandInput
+						placeholder="Search or enter qualifier..."
+						value={search}
+						onValueChange={setSearch}
+					/>
+					{more && (
+						<p className="px-3 pt-2 text-xs text-muted-foreground">
+							Showing the first {MAX_SHOWN_QUALIFIERS} matches. Keep typing to narrow them down.
+						</p>
+					)}
+					<CommandGroup>
+						{typed === "" && (
+							<CommandItem value="any:" onSelect={() => select(null)}>
+								<RxCheck className={clsx("mr-2 h-4 w-4", value !== null && "opacity-0")} />
+								<span className="text-muted-foreground">Any qualifier</span>
+							</CommandItem>
+						)}
+						{matches.map((q, i) => (
+							// cmdk lowercases values, which would merge "Order" and "order".
+							<CommandItem key={q} value={`q:${i}`} onSelect={() => select(q)}>
+								<RxCheck className={clsx("mr-2 h-4 w-4", value !== q && "opacity-0")} />
+								{q}
+							</CommandItem>
+						))}
+						{typed !== "" && !(suggestions ?? []).includes(typed) && (
+							<CommandItem value={`use:${typed}`} onSelect={() => select(typed)}>
+								<RxCheck className="mr-2 h-4 w-4 opacity-0" />
+								Use "{typed}"
+							</CommandItem>
+						)}
+					</CommandGroup>
+				</Command>
+			</PopoverContent>
+		</Popover>
 	);
 }
 

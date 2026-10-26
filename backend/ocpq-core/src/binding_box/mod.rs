@@ -4,7 +4,7 @@ pub mod step_order;
 
 pub mod expand_step;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 // Only the benchmark path writes timings to a file, and that path does not exist on wasm.
 #[cfg(not(target_arch = "wasm32"))]
@@ -437,6 +437,26 @@ pub struct EvalPageRequest {
     pub limit: usize,
     /// None = both; Some(true) = only violated; Some(false) = only satisfied.
     pub violated: Option<bool>,
+    /// Only the rows that extend this row of the parent box.
+    #[serde(default)]
+    #[ts(optional)]
+    pub parent: Option<ParentRow>,
+    /// For each returned row, count the rows of these child nodes that extend it into
+    /// [`BindingRow::child_counts`].
+    #[serde(default)]
+    #[ts(optional)]
+    pub child_nodes: Option<Vec<usize>>,
+}
+
+/// A row of a parent box, given by the id of the element bound to each variable. A row of a child
+/// box extends it when it binds each of these variables to the same element.
+#[derive(TS)]
+#[ts(export)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ParentRow {
+    pub objects: Vec<(ObjectVariable, String)>,
+    pub events: Vec<(EventVariable, String)>,
 }
 
 #[derive(TS)]
@@ -458,6 +478,11 @@ pub struct BindingRow {
     pub events: Vec<(EventVariable, String)>,
     pub labels: Vec<(String, LabelValue)>,
     pub violation: Option<ViolationReason>,
+    /// For each node of [`EvalPageRequest::child_nodes`], the number of its rows that extend this
+    /// row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub child_counts: Option<Vec<usize>>,
 }
 
 /// A registry handle, not a wire value: situations can run to millions of rows, so the frontend pages them instead.
@@ -502,29 +527,109 @@ impl EvaluateBoxTreeResult {
             .get(req.node_index)
             .ok_or_else(|| format!("node_index {} out of range", req.node_index))?;
 
-        let filtered_count = match req.violated {
-            None => node.situation_count,
-            Some(true) => node.situation_violated_count,
-            Some(false) => node.situation_count - node.situation_violated_count,
+        let wanted = |(b, v): &&(Binding, Option<ViolationReason>)| {
+            req.violated.is_none_or(|want| v.is_some() == want)
+                && req.parent.as_ref().is_none_or(|p| self.extends(b, p))
+        };
+        let filtered_count = match (&req.parent, req.violated) {
+            (Some(_), _) => node.situations.iter().filter(wanted).count(),
+            (None, None) => node.situation_count,
+            (None, Some(true)) => node.situation_violated_count,
+            (None, Some(false)) => node.situation_count - node.situation_violated_count,
         };
 
         let limit = req.limit.min(1000);
-        let rows = node
+        let page: Vec<_> = node
             .situations
             .iter()
-            .filter(|(_, v)| match req.violated {
-                None => true,
-                Some(want) => v.is_some() == want,
-            })
+            .filter(wanted)
             .skip(req.offset)
             .take(limit)
-            .map(|(b, v)| self.binding_to_row(b, v))
+            .collect();
+        let counts = match &req.child_nodes {
+            Some(children) => Some(self.child_counts(&page, children)?),
+            None => None,
+        };
+        let rows = page
+            .iter()
+            .enumerate()
+            .map(|(i, (b, v))| {
+                let mut row = self.binding_to_row(b, v);
+                row.child_counts = counts
+                    .as_ref()
+                    .map(|c| c.iter().map(|per_row| per_row[i]).collect());
+                row
+            })
             .collect();
 
         Ok(EvalPageResponse {
             rows,
             filtered_count,
         })
+    }
+
+    /// Whether `b` binds every variable of `parent` to the element with the same id.
+    fn extends(&self, b: &Binding, parent: &ParentRow) -> bool {
+        parent.objects.iter().all(|(var, id)| {
+            b.get_ob_index(var)
+                .is_some_and(|i| self.object_ids[i.into_inner() as usize] == *id)
+        }) && parent.events.iter().all(|(var, id)| {
+            b.get_ev_index(var)
+                .is_some_and(|i| self.event_ids[i.into_inner() as usize] == *id)
+        })
+    }
+
+    /// For each node in `children`, the number of its rows that extend each row of `page`. All rows
+    /// of a node bind the same variables, so the variables of the first page row key every row.
+    fn child_counts(
+        &self,
+        page: &[&(Binding, Option<ViolationReason>)],
+        children: &[usize],
+    ) -> Result<Vec<Vec<usize>>, String> {
+        if let Some(c) = children
+            .iter()
+            .find(|&&c| c >= self.evaluation_results.len())
+        {
+            return Err(format!("child node_index {c} out of range"));
+        }
+        let Some((first, _)) = page.first() else {
+            return Ok(children.iter().map(|_| Vec::new()).collect());
+        };
+        let ob_vars: Vec<_> = first.object_map.iter().map(|(v, _)| *v).collect();
+        let ev_vars: Vec<_> = first.event_map.iter().map(|(v, _)| *v).collect();
+        let key = |b: &Binding| -> Option<(Vec<u32>, Vec<u32>)> {
+            Some((
+                ob_vars
+                    .iter()
+                    .map(|v| b.get_ob_index(v).map(|i| i.into_inner()))
+                    .collect::<Option<_>>()?,
+                ev_vars
+                    .iter()
+                    .map(|v| b.get_ev_index(v).map(|i| i.into_inner()))
+                    .collect::<Option<_>>()?,
+            ))
+        };
+        let page_keys: Vec<_> = page.iter().map(|(b, _)| key(b)).collect();
+        children
+            .iter()
+            .map(|&c| {
+                let child = self
+                    .evaluation_results
+                    .get(c)
+                    .ok_or_else(|| format!("child node_index {c} out of range"))?;
+                let mut counts: HashMap<&(Vec<u32>, Vec<u32>), usize> =
+                    page_keys.iter().flatten().map(|k| (k, 0)).collect();
+                for (b, _) in &child.situations {
+                    if let Some(n) = key(b).and_then(|k| counts.get_mut(&k)) {
+                        *n += 1;
+                    }
+                }
+                Ok(page_keys
+                    .iter()
+                    .map(|k| k.as_ref().and_then(|k| counts.get(k)).copied().unwrap_or(0))
+                    .collect())
+            })
+            .collect()
     }
 
     fn binding_to_row(&self, b: &Binding, v: &Option<ViolationReason>) -> BindingRow {
@@ -541,6 +646,7 @@ impl EvaluateBoxTreeResult {
                 .collect(),
             labels: b.label_map.clone(),
             violation: *v,
+            child_counts: None,
         }
     }
 }
@@ -574,6 +680,8 @@ mod tests {
             offset,
             limit,
             violated,
+            parent: None,
+            child_nodes: None,
         }
     }
 
@@ -975,6 +1083,8 @@ mod evaluation_tests {
                 offset: 0,
                 limit: 10,
                 violated: Some(true),
+                parent: None,
+                child_nodes: None,
             })
             .expect("page");
         assert_eq!(page.filtered_count, 1);
@@ -984,5 +1094,95 @@ mod evaluation_tests {
         assert_eq!(page.rows[0].objects, vec![(ObjectVariable(0), "o2".into())]);
         assert_eq!(page.rows[0].events, vec![(EventVariable(0), "e2".into())]);
         assert!(page.rows[0].violation.is_some());
+    }
+
+    /// Every order, with child "A" binding each `ship` event of that order. o1 ships twice (e4,
+    /// e5) and o2 never ships.
+    fn orders_and_their_shipments() -> EvaluateBoxTreeResult {
+        let mut res = eval(tree(
+            vec![
+                BindingBoxTreeNode::Box(
+                    BindingBox {
+                        new_object_vars: ob_vars(&[(0, "order")]),
+                        ..Default::default()
+                    },
+                    vec![1],
+                ),
+                BindingBoxTreeNode::Box(
+                    BindingBox {
+                        new_event_vars: ev_vars(&[(0, "ship")]),
+                        filters: vec![o2e(0, 0, None)],
+                        ..Default::default()
+                    },
+                    vec![],
+                ),
+            ],
+            &[((0, 1), "A")],
+        ));
+        res.eval_version = 1;
+        res
+    }
+
+    fn page_req(node_index: usize) -> EvalPageRequest {
+        EvalPageRequest {
+            eval_version: 1,
+            node_index,
+            offset: 0,
+            limit: 10,
+            violated: None,
+            parent: None,
+            child_nodes: None,
+        }
+    }
+
+    #[test]
+    fn rows_count_the_child_rows_that_extend_them() {
+        let res = orders_and_their_shipments();
+        let page = res
+            .get_page(&EvalPageRequest {
+                child_nodes: Some(vec![1]),
+                ..page_req(0)
+            })
+            .expect("page");
+        let counts: HashMap<_, _> = page
+            .rows
+            .iter()
+            .map(|r| (r.objects[0].1.as_str(), r.child_counts.clone()))
+            .collect();
+        assert_eq!(counts["o1"], Some(vec![2]));
+        assert_eq!(counts["o2"], Some(vec![0]));
+        let plain = res.get_page(&page_req(0)).expect("page");
+        assert!(plain.rows.iter().all(|r| r.child_counts.is_none()));
+    }
+
+    #[test]
+    fn a_parent_row_narrows_the_page_to_its_child_rows() {
+        let res = orders_and_their_shipments();
+        let of = |id: &str| EvalPageRequest {
+            parent: Some(ParentRow {
+                objects: vec![(ObjectVariable(0), id.to_string())],
+                events: vec![],
+            }),
+            ..page_req(1)
+        };
+        let o1 = res.get_page(&of("o1")).expect("page");
+        assert_eq!(o1.filtered_count, 2);
+        let mut shipped: Vec<_> = o1.rows.iter().map(|r| r.events[0].1.as_str()).collect();
+        shipped.sort_unstable();
+        assert_eq!(shipped, vec!["e4", "e5"]);
+        let o2 = res.get_page(&of("o2")).expect("page");
+        assert_eq!((o2.filtered_count, o2.rows.len()), (0, 0));
+    }
+
+    #[test]
+    fn child_counts_reject_an_unknown_node() {
+        let res = orders_and_their_shipments();
+        let err = res
+            .get_page(&EvalPageRequest {
+                child_nodes: Some(vec![9]),
+                ..page_req(0)
+            })
+            .unwrap_err();
+        assert!(err.contains("out of range"), "got: {err}");
     }
 }

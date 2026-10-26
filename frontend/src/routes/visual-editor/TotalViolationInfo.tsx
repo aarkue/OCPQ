@@ -1,14 +1,14 @@
 import type { Edge, Node, ReactFlowJsonObject } from "@xyflow/react";
 import clsx from "clsx";
-import { PiPlayFill } from "react-icons/pi";
 import type {
 	EvaluationResPerNodes,
 	EventTypeLinkData,
 	EventTypeNodeData,
 	GateNodeData,
 } from "./helper/types";
-import { getViolationStyles, getViolationTextColor } from "./helper/violation-styles";
+import { getViolationStyles } from "./helper/violation-styles";
 
+/** One-line summary of the violations in the root boxes. */
 export default function TotalViolationInfo({
 	violations,
 	flowJSON,
@@ -34,32 +34,24 @@ export default function TotalViolationInfo({
 			],
 			[0, 0],
 		);
+	if (violations === undefined) {
+		return <span className="text-xs text-slate-600">Not evaluated yet</span>;
+	}
+	if (situationCount === 0) {
+		return <span className="text-xs text-slate-600">No bindings</span>;
+	}
 	const percentage = (100 * situationViolatedCount) / situationCount;
-
 	return (
-		<div
+		<span
 			className={clsx(
-				"rounded w-full h-14 overflow-hidden",
-				Number.isNaN(percentage) && "text-gray-700",
-				!Number.isNaN(percentage) && "font-bold border-2",
-				!Number.isNaN(percentage) && getViolationStyles({ situationViolatedCount, situationCount }),
-				!Number.isNaN(percentage) &&
-					getViolationTextColor({ situationViolatedCount, situationCount }),
+				"inline-flex items-center gap-1 rounded-full border px-2 py-px text-xs text-slate-900",
+				getViolationStyles({ situationViolatedCount, situationCount }),
 			)}
 		>
-			{!Number.isNaN(percentage) && <>{Math.round(100 * percentage) / 100}% ⌀ Violations </>}
-			{Number.isNaN(percentage) && <span className="text-sm">No evaluation result available</span>}
-			<br />
-			{!Number.isNaN(percentage) && (
-				<>
-					({situationViolatedCount} of {situationCount})
-				</>
-			)}
-			{Number.isNaN(percentage) && (
-				<div className="inline-flex items-center gap-x-1 text-xs">
-					Evaluate using the <PiPlayFill className="text-purple-600" /> button below
-				</div>
-			)}
-		</div>
+			<span className="font-semibold">{Math.round(10 * percentage) / 10}% violated</span>
+			<span className="tabular-nums text-slate-700">
+				({situationViolatedCount} of {situationCount})
+			</span>
+		</span>
 	);
 }

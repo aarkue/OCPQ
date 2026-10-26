@@ -7,6 +7,8 @@ import {
 	type OnConnectEnd,
 	Panel,
 	ReactFlow,
+	useEdges,
+	useNodes,
 	useNodesInitialized,
 	useReactFlow,
 } from "@xyflow/react";
@@ -21,7 +23,6 @@ import {
 } from "react";
 
 import AlertHelper from "@/components/AlertHelper";
-import ElementInfoSheet from "@/components/ElementInfoSheet";
 import Spinner from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -33,10 +34,15 @@ import {
 } from "@/components/ui/context-menu";
 import { Label } from "@/components/ui/label";
 import { Toggle } from "@/components/ui/toggle";
+import { ElementInfoContext } from "@/ElementInfo";
 import { useBackend } from "@/hooks";
+import { InspectorContext } from "@/inspector/InspectorContext";
+import { setLatestEvaluation } from "@/inspector/latest-evaluations";
+import { publishQueryContext } from "@/inspector/query-context";
 import "@/lib/editor-loader";
 import { ImageIcon } from "@radix-ui/react-icons";
 import { isEditorElementTarget } from "@/lib/flow-helper";
+import { MOD_KEY } from "@/lib/platform";
 import type { BindingBoxTreeNode } from "@/types/generated/BindingBoxTreeNode";
 import type { EventVariable } from "@/types/generated/EventVariable";
 import type { ObjectVariable } from "@/types/generated/ObjectVariable";
@@ -54,6 +60,7 @@ import {
 	getAvailableChildNamesWithEdges,
 	getNamesInConnectedTreeWithEdges,
 } from "./helper/child-names";
+import { variableDisplay } from "./helper/colors";
 import {
 	EVENT_TYPE_LINK_TYPE,
 	EVENT_TYPE_NODE_TYPE,
@@ -82,12 +89,13 @@ import {
 	type GateNodeData,
 } from "./helper/types";
 import { VisualEditorContext } from "./helper/VisualEditorContext";
-import ViolationDetailsSheet from "./ViolationDetailsSheet";
 
 interface VisualEditorProps {
 	ocelInfo: OCELInfo;
 	children?: ReactNode;
 	constraintInfo: ConstraintInfo;
+	/** Identifies the open query. The view is framed again only when it changes. */
+	queryKey: number;
 }
 
 const DEFAULT_EDGE_OPTIONS = {
@@ -98,16 +106,30 @@ const DEFAULT_EDGE_OPTIONS = {
 	},
 } as const;
 
+/** Tells the inspector which boxes the open query has and which one is selected. */
+function QueryContextPublisher() {
+	const nodes = useNodes<Node<EventTypeNodeData | GateNodeData>>();
+	const edges = useEdges();
+	useEffect(() => {
+		const parentOf = new Map(edges.map((e) => [e.target, e.source]));
+		const selected = nodes.filter((n) => n.selected);
+		publishQueryContext({
+			nodes: nodes.map((n) => ({
+				id: n.id,
+				parentId: parentOf.get(n.id),
+				box: "box" in n.data ? n.data.box : undefined,
+			})),
+			selectedId: selected.length === 1 ? selected[0].id : undefined,
+		});
+	}, [nodes, edges]);
+	useEffect(() => () => publishQueryContext(undefined), []);
+	return null;
+}
+
 export default function VisualEditor(props: VisualEditorProps) {
 	const { setInstance, registerOtherDataGetter, otherData, flushData, scheduleAutoSave } =
 		useContext(FlowContext);
 	const instance = useReactFlow<Node<EventTypeNodeData | GateNodeData>, Edge<EventTypeLinkData>>();
-
-	const [violationDetails, setViolationDetails] = useState<{
-		id: string;
-		initialMode?: "violations" | "situations" | "satisfied-situations";
-		node: BindingBoxTreeNode;
-	}>();
 
 	const [violationInfo, setViolationInfo] = useState<{
 		violationsPerNode?: EvaluationResPerNodes;
@@ -120,20 +142,22 @@ export default function VisualEditor(props: VisualEditorProps) {
 		showViolationsFor,
 		violationsPerNode: otherData?.violations,
 	});
+	const { pin } = useContext(InspectorContext);
+	const evalSlot = `q${props.queryKey}`;
+	const queryName =
+		props.constraintInfo.name !== "" ? props.constraintInfo.name : `Query ${props.queryKey + 1}`;
 	function showViolationsFor(
 		nodeID: string,
 		im?: "violations" | "situations" | "satisfied-situations",
 	) {
-		if (
-			violationInfo.violationsPerNode != null &&
-			nodeID in violationInfo.violationsPerNode.evalRes &&
-			violationInfo.violationsPerNode.evalNodes != null &&
-			nodeID in violationInfo.violationsPerNode.evalNodes
-		) {
-			setViolationDetails({
-				id: nodeID,
-				initialMode: im,
-				node: violationInfo.violationsPerNode.evalNodes[nodeID],
+		const evaluated = violationInfo.violationsPerNode;
+		if (evaluated != null && nodeID in evaluated.evalRes && nodeID in evaluated.evalNodes) {
+			pin({
+				kind: "result",
+				slot: evalSlot,
+				nodeId: nodeID,
+				title: `${queryName} · Box ${evaluated.nodeIdtoIndex[nodeID] + 1}`,
+				mode: im,
 			});
 		}
 	}
@@ -142,15 +166,17 @@ export default function VisualEditor(props: VisualEditorProps) {
 	// since before that it has no sizes to fit to. The `maxZoom` cap only binds when the content is
 	// small. Uncapped, a lone box fills the canvas; at scale 1 it is a stamp in an empty pane. At 2 it
 	// takes up about 40% of the width.
+	// Keyed on the query because autosave and evaluation hand back a fresh `otherData.nodes` array
+	// for the same query, and refitting on each would undo the user's zoom.
 	const nodesInitialized = useNodesInitialized();
-	const fittedNodes = useRef<unknown>(undefined);
+	const fittedQuery = useRef<number>();
 	useEffect(() => {
-		if (!nodesInitialized || fittedNodes.current === otherData?.nodes) {
+		if (!nodesInitialized || fittedQuery.current === props.queryKey) {
 			return;
 		}
-		fittedNodes.current = otherData?.nodes;
+		fittedQuery.current = props.queryKey;
 		void instance.fitView({ padding: 0.2, maxZoom: 2 });
-	}, [nodesInitialized, otherData?.nodes, instance]);
+	}, [nodesInitialized, props.queryKey, instance]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: violationInfo intentionally excluded to avoid re-render loop
 	useEffect(() => {
@@ -222,6 +248,22 @@ export default function VisualEditor(props: VisualEditorProps) {
 		edges: Edge<EventTypeLinkData>[];
 	}>({ nodes: [], edges: [] });
 
+	const evaluateButton = useRef<HTMLButtonElement>(null);
+	// Ctrl/⌘+Enter evaluates from anywhere in the window, with Shift to measure performance. It
+	// clicks the button to keep one code path. Not while a dialog is open, as its edits are not in
+	// the query yet.
+	useEffect(() => {
+		const onKeyDown = (ev: KeyboardEvent) => {
+			if (ev.key !== "Enter" || !(ev.ctrlKey || ev.metaKey) || ev.repeat) return;
+			if (document.querySelector('[role="dialog"], [role="alertdialog"]') !== null) return;
+			const button = evaluateButton.current;
+			if (button === null || button.disabled) return;
+			ev.preventDefault();
+			button.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: ev.shiftKey }));
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
 	const mousePos = useRef<{
 		x: number;
 		y: number;
@@ -552,26 +594,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 	const contextMenuTriggerRef = useRef<HTMLButtonElement>(null);
 	const contextMenuPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-	const COLORS = {
-		// https://colordesigner.io/color-scheme-builder?mode=lch#0067A6-FA9805-CE2727-00851D-A90A76-E0F20D-e9488f-0481cc-16cc9d-080999
-		object: [
-			"#0067A6",
-			"#FA9805",
-			"#CE2727",
-			"#00851D",
-			"#A90A76",
-			"#E0F20D",
-			"#e9488f",
-			"#0481cc",
-			"#16cc9d",
-			"#080999",
-		],
-		event: ["#01425e", "#53077f", "#db11c3", "#b76b00", "#506b01", "#aa082b", "#006289", "#758406"],
-	} as const;
-	const [elementInfo, setElementInfo] = useState<{
-		type: "event" | "object";
-		req: { id: string } | { index: number };
-	}>();
+	const { showElementInfo, openElementSearch } = useContext(ElementInfoContext);
 	return (
 		<VisualEditorContext.Provider
 			value={{
@@ -584,16 +607,8 @@ export default function VisualEditor(props: VisualEditorProps) {
 				getTypesForVariable,
 				getNodeIDByName,
 				filterMode,
-				showElementInfo: (elInfo) => {
-					setElementInfo(elInfo ? { ...elInfo } : undefined);
-				},
-				getVarName: (variable, type) => {
-					return {
-						name: type.substring(0, 1) + (variable + 1),
-						// name: type.substring(0, 2) + "_" + variable,
-						color: COLORS[type][variable % COLORS[type].length],
-					};
-				},
+				showElementInfo,
+				getVarName: variableDisplay,
 				onNodeDataChange: (id, newData) => {
 					if (newData === undefined) {
 						instance.deleteElements({ nodes: [{ id }] });
@@ -653,7 +668,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 				}}
 				defaultViewport={otherData?.viewport}
 				maxZoom={3.5}
-				minZoom={0.33}
+				minZoom={0.05}
 				edgeTypes={edgeTypes}
 				nodeTypes={nodeTypes}
 				connectionLineStyle={{ stroke: "#646464", strokeWidth: 3 }}
@@ -686,13 +701,20 @@ export default function VisualEditor(props: VisualEditorProps) {
 				onEdgesChange={scheduleAutoSave}
 				onMoveEnd={scheduleAutoSave}
 			>
+				<QueryContextPublisher />
 				<Controls onInteractiveChange={() => {}} />
-				<Panel position="top-right" className="flex flex-row-reverse gap-x-2">
+				{/* The panel's box spans the gaps between and below the buttons. Only the buttons take
+				    clicks, so clicks in those gaps reach the canvas. */}
+				<Panel
+					position="top-right"
+					className="flex flex-row-reverse gap-x-2 pointer-events-none [&_button]:pointer-events-auto"
+				>
 					<div className="flex flex-col items-center gap-y-1">
 						<Button
+							ref={evaluateButton}
 							disabled={isEvaluationLoading}
 							variant="outline"
-							title="Evaluate (Hold Shift for Performance Evaluation)"
+							title={`Evaluate (${MOD_KEY}+Enter). Hold Shift to measure performance.`}
 							className="relative bg-fuchsia-100 disabled:bg-fuchsia-200 border-fuchsia-300 hover:bg-fuchsia-200 hover:border-fuchsia-300"
 							onClick={async (ev) => {
 								setEvaluationLoading(true);
@@ -707,7 +729,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 								}
 								try {
 									const res = await toast.promise(
-										backend["ocel/check-constraints-box"](tree, measurePerformance),
+										backend["ocel/check-constraints-box"](tree, measurePerformance, evalSlot),
 										{
 											loading: "Evaluating...",
 											success: (res) => (
@@ -775,23 +797,24 @@ export default function VisualEditor(props: VisualEditorProps) {
 										evalNodes[nodesOrder[i].id] = node;
 										nodeIdtoIndex[nodesOrder[i].id] = i;
 									});
-									setViolationInfo((vi) => ({
-										...vi,
-										violationsPerNode: {
-											evalRes,
-											evalVersion: res.evalVersion,
-											evalNodes,
-											nodeIdtoIndex,
-										},
-									}));
-									flushData({
-										violations: {
-											evalRes,
-											evalVersion: res.evalVersion,
-											evalNodes,
-											nodeIdtoIndex,
-										},
-									});
+									const childSets: Record<string, { name: string; nodeId: string }[]> = {};
+									for (const [[parent, child], name] of tree.edgeNames) {
+										const id = nodesOrder[parent].id;
+										childSets[id] = [
+											...(childSets[id] ?? []),
+											{ name, nodeId: nodesOrder[child].id },
+										];
+									}
+									const evaluated = {
+										evalRes,
+										evalVersion: res.evalVersion,
+										evalNodes,
+										nodeIdtoIndex,
+										childSets,
+									};
+									setLatestEvaluation(evalSlot, evaluated);
+									setViolationInfo((vi) => ({ ...vi, violationsPerNode: evaluated }));
+									flushData({ violations: evaluated });
 								} finally {
 									setEvaluationLoading(false);
 								}
@@ -867,10 +890,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 											error: "Failed to export!",
 										});
 										if (res) {
-											backend["download-blob"](
-												res,
-												`${props.constraintInfo.name}-export.${type.toLowerCase()}`,
-											);
+											backend["download-blob"](res, `${queryName}-export.${type.toLowerCase()}`);
 										}
 									} finally {
 										setEvaluationLoading(false);
@@ -927,10 +947,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 												blob = await (await fetch(blob)).blob();
 											}
 											if (blob) {
-												backend["download-blob"](
-													blob,
-													`${props.constraintInfo.name}.${useSVG ? "svg" : "png"}`,
-												);
+												backend["download-blob"](blob, `${queryName}.${useSVG ? "svg" : "png"}`);
 											}
 										})
 										.finally(() => {
@@ -1030,20 +1047,11 @@ export default function VisualEditor(props: VisualEditorProps) {
 				</Panel>
 				<Background />
 			</ReactFlow>
-			{violationDetails !== undefined && violationInfo.violationsPerNode !== undefined && (
-				<ViolationDetailsSheet
-					initialMode={violationDetails.initialMode}
-					nodeID={violationDetails.id}
-					reset={() => setViolationDetails(undefined)}
-					violationResPerNodes={violationInfo.violationsPerNode}
-					node={violationDetails.node}
-				/>
-			)}
-			<ElementInfoSheet elInfo={elementInfo} />
 			<Button
 				className="absolute right-0 bottom-0 m-1"
 				size="icon"
-				onClick={() => setElementInfo({ type: "object", req: { index: 0 } })}
+				title="Find an event or object"
+				onClick={openElementSearch}
 			>
 				<LuFileSearch />
 			</Button>

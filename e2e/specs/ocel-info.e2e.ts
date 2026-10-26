@@ -15,8 +15,8 @@ describe("OCEL info", () => {
 
   it("reports the fixture's counts", async () => {
     const body = await $("body");
-    await expect(body).toHaveText(expect.stringContaining("11 Event Types"));
-    await expect(body).toHaveText(expect.stringContaining("6 Object Types"));
+    await expect(body).toHaveText(expect.stringContaining("11 event types"));
+    await expect(body).toHaveText(expect.stringContaining("6 object types"));
     await expect(body).toHaveText(expect.stringContaining("21,008"));
     await expect(body).toHaveText(expect.stringContaining("10,840"));
   });

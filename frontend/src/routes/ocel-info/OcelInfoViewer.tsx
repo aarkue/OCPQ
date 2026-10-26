@@ -3,12 +3,14 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { LuDownload, LuTrash2 } from "react-icons/lu";
 import { useNavigate } from "react-router-dom";
+import { AreaPageHeader } from "@/components/layout/AreaPage";
 import { R4pmIsland } from "@/components/r4pm/R4pmIsland";
 import { Button } from "@/components/ui/button";
 import { useBackend } from "@/hooks";
 import { useAttributeStats, useClearOcel, useOcelInfo, useOcelStats } from "@/hooks/useOcelInfo";
+import OcelTypeGraphSection from "./OcelTypeGraphSection";
 
-function AttrStatsDetail({
+export function AttrStatsDetail({
 	scope,
 	type,
 	attr,
@@ -39,14 +41,12 @@ export default function OcelInfoViewer() {
 		return <div>No Info!</div>;
 	}
 	return (
-		<div className="my-4 text-lg text-left">
-			<h2 className="text-4xl font-black">OCEL Info</h2>
-			<p className="text-muted-foreground flex flex-col leading-tight mt-2">
-				<span>{ocelInfo.event_types.length} Event Types</span>
-				<span>{ocelInfo.object_types.length} Object Types</span>
-			</p>
+		<div className="text-lg text-left">
+			<AreaPageHeader
+				description={`${ocelInfo.event_types.length} event types · ${ocelInfo.object_types.length} object types`}
+			/>
 			{ocelStats && (
-				<div className="mt-4 mb-3">
+				<div className="mb-3">
 					<R4pmIsland>
 						<OCELCountInfo
 							data={ocelStats}
@@ -63,6 +63,7 @@ export default function OcelInfoViewer() {
 					</R4pmIsland>
 				</div>
 			)}
+			<OcelTypeGraphSection ocelInfo={ocelInfo} stats={ocelStats ?? undefined} />
 			<ExportOcelSection />
 			<UnloadOcelSection />
 		</div>

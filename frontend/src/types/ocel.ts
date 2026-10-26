@@ -5,8 +5,8 @@ export type OCELInfo = {
 	num_events: number;
 	object_types: OCELType[];
 	event_types: OCELType[];
-	e2o_types: Record<string, Record<string, [number, Set<string>]>>;
-	o2o_types: Record<string, Record<string, [number, Set<string>]>>;
+	e2o_types: Record<string, Record<string, [number, string[]]>>;
+	o2o_types: Record<string, Record<string, [number, string[]]>>;
 	/** Per activity and object type: [min, max] number of objects of that type per event. */
 	activity_involvements?: Record<string, Record<string, [number, number]>>;
 };

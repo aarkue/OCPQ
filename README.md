@@ -191,7 +191,6 @@ To add functionality, declare the call in the `BackendProvider` type. Implement 
 Wire it up in the web server and tauri backends, then add the field to both `BackendProvider`
 implementations.
 
-
 ## License
 
 This project is dual-licensed under either the [Apache License Version 2.0](LICENSE-APACHE) or the [MIT License](LICENSE-MIT), at your option.

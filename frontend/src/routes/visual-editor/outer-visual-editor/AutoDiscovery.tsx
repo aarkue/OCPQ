@@ -21,6 +21,7 @@ import type { OCELInfo } from "@/types/ocel";
 import { bindingBoxTreeToNodes } from "../helper/constructNodes";
 import { applyLayoutToNodes } from "../helper/LayoutFlow";
 import type {
+	ConstraintInfo,
 	DiscoverConstraintsRequest,
 	DiscoverConstraintsRequestWrapper,
 } from "../helper/types";
@@ -32,18 +33,8 @@ export default function AutoDiscoveryButton({
 	prevDataRef,
 }: {
 	ocelInfo: OCELInfo;
-	constraints: {
-		name: string;
-		description: string;
-	}[];
-	setConstraints: React.Dispatch<
-		React.SetStateAction<
-			{
-				name: string;
-				description: string;
-			}[]
-		>
-	>;
+	constraints: ConstraintInfo[];
+	setConstraints: React.Dispatch<React.SetStateAction<ConstraintInfo[]>>;
 	prevDataRef: { current: FlowAndViolationData[] };
 }) {
 	const backend = useBackend();

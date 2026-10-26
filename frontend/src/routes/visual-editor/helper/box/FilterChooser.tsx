@@ -3,7 +3,7 @@ import { Combobox } from "@/components/ui/combobox";
 import type { EventVariable } from "@/types/generated/EventVariable";
 import type { ObjectVariable } from "@/types/generated/ObjectVariable";
 import { VisualEditorContext } from "../VisualEditorContext";
-import { getEvVarName, getObVarName } from "./variable-names";
+import { EvVarName, getEvVarName, getObVarName } from "./variable-names";
 
 export const INVALID_VARIABLE_PLACEHOLDER = 99999;
 
@@ -97,16 +97,33 @@ export function EventVarSelector({
 	eventVars,
 	value,
 	onChange,
+	nodeID,
 }: {
 	eventVars: EventVariable[];
 	value: EventVariable | undefined;
 	onChange: (value: EventVariable | undefined) => unknown;
+	/** Also shows each variable's event types, as seen from this node. */
+	nodeID?: string;
 }) {
-	const { getVarName } = useContext(VisualEditorContext);
+	const { getVarName, getTypesForVariable } = useContext(VisualEditorContext);
+	const labelOf = (v: EventVariable) => {
+		if (nodeID === undefined) return getEvVarName(v);
+		const types = getTypesForVariable(nodeID, v, "event")
+			.map((t) => t.name)
+			.join(", ");
+		return function EventVarWithTypes() {
+			return (
+				<span className="flex items-center gap-1.5">
+					<EvVarName eventVar={v} />
+					<span className="max-w-40 truncate font-normal text-slate-600">{types}</span>
+				</span>
+			);
+		};
+	};
 	return (
 		<Combobox
 			options={eventVars.map((v) => ({
-				label: getEvVarName(v),
+				label: labelOf(v),
 				value: `${v} --- ${getVarName(v, "event").name}`,
 			}))}
 			onChange={(val) => {

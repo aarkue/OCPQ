@@ -189,10 +189,24 @@ export async function addChildOf(nodeId: string, slot = 0): Promise<string> {
  * alongside the intended type (the editor reads multiple types as OR).
  */
 export async function selectTypes(wanted: string[]): Promise<void> {
-  const rows = await $$('[role="alertdialog"] [role="option"]');
-  for (const row of rows) {
-    const title = (await row.getAttribute("title")) ?? "";
-    const name = title.replace(/\s*\(\d[\d,]*\)\s*$/, "");
+  const typeRows = async () => {
+    const rows = await $$('[role="alertdialog"] [role="option"]');
+    const out = [];
+    for (const row of rows) {
+      const title = (await row.getAttribute("title")) ?? "";
+      out.push({ row, name: title.replace(/\s*\(\d[\d,]*\)\s*$/, "") });
+    }
+    return out;
+  };
+  let rows = await typeRows();
+  // With variables in scope the list starts out limited to related types, which can hide a wanted one.
+  const relatedOnly = await $('[role="alertdialog"] button[role="switch"][aria-checked="true"]');
+  if (wanted.some((w) => !rows.some((r) => r.name === w)) && (await relatedOnly.isExisting())) {
+    await relatedOnly.click();
+    await browser.pause(200);
+    rows = await typeRows();
+  }
+  for (const { row, name } of rows) {
     const selected = (await row.getAttribute("aria-selected")) === "true";
     if (wanted.includes(name) !== selected) await row.click();
   }
@@ -329,14 +343,16 @@ export async function clickInDialog(text: string) {
 /**
  * Confirms the dialog. Editors that build a list (CBE, CBPE) carry their own "Add" for appending a
  * row, first in the DOM, and a text match grows the list instead of submitting. Submit is last.
+ * A new variable that can be connected offers "Add without connecting" instead. The specs add
+ * their filters themselves, so they take that one.
  */
 export async function submitDialog(): Promise<void> {
   await browser.execute(() => {
     const dlg = document.querySelector('[role="alertdialog"]');
-    const adds = Array.from(dlg?.querySelectorAll("button") ?? []).filter(
-      (b) => (b.textContent || "").trim() === "Add",
-    );
-    (adds[adds.length - 1] as HTMLButtonElement | undefined)?.click();
+    const buttons = Array.from(dlg?.querySelectorAll("button") ?? []);
+    const plain = buttons.find((b) => (b.textContent || "").trim() === "Add without connecting");
+    const adds = buttons.filter((b) => (b.textContent || "").trim() === "Add");
+    ((plain ?? adds[adds.length - 1]) as HTMLButtonElement | undefined)?.click();
   });
   await browser.waitUntil(
     async () => (await browser.execute(() => document.querySelectorAll('[role="alertdialog"]').length)) === 0,

@@ -23,6 +23,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useBackend, useOcelInfo } from "@/hooks";
 import type { PathSchemaInfo } from "@/types/generated/PathSchemaInfo";
 import type { PathSchemaRow } from "@/types/generated/PathSchemaRow";
@@ -85,6 +86,10 @@ function SortHeader({
 
 const edgeKey = (source: PathTypeRef, qualifier: string, target: PathTypeRef) =>
 	`${typeKey(source)}|${qualifier}|${typeKey(target)}`;
+const pairKey = (source: PathTypeRef, target: PathTypeRef) =>
+	`${typeKey(source)}->${typeKey(target)}`;
+/** Above this many qualified edges, drawing one arc per qualifier stalls the layout. */
+const MAX_QUALIFIED_EDGES = 400;
 
 export default function PathSchemasViewer() {
 	const ocelInfo = useOcelInfo();
@@ -108,6 +113,7 @@ export default function PathSchemasViewer() {
 	}, []);
 
 	const [shownTypes, setShownTypes] = useState<PathTypeRef[]>([]);
+	const [showQualifiers, setShowQualifiers] = useState(false);
 	const [source, setSource] = useState<PathTypeRef | null>(null);
 	const [target, setTarget] = useState<PathTypeRef | null>(null);
 	const [maxLength, setMaxLength] = useState(3);
@@ -409,8 +415,11 @@ export default function PathSchemasViewer() {
 	}
 
 	// Map PathTypeGraph -> generic OcelTypeGraph nodes/edges. Node id is the composite
-	// typeKey ("e:"/"o:" + name); edge id is the (source|qualifier|target) composite so
-	// schema steps (which carry the same endpoints) can key straight into it.
+	// typeKey ("e:"/"o:" + name); edge id is the (source|qualifier|target) composite, or the
+	// (source->target) pair with qualifiers collapsed, so schema steps (which carry the same
+	// endpoints) can key straight into it.
+	const qualifiersAllowed = (typeGraph?.edges.length ?? 0) <= MAX_QUALIFIED_EDGES;
+	const qualified = showQualifiers && qualifiersAllowed;
 	const graphNodes = useMemo<OcelTypeGraphNode[]>(
 		() =>
 			typeGraph
@@ -423,19 +432,29 @@ export default function PathSchemasViewer() {
 				: [],
 		[typeGraph],
 	);
-	const graphEdges = useMemo<OcelTypeGraphEdge[]>(
-		() =>
-			typeGraph
-				? typeGraph.edges.map((e) => ({
-						id: edgeKey(e.source, e.qualifier, e.target),
-						source: typeKey(e.source),
-						target: typeKey(e.target),
-						qualifier: e.qualifier,
-						kind: e.source.is_event ? "e2o" : "o2o",
-					}))
-				: [],
-		[typeGraph],
-	);
+	const graphEdges = useMemo<OcelTypeGraphEdge[]>(() => {
+		if (!typeGraph) return [];
+		if (qualified) {
+			return typeGraph.edges.map((e) => ({
+				id: edgeKey(e.source, e.qualifier, e.target),
+				source: typeKey(e.source),
+				target: typeKey(e.target),
+				qualifier: e.qualifier,
+			}));
+		}
+		const byPair = new Map<string, OcelTypeGraphEdge>();
+		for (const e of typeGraph.edges) {
+			const id = pairKey(e.source, e.target);
+			if (!byPair.has(id)) {
+				byPair.set(id, {
+					id,
+					source: typeKey(e.source),
+					target: typeKey(e.target),
+				});
+			}
+		}
+		return [...byPair.values()];
+	}, [typeGraph, qualified]);
 
 	// Scope for the TypeScopeSelector: the shown set as node ids. `onChange` maps ids back to refs.
 	const shownKeys = useMemo(() => new Set(shownTypes.map(typeKey)), [shownTypes]);
@@ -472,7 +491,9 @@ export default function PathSchemasViewer() {
 			nodeKeys.add(typeKey(s));
 			for (const step of steps) {
 				nodeKeys.add(typeKey(step.reverse ? step.source : step.target));
-				const key = edgeKey(step.source, step.qualifier, step.target);
+				const key = qualified
+					? edgeKey(step.source, step.qualifier, step.target)
+					: pairKey(step.source, step.target);
 				const ex = colors.get(key);
 				if (ex) {
 					if (!ex.includes(color)) ex.push(color);
@@ -482,7 +503,7 @@ export default function PathSchemasViewer() {
 			}
 		}
 		return { schemaNodeKeys: nodeKeys, edgeHighlightColors: colors };
-	}, [highlightedSchemas]);
+	}, [highlightedSchemas, qualified]);
 	const hasActiveSchema = highlightedSchemas.length > 0;
 
 	const nodeRingColor = (id: string) =>
@@ -649,7 +670,25 @@ export default function PathSchemasViewer() {
 					<div className="border rounded-lg relative h-[42%] min-h-56 overflow-hidden bg-white">
 						{/* Top-right: the ViewerExportFrame menu sits at the very corner, the scope
 						    selector left of it. OcelTypeGraph's own Fit button is at top-left. */}
-						<div className="absolute top-2 right-16 z-30">
+						<div className="absolute top-2 right-16 z-30 flex items-center gap-x-3">
+							{typeGraph && (
+								<Label
+									className="flex items-center gap-x-1.5 text-xs font-normal bg-white/80 rounded px-1"
+									title={
+										qualifiersAllowed
+											? "Draw one edge per qualifier instead of one per type pair"
+											: `One edge per qualifier would be ${typeGraph.edges.length.toLocaleString()} edges, too many to draw`
+									}
+								>
+									<Switch
+										className="scale-75"
+										checked={qualified}
+										disabled={!qualifiersAllowed}
+										onCheckedChange={setShowQualifiers}
+									/>
+									Qualifiers
+								</Label>
+							)}
 							{typeGraph && (
 								<R4pmIsland>
 									<TypeScopeSelector

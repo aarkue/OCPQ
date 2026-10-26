@@ -25,6 +25,7 @@ pub mod binding_box;
 pub mod timing;
 pub mod db_translation;
 pub mod discovery;
+pub mod element_lookup;
 pub mod ocel_graph;
 pub mod ocel_stats;
 pub mod path_schemas;

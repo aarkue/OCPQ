@@ -15,8 +15,8 @@ importers:
         specifier: ^4.6.0
         version: 4.7.0(monaco-editor@0.50.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@r4pm/components':
-        specifier: ^0.3.2
-        version: 0.3.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(plotly.js@3.7.0(mapbox-gl@1.13.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.4.0
+        version: 0.4.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(plotly.js@3.7.0(mapbox-gl@1.13.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
         version: 1.2.20(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -95,9 +95,6 @@ importers:
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
-      elkjs:
-        specifier: ^0.9.3
-        version: 0.9.3
       html-to-image:
         specifier: 1.11.11
         version: 1.11.11
@@ -606,8 +603,8 @@ packages:
   '@plotly/regl@2.1.2':
     resolution: {integrity: sha512-Mdk+vUACbQvjd0m/1JJjOOafmkp/EpmHjISsopEz5Av44CBq7rPC05HHNbYGKVyNUF2zmEoBS/TT0pd0SPFFyw==}
 
-  '@r4pm/components@0.3.2':
-    resolution: {integrity: sha512-2aEjDhAOSUKpvpvyVLShvby43pWNlXkL7ojkDgxGhxyKyjN9FoYX1gwDrTKam6Yx8pFJdUIIjx/xF6bm3cdkRQ==}
+  '@r4pm/components@0.4.0':
+    resolution: {integrity: sha512-khvTLNy4H1AblBQ580dhSsrDEjnExY+M3eRznYoRU3Oj676dOVZ7wLg2juFawcbFcCjfSSZgx2Yl1fVwhziQew==}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -2201,12 +2198,6 @@ packages:
   elementary-circuits-directed-graph@1.3.1:
     resolution: {integrity: sha512-ZEiB5qkn2adYmpXGnJKkxT8uJHlW/mxmBpmeqawEHzPxh9HkLD4/1mFYX5l0On+f6rcPIt8/EWlRU2Vo3fX6dQ==}
 
-  elkjs@0.10.2:
-    resolution: {integrity: sha512-Yx3ORtbAFrXelYkAy2g0eYyVY8QG0XEmGdQXmy0eithKKjbWRfl3Xe884lfkszfBF6UKyIy4LwfcZ3AZc8oxFw==}
-
-  elkjs@0.9.3:
-    resolution: {integrity: sha512-f/ZeWvW/BCXbhGEf1Ujp29EASo/lk1FDnETgNKwJrsVvGZhUWCZyg3xLJjAsxfOmt8KjswHmI5EwCQcPMpOYhQ==}
-
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
@@ -3722,12 +3713,11 @@ snapshots:
 
   '@plotly/regl@2.1.2': {}
 
-  '@r4pm/components@0.3.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(plotly.js@3.7.0(mapbox-gl@1.13.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@r4pm/components@0.4.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(plotly.js@3.7.0(mapbox-gl@1.13.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@radix-ui/themes': 3.3.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tanstack/react-virtual': 3.14.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@xyflow/react': 12.11.3(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      elkjs: 0.10.2
       html-to-image: 1.11.11
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
@@ -5343,10 +5333,6 @@ snapshots:
   elementary-circuits-directed-graph@1.3.1:
     dependencies:
       strongly-connected-components: 1.0.1
-
-  elkjs@0.10.2: {}
-
-  elkjs@0.9.3: {}
 
   end-of-stream@1.4.5:
     dependencies:

@@ -6,6 +6,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BackendProviderContext, createBackendProvider } from "$/BackendProviderContext";
 import { createTauriBackend } from "$/bindings/tauri-backend";
+import { installPinchBridge } from "$/lib/pinch-bridge";
 import { MainRouterProvider } from "$/router";
 
 /** The desktop backend is the shared tauri transport plus the updater. The updater stays here
@@ -14,6 +15,8 @@ const backend = {
 	...createBackendProvider(createTauriBackend()),
 	"check-for-updates": () => check(),
 };
+
+installPinchBridge();
 
 const root = document.getElementById("root");
 if (root === null) {

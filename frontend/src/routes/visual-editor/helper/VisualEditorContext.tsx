@@ -2,6 +2,7 @@ import { createContext } from "react";
 import type { EventVariable } from "@/types/generated/EventVariable";
 import type { ObjectVariable } from "@/types/generated/ObjectVariable";
 import type { OCELInfo, OCELType } from "@/types/ocel";
+import { variableDisplay } from "./colors";
 import type {
 	EvaluationResPerNodes,
 	EventTypeLinkData,
@@ -47,11 +48,7 @@ export const VisualEditorContext = createContext<VisualEditorContextValue>({
 	getTypesForVariable: () => [],
 	getAvailableChildNames: () => [],
 	getNamesInConnectedTree: () => [],
-	getVarName: (variable, type) => ({
-		name: type.substring(0, 1) + variable,
-		// name: type.substring(0, 2) + "_" + variable,
-		color: "black",
-	}),
+	getVarName: variableDisplay,
 	showElementInfo: () => {},
 	filterMode: "shown",
 });

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import {
 	BsFileEarmarkBreak,
@@ -17,18 +17,31 @@ import {
 	getAPIServerBackendProvider,
 } from "./BackendProviderContext";
 import { BackendModeDialog } from "./components/backend/BackendModeDialog";
-import { Sidebar } from "./components/layout/Sidebar";
+import CommandPalette from "./components/CommandPalette";
+import { AreaRail, TopBar } from "./components/layout/AppChrome";
+import { areaOfPathname } from "./components/layout/areas";
 import { OcelDropzone } from "./components/ocel/OcelDropzone";
 import { OcelFilePicker } from "./components/ocel/OcelFilePicker";
 import { OcelSelector } from "./components/ocel/OcelSelector";
+import { ElementInfoContext, type ElementRef } from "./ElementInfo";
 import { useBackend } from "./hooks/useBackend";
 import { useOcelAvailable } from "./hooks/useOcelAvailable";
 import { useOcelInfoQuery } from "./hooks/useOcelInfo";
 import { InfoSheetContext, type InfoSheetState } from "./InfoSheet";
 import InfoSheetViewer from "./InfoSheetViewer";
+import Inspector from "./inspector/Inspector";
+import { InspectorContext } from "./inspector/InspectorContext";
+import {
+	inspectorReducer,
+	loadInspector,
+	type PinTarget,
+	saveInspector,
+} from "./inspector/inspector-state";
+import { clearLatestEvaluations } from "./inspector/latest-evaluations";
 import type { OCPQJobOptions } from "./types/generated/OCPQJobOptions";
 import type { OCELInfo } from "./types/ocel";
 
+const INSPECTOR_STORAGE_KEY = "ocpq-inspector";
 const queryClient = new QueryClient();
 
 function App() {
@@ -88,8 +101,64 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 	const backendAvailable = ocelInfoQuery.isSuccess;
 	const availableOcels = availableOcelsQuery.data ?? [];
 
+	const [inspector, dispatchInspector] = useReducer(inspectorReducer, undefined, () => {
+		try {
+			return loadInspector(localStorage.getItem(INSPECTOR_STORAGE_KEY));
+		} catch {
+			return loadInspector(null);
+		}
+	});
+	useEffect(() => {
+		try {
+			localStorage.setItem(INSPECTOR_STORAGE_KEY, saveInspector(inspector));
+		} catch {
+			// Storage can be unavailable (private mode, quota). The board then lasts only for this session.
+		}
+	}, [inspector]);
+	const [paletteOpen, setPaletteOpen] = useState(false);
+	useEffect(() => {
+		const onKey = (ev: KeyboardEvent) => {
+			if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
+				ev.preventDefault();
+				setPaletteOpen(true);
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, []);
+
+	const page = areaOfPathname(location.pathname)?.to ?? "/";
+	// The pin callbacks stay stable for the contexts below and read the page at call time.
+	const pageRef = useRef(page);
+	pageRef.current = page;
+	const pinElement = useCallback((el: ElementRef) => {
+		if ("id" in el.req) {
+			dispatchInspector({
+				type: "pin",
+				target: { kind: "element", type: el.type, id: el.req.id },
+				page: pageRef.current,
+			});
+		}
+	}, []);
+	const elementInfoContext = useMemo(
+		() => ({
+			showElementInfo: (el: ElementRef | undefined) => el !== undefined && pinElement(el),
+			openElementSearch: () => setPaletteOpen(true),
+		}),
+		[pinElement],
+	);
+	const inspectorContext = useMemo(
+		() => ({
+			pin: (target: PinTarget) => dispatchInspector({ type: "pin", target, page: pageRef.current }),
+			unpin: (key: string) => dispatchInspector({ type: "unpin", key }),
+		}),
+		[],
+	);
+
 	const setOcelInfoAndNavigate = useCallback(
 		(info: OCELInfo | undefined) => {
+			dispatchInspector({ type: "reset-pins" });
+			clearLatestEvaluations();
 			queryClient.setQueryData<OCELInfo | undefined>(["ocel", "info"], info);
 			queryClient.invalidateQueries({ queryKey: ["ocel"] });
 			if (info !== undefined) {
@@ -260,72 +329,87 @@ function InnerApp({ children }: { children?: React.ReactNode }) {
 		<InfoSheetContext.Provider
 			value={{ infoSheetState: infoSheet, setInfoSheetState: setInfoSheet }}
 		>
-			<div className="max-w-full overflow-hidden h-screen grid grid-cols-[13rem_auto]">
-				<Sidebar ocelInfo={ocelInfo} backendAvailable={backendAvailable}>
-					{children}
-				</Sidebar>
-				<div className="px-4 overflow-auto my-4">
-					{isAtRoot && (
-						<div className="text-center">
-							<h2 className="text-4xl font-black mb-2">Load a Dataset</h2>
-							<p className="text-xl text-muted-foreground mb-1">
-								OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite, CSV, ZIP)
-							</p>
-							<p className="text-sm text-muted-foreground mb-6">
-								XES/XES.GZ files are also supported and are interpreted with the single object type{" "}
-								<span className="font-mono italic">Case</span>.
-							</p>
-							<div className="mx-auto grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2">
-								<div className="flex flex-col items-center rounded-lg border-2 border-green-300/40 bg-green-300/10 p-6">
-									<div className="mb-1 flex items-center justify-center gap-2">
-										<LuFileUp className="text-green-700" size={22} />
-										<h3 className="text-xl font-bold">Select an Event Log</h3>
+			<ElementInfoContext.Provider value={elementInfoContext}>
+				<InspectorContext.Provider value={inspectorContext}>
+					<div className="max-w-full overflow-hidden h-screen flex flex-col">
+						<TopBar
+							ocelInfo={ocelInfo}
+							backendAvailable={backendAvailable}
+							onOpenSearch={() => setPaletteOpen(true)}
+						>
+							{children}
+						</TopBar>
+						<div className="flex flex-1 min-h-0">
+							<AreaRail ocelLoaded={ocelInfo !== undefined} />
+							<div className="flex-1 min-w-0 px-4 overflow-auto py-4">
+								{isAtRoot && (
+									<div className="text-center">
+										<h2 className="text-4xl font-black mb-2">Load a Dataset</h2>
+										<p className="text-xl text-muted-foreground mb-1">
+											OCPQ supports all OCEL 2.0 file formats (XML, JSON, SQLite, CSV, ZIP)
+										</p>
+										<p className="text-sm text-muted-foreground mb-6">
+											XES/XES.GZ files are also supported and are interpreted with the single object
+											type <span className="font-mono italic">Case</span>.
+										</p>
+										<div className="mx-auto grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2">
+											<div className="flex flex-col items-center rounded-lg border-2 border-green-300/40 bg-green-300/10 p-6">
+												<div className="mb-1 flex items-center justify-center gap-2">
+													<LuFileUp className="text-green-700" size={22} />
+													<h3 className="text-xl font-bold">Select an Event Log</h3>
+												</div>
+												<p className="mb-4 text-sm text-muted-foreground">
+													Already have a single OCEL or XES file? Load it directly.
+												</p>
+												<div className="flex w-full flex-1 flex-col items-center justify-center gap-2">
+													<OcelFilePicker
+														loading={loading}
+														setLoading={setLoading}
+														onOcelLoaded={setOcelInfoAndNavigate}
+													/>
+													{showAvailableOcels && (
+														<OcelSelector
+															availableOcels={availableOcels}
+															loading={loading}
+															setLoading={setLoading}
+															onOcelLoaded={setOcelInfoAndNavigate}
+														/>
+													)}
+													<OcelDropzone
+														loading={loading}
+														setLoading={setLoading}
+														onFileSelect={handleFileUpload}
+														onOcelLoaded={setOcelInfoAndNavigate}
+													/>
+												</div>
+											</div>
+											<Link
+												to="/data-extraction"
+												className="group flex h-full flex-col items-center justify-center rounded-lg border-2 border-blue-300/40 bg-blue-300/10 p-6 text-center transition-colors hover:border-blue-400 hover:bg-blue-300/30"
+											>
+												<div className="mb-1 flex items-center justify-center gap-2">
+													<LuFileSpreadsheet className="text-blue-700" size={22} />
+													<h3 className="text-xl font-bold">Extract from Tables</h3>
+												</div>
+												<p className="text-sm text-muted-foreground">
+													Source an Object-Centric Event Log from CSV, XLSX, or Parquet files, or a
+													connected database (PostgreSQL, SQLite, DuckDB).
+												</p>
+											</Link>
+										</div>
 									</div>
-									<p className="mb-4 text-sm text-muted-foreground">
-										Already have a single OCEL or XES file? Load it directly.
-									</p>
-									<div className="flex w-full flex-1 flex-col items-center justify-center gap-2">
-										<OcelFilePicker
-											loading={loading}
-											setLoading={setLoading}
-											onOcelLoaded={setOcelInfoAndNavigate}
-										/>
-										{showAvailableOcels && (
-											<OcelSelector
-												availableOcels={availableOcels}
-												loading={loading}
-												setLoading={setLoading}
-												onOcelLoaded={setOcelInfoAndNavigate}
-											/>
-										)}
-										<OcelDropzone
-											loading={loading}
-											setLoading={setLoading}
-											onFileSelect={handleFileUpload}
-											onOcelLoaded={setOcelInfoAndNavigate}
-										/>
-									</div>
-								</div>
-								<Link
-									to="/data-extraction"
-									className="group flex h-full flex-col items-center justify-center rounded-lg border-2 border-blue-300/40 bg-blue-300/10 p-6 text-center transition-colors hover:border-blue-400 hover:bg-blue-300/30"
-								>
-									<div className="mb-1 flex items-center justify-center gap-2">
-										<LuFileSpreadsheet className="text-blue-700" size={22} />
-										<h3 className="text-xl font-bold">Extract from Tables</h3>
-									</div>
-									<p className="text-sm text-muted-foreground">
-										Source an Object-Centric Event Log from CSV, XLSX, or Parquet files, or a
-										connected database (PostgreSQL, SQLite, DuckDB).
-									</p>
-								</Link>
+								)}
+								<Outlet />
 							</div>
+							{ocelInfo !== undefined && (
+								<Inspector board={inspector} dispatch={dispatchInspector} page={page} />
+							)}
 						</div>
-					)}
-					<Outlet />
-				</div>
-			</div>
-			<InfoSheetViewer />
+					</div>
+					<InfoSheetViewer />
+					<CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+				</InspectorContext.Provider>
+			</ElementInfoContext.Provider>
 		</InfoSheetContext.Provider>
 	);
 }

@@ -1,95 +1,48 @@
-import { type Edge, type Node, useReactFlow } from "@xyflow/react";
-import ELK, { type ElkNode, type LayoutOptions } from "elkjs/lib/elk.bundled.js";
-import { useCallback } from "react";
+import type { GraphRequest, Layout } from "@r4pm/components";
+import { wasmViz } from "@r4pm/components/viz/wasm";
+import type { Edge, Node } from "@xyflow/react";
 import type { EventTypeLinkData, EventTypeNodeData, GateNodeData } from "./types";
 
-const elk = new ELK();
-// void (async () => {
-//   console.log(
-//     await elk.knownLayoutAlgorithms(),
-//     await elk.knownLayoutCategories(),
-//     await elk.knownLayoutOptions(),
-//   );
-// })();
+const ROW_GAP = 80;
+const SIBLING_GAP = 65;
 
-const defaultOptions = {
-	"elk.layered.spacing.nodeNodeBetweenLayers": "100",
-	"elk.direction": "DOWN",
+/** A gate's left output goes first. graphlay's tree keeps the order of the edges, so its left
+ *  child ends up on the left. */
+const handleOrder = (e: Edge) =>
+	e.sourceHandle?.endsWith("-left-source") ? 0 : e.sourceHandle?.endsWith("-right-source") ? 2 : 1;
 
-	"elk.algorithm": "mrtree",
-	"elk.spacing.nodeNode": "65",
-};
-
-export const useLayoutedElements = () => {
-	const { getNodes, setNodes, getEdges, fitView } = useReactFlow<
-		Node<EventTypeNodeData | GateNodeData>,
-		Edge<EventTypeLinkData>
-	>();
-
-	const getLayoutedElements = useCallback(
-		(options: any, fitViewAfter = true) => {
-			const nodes: Node<EventTypeNodeData | GateNodeData>[] = [...getNodes()];
-			const edges = getEdges();
-			void applyLayoutToNodes(nodes, edges, options).then(() => {
-				setNodes(nodes);
-				if (fitViewAfter) {
-					setTimeout(() => {
-						fitView();
-					}, 50);
-				}
-			});
-		},
-		[fitView, getEdges, getNodes, setNodes],
-	);
-
-	return { getLayoutedElements };
-};
-
-// Apply layout in place
+/** Moves `nodes` into a top-down tree, each box or gate centred over its children. The editor
+ *  allows no second parent and no loop, so a query is a tree or a forest of them. */
 export async function applyLayoutToNodes(
 	nodes: Node<EventTypeNodeData | GateNodeData>[],
-	edges: Edge<any>[],
-	options: Partial<LayoutOptions> = {},
+	edges: Edge<EventTypeLinkData>[],
 ) {
-	const layoutOptions = { ...defaultOptions, ...options };
-	const graph = {
-		id: "root",
-		layoutOptions,
-		children: nodes.map((n) => {
-			const targetPorts = [{ id: `${n.id}-target`, properties: { side: "NORTH" } }];
-
-			const sourcePorts =
-				"box" in n.data || ("type" in n.data && n.data.type === "not")
-					? [{ id: `${n.id}-source`, properties: { side: "SOUTH" } }]
-					: [
-							{ id: `${n.id}-left-source`, properties: { side: "WEST" } },
-							{ id: `${n.id}-right-source`, properties: { side: "EAST" } },
-						];
-			return {
-				id: n.id,
+	const index = new Map(nodes.map((n, i) => [n.id, i]));
+	const graph: GraphRequest["graph"] = {
+		nodes: nodes.map((n) => ({
+			size: {
 				width: n.measured?.width ?? n.width ?? ("box" in n.data ? 240 : 128),
 				height: n.measured?.height ?? n.height ?? ("box" in n.data ? 180 : 80),
-				properties: { "org.eclipse.elk.portConstraints": "FIXED_SIDE" },
-				//  also pass plain id to handle edges without a sourceHandle or targetHandle
-				ports: [{ id: n.id, properties: { side: "EAST" } }, ...targetPorts, ...sourcePorts],
-			};
-		}),
-		edges: edges.map((e) => ({
-			id: e.id,
-			sources: [e.sourceHandle ?? e.source],
-			targets: [e.targetHandle ?? e.target],
+			},
 		})),
+		edges: [...edges]
+			.sort((a, b) => handleOrder(a) - handleOrder(b))
+			.flatMap((e) => {
+				const source = index.get(e.source);
+				const target = index.get(e.target);
+				return source === undefined || target === undefined || source === target
+					? []
+					: [{ source, target }];
+			}),
 	};
-	await elk.layout(graph).then(({ children }: ElkNode) => {
-		if (children !== undefined) {
-			children.forEach((node) => {
-				const n = nodes.find((n) => n.id === node.id);
-				if (n !== undefined) {
-					n.position = { x: node.x ?? 0, y: node.y ?? 0 };
-				} else {
-					console.warn(`[Layout] Node not found: ${node.id}`);
-				}
-			});
-		}
+	const layout = (await wasmViz.call("layout_tree", {
+		request: {
+			graph,
+			options: { row_gap: ROW_GAP, sibling_gap: SIBLING_GAP, subtree_gap: SIBLING_GAP },
+		},
+	})) as Layout;
+	// graphlay places node centres, React Flow positions are top-left corners.
+	layout.nodes.forEach(({ center, size }, i) => {
+		nodes[i].position = { x: center.x - size.width / 2, y: center.y - size.height / 2 };
 	});
 }

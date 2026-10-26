@@ -4,4 +4,9 @@ import type { LabelValue } from "./LabelValue";
 import type { ObjectVariable } from "./ObjectVariable";
 import type { ViolationReason } from "./ViolationReason";
 
-export type BindingRow = { objects: Array<[ObjectVariable, string]>, events: Array<[EventVariable, string]>, labels: Array<[string, LabelValue]>, violation: ViolationReason | null, };
+export type BindingRow = { objects: Array<[ObjectVariable, string]>, events: Array<[EventVariable, string]>, labels: Array<[string, LabelValue]>, violation: ViolationReason | null, 
+/**
+ * For each node of [`EvalPageRequest::child_nodes`], the number of its rows that extend this
+ * row.
+ */
+childCounts?: Array<number>, };

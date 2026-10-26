@@ -1,3 +1,5 @@
+import { type ViewerConfig, ViewerConfigProvider } from "@r4pm/components";
+import { wasmViz } from "@r4pm/components/viz/wasm";
 import { lazy, Suspense } from "react";
 import { Toaster } from "react-hot-toast";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
@@ -6,7 +8,7 @@ import ErrorPage from "./ErrorPage.tsx";
 import DataExtractionBlueprintEditor from "./routes/data-extraction/DataExtractionBlueprintEditor.tsx";
 import DataExtractionRoot from "./routes/data-extraction/DataExtractionRoot.tsx";
 import OcelElementViewer from "./routes/OcelElementViewer.tsx";
-import OcelGraphViewer from "./routes/OcelGraphViewer.tsx";
+import { OcelGraphRoute } from "./routes/OcelGraphViewer.tsx";
 import OCDeclareListPage from "./routes/oc-declare/OCDeclareListPage.tsx";
 import OCDeclareViewer from "./routes/oc-declare/OCDeclareViewer.tsx";
 import OcelInfoViewer from "./routes/ocel-info/OcelInfoViewer.tsx";
@@ -38,7 +40,7 @@ const router = createBrowserRouter([
 		children: [
 			{ path: "/constraints", element: <OuterVisualEditor /> },
 			{ path: "/ocel-info", element: <OcelInfoViewer /> },
-			{ path: "/graph", element: <OcelGraphViewer /> },
+			{ path: "/graph", element: <OcelGraphRoute /> },
 			{ path: "/path-schemas", element: <PathSchemasViewer /> },
 			{ path: "/ocel-element", element: <OcelElementViewer /> },
 			{ path: "/oc-declare", element: <OCDeclareListPage /> },
@@ -53,9 +55,13 @@ const router = createBrowserRouter([
 	},
 ]);
 
+// The web and desktop entries both mount this provider. Without `viz`, the graphs of
+// @r4pm/components get no layout, and OC-DECLARE stacks its activities in a column.
+const viewerConfig: ViewerConfig = { viz: wasmViz };
+
 export const MainRouterProvider = () => (
-	<>
+	<ViewerConfigProvider value={viewerConfig}>
 		<Toaster position="top-right" />
 		<RouterProvider router={router} />
-	</>
+	</ViewerConfigProvider>
 );

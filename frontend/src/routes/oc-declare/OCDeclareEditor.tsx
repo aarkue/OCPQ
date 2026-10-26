@@ -104,7 +104,7 @@ export default function OCDeclareEditor({
 	const modelRef = useRef(model);
 	modelRef.current = model;
 	const viewportRef = useRef<Viewport>(initialFlowJson?.viewport ?? DEFAULT_VIEWPORT);
-	const { settings, setSettings, layout, activityColor } = useOCDeclareLayoutSettings();
+	const { settings, setSettings, activityColor } = useOCDeclareLayoutSettings();
 
 	// Stable identities: the viz rebuilds its edit context (and every node/edge with it) whenever a prop changes.
 	const eventTypes = useMemo(() => ocelInfo?.event_types.map((t) => t.name) ?? [], [ocelInfo]);
@@ -207,7 +207,6 @@ export default function OCDeclareEditor({
 					eventTypeCounts={ocelStats?.event_type_counts}
 					getSupport={getSupport}
 					onProjectActivities={onProjectActivities}
-					layoutOverride={layout}
 					activityColor={activityColor}
 					relayoutOnChange={settings.relayoutOnChange}
 					onDiscover={onDiscover}

@@ -109,7 +109,7 @@ export function BackendModeDialog({
 	return (
 		<AlertDialog open={step !== undefined} onOpenChange={(open) => setStep(open ? 0 : undefined)}>
 			<AlertDialogTrigger asChild>
-				<Button className="mt-8 mb-1 text-xs" size="sm" variant="ghost">
+				<Button className="text-xs h-7" size="sm" variant="ghost">
 					<span className="mr-1">{backendMode === "local" ? "Local" : "HPC"}</span>
 					Backend
 				</Button>

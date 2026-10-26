@@ -161,6 +161,28 @@ describe("ocel/check-constraints-box", () => {
 		// The OCEL rides along so the reader can refuse an evaluation produced from a different one.
 		expect(fake.calls[1].args).toEqual({ ocel: OCEL_ID, eval: "eval" });
 	});
+
+	it("keeps each slot's evaluation under its own handle for paging", async () => {
+		let version = 0;
+		const fake = makeFake({
+			bindings: {
+				"app_bindings::query::check_constraints_box": (args) =>
+					(args as { output_id: string }).output_id,
+				"app_bindings::query::eval_summary": () => ({ nodeSummaries: [], evalVersion: ++version }),
+				"app_bindings::query::eval_results_page": () => ({ rows: [] }),
+			},
+		});
+		const provider = createBackendProvider(fake.backend);
+		const a = await provider["ocel/check-constraints-box"]({} as never, false, "q0");
+		const b = await provider["ocel/check-constraints-box"]({} as never, false, "q1");
+		await provider["ocel/eval-results/page"]({ evalVersion: a.evalVersion } as never);
+		await provider["ocel/eval-results/page"]({ evalVersion: b.evalVersion } as never);
+		expect(
+			fake.calls
+				.filter((c) => c.id === "app_bindings::query::eval_results_page")
+				.map((c) => c.args.eval),
+		).toEqual(["eval-q0", "eval-q1"]);
+	});
 });
 
 describe("data-extraction/execute", () => {

@@ -13,6 +13,8 @@ export function useEvalResultPage(req: EvalPageRequest | null) {
 			req?.offset,
 			req?.limit,
 			req?.violated ?? null,
+			JSON.stringify(req?.parent ?? null),
+			req?.childNodes?.join() ?? null,
 		],
 		queryFn: () => backend["ocel/eval-results/page"](req!),
 		enabled: req !== null,

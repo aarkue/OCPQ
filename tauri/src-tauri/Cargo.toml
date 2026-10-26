@@ -56,5 +56,8 @@ custom-protocol = ["tauri/custom-protocol"]
 # binary with `--features wdio --config src-tauri/tauri.conf.test.json`.
 wdio = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"

@@ -1,5 +1,6 @@
 import { ActivityChooser, ObjectTypeChooser } from "@r4pm/components";
-import { useContext, useEffect, useState } from "react";
+import clsx from "clsx";
+import { useContext, useEffect, useRef, useState } from "react";
 import { LuAsterisk, LuPlus } from "react-icons/lu";
 import FilterLabelIcon from "@/components/FilterLabelIcon";
 import { R4pmIsland } from "@/components/r4pm/R4pmIsland";
@@ -14,14 +15,26 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useOcelStats } from "@/hooks";
+import { useAddVariableRequest } from "@/inspector/query-context";
+import {
+	type ConnectionCandidate,
+	deDupe,
+	getConnectionCandidates,
+	getTypesRelatedToBound,
+} from "@/lib/variable-hints";
 import type { BindingBox } from "@/types/generated/BindingBox";
 import type { EventVariable } from "@/types/generated/EventVariable";
 import type { FilterLabel } from "@/types/generated/FilterLabel";
 import type { ObjectVariable } from "@/types/generated/ObjectVariable";
+import type { OCELInfo } from "@/types/ocel";
 import { VisualEditorContext } from "../VisualEditorContext";
+import { FilterOrConstraintDisplay } from "./FilterOrConstraintEditor";
+import { QualifierSelector } from "./filter-helpers";
 import { EvVarName, getEvVarName, getObVarName, ObVarName } from "./variable-names";
 
 export default function NewVariableChooser({
@@ -33,13 +46,17 @@ export default function NewVariableChooser({
 	box: BindingBox;
 	updateBox: (box: BindingBox) => unknown;
 }) {
-	const { ocelInfo, getAvailableVars, getVarName } = useContext(VisualEditorContext);
+	const { ocelInfo, getAvailableVars, getVarName, getTypesForVariable } =
+		useContext(VisualEditorContext);
 	const ocelStats = useOcelStats();
 	const [alertState, setAlertState] = useState<
 		{
 			variant: "event" | "object";
 			key: ObjectVariable | EventVariable;
 			value: string[];
+			showAllTypes?: boolean;
+			/** Connections ticked by hand. Unset means only the best supported one is ticked. */
+			connections?: { key: string; qualifier: string | null }[];
 		} & ({ mode: "add" } | { mode: "edit"; editKey: ObjectVariable | EventVariable })
 	>();
 	const availableObjectVars = getAvailableVars(id, "object");
@@ -82,13 +99,116 @@ export default function NewVariableChooser({
 		}
 		const firstFree = Array.from({ length: 100 }, (_, i) => i).find((i) => !taken.includes(i));
 		if (firstFree !== undefined) {
-			setAlertState({ ...alertState, key: firstFree });
+			// Ticked connections name the variable, so they go with it.
+			setAlertState({ ...alertState, key: firstFree, connections: undefined });
 		}
 	}, [alertState, takenObjectVars, takenEventVars]);
+
+	// A type picked in the inspector's type graph opens this dialog with it chosen.
+	const addRequest = useAddVariableRequest();
+	const handledRequest = useRef(addRequest?.at);
+	useEffect(() => {
+		if (addRequest === undefined || addRequest.at === handledRequest.current) return;
+		handledRequest.current = addRequest.at;
+		if (addRequest.nodeId !== id) return;
+		const free = addRequest.kind === "object" ? getAvailableObjVars() : getAvailableEvVars();
+		setAlertState({
+			mode: "add",
+			variant: addRequest.kind,
+			key: free[0],
+			value: [addRequest.type],
+		});
+	});
 
 	if (ocelInfo === undefined) {
 		return <div>No OCEL Info available. Check backend and reload.</div>;
 	}
+
+	function getTypeChoices(state: NonNullable<typeof alertState>, ocelInfo: OCELInfo) {
+		const boundTypes = (variant: "object" | "event") =>
+			deDupe(
+				(variant === "object" ? availableObjectVars : availableEventVars)
+					.filter(
+						(v) => !(state.mode === "edit" && state.variant === variant && v === state.editKey),
+					)
+					.flatMap((v) => getTypesForVariable(id, v, variant).map((t) => t.name)),
+			);
+		const allCounts =
+			state.variant === "object"
+				? (ocelStats?.object_type_counts ??
+					Object.fromEntries(ocelInfo.object_types.map((t) => [t.name, 0])))
+				: (ocelStats?.event_type_counts ??
+					Object.fromEntries(ocelInfo.event_types.map((t) => [t.name, 0])));
+		const related = getTypesRelatedToBound(
+			ocelInfo,
+			state.variant,
+			boundTypes("object"),
+			boundTypes("event"),
+		);
+		// No related types means nothing in scope can be joined against, so filtering would hide everything.
+		if (related.length === 0) {
+			return { counts: allCounts, related, total: Object.keys(allCounts).length, canFilter: false };
+		}
+		// Keep the variable's types visible while editing, even unrelated ones, so they can be deselected.
+		const initial =
+			state.mode === "edit"
+				? ((state.variant === "object" ? box.newObjectVars : box.newEventVars)[state.editKey] ?? [])
+				: [];
+		const keep = new Set([...related, ...initial, ...state.value]);
+		const counts =
+			state.showAllTypes === true
+				? allCounts
+				: Object.fromEntries(Object.entries(allCounts).filter(([t]) => keep.has(t)));
+		return { counts, related, total: Object.keys(allCounts).length, canFilter: true };
+	}
+	const typeChoices = alertState !== undefined ? getTypeChoices(alertState, ocelInfo) : undefined;
+
+	const candidates: ConnectionCandidate[] =
+		alertState?.mode === "add" && alertState.value.length > 0
+			? getConnectionCandidates(
+					ocelInfo,
+					{ kind: alertState.variant, variable: alertState.key, types: alertState.value },
+					(["object", "event"] as const).flatMap((kind) =>
+						(kind === "object" ? availableObjectVars : availableEventVars).map((v) => ({
+							kind,
+							variable: v,
+							types: getTypesForVariable(id, v, kind).map((t) => t.name),
+						})),
+					),
+				)
+			: [];
+	const connections =
+		alertState?.connections ??
+		(candidates.length > 0 ? [{ key: candidates[0].key, qualifier: null }] : []);
+	const setConnections = (next: { key: string; qualifier: string | null }[]) =>
+		setAlertState((s) => (s ? { ...s, connections: next } : s));
+	const connectionFilters = connections.flatMap((c) => {
+		const candidate = candidates.find((cand) => cand.key === c.key);
+		return candidate !== undefined ? [{ ...candidate.filter, qualifier: c.qualifier }] : [];
+	});
+	const addVariable = (connect: boolean) => {
+		if (alertState === undefined) return;
+		const newBox = { ...box };
+		if (alertState.mode === "edit") {
+			if (alertState.variant === "object") {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete newBox.newObjectVars[alertState.editKey];
+			} else {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete newBox.newEventVars[alertState.editKey];
+			}
+		}
+		if (alertState.variant === "object") {
+			newBox.newObjectVars[alertState.key] = alertState.value;
+		} else {
+			newBox.newEventVars[alertState.key] = alertState.value;
+		}
+		if (connect) {
+			newBox.filters = [...newBox.filters, ...connectionFilters];
+		}
+		updateBox(newBox);
+		setAlertState(undefined);
+	};
 	return (
 		<div className="font-normal text-left w-full">
 			<div className="flex items-center gap-x-1 -mb-0.5">
@@ -277,7 +397,7 @@ export default function NewVariableChooser({
 									onChange={(value: string) => {
 										const variableKey = Number.parseInt(value.split(" --- ")[0], 10);
 										if (!Number.isNaN(variableKey) && variableKey >= 0) {
-											setAlertState({ ...alertState, key: variableKey });
+											setAlertState({ ...alertState, key: variableKey, connections: undefined });
 										}
 									}}
 									name={""}
@@ -287,38 +407,60 @@ export default function NewVariableChooser({
 											: getVarName(alertState.key, "event").name
 									}`}
 								/>
-								<R4pmIsland>
-									{alertState?.variant === "object" ? (
-										<ObjectTypeChooser
-											counts={
-												ocelStats?.object_type_counts ??
-												Object.fromEntries(ocelInfo.object_types.map((t) => [t.name, 0]))
-											}
-											value={new Set(alertState.value)}
-											onChange={(next) =>
-												setAlertState((s) => (s ? { ...s, value: [...next] } : s))
-											}
-											mode="multi"
-											searchable
-											showCutoff={false}
-										/>
-									) : (
-										<ActivityChooser
-											counts={
-												ocelStats?.event_type_counts ??
-												Object.fromEntries(ocelInfo.event_types.map((t) => [t.name, 0]))
-											}
-											value={new Set(alertState.value)}
-											onChange={(next) =>
-												setAlertState((s) => (s ? { ...s, value: [...next] } : s))
-											}
-											mode="multi"
-											searchable
-											showCutoff={false}
-										/>
+								<div className="flex flex-col gap-y-1.5">
+									{typeChoices?.canFilter === true && (
+										<Label className="flex items-center gap-x-2 font-normal text-xs">
+											<Switch
+												className="scale-75"
+												checked={alertState.showAllTypes !== true}
+												onCheckedChange={(checked) =>
+													setAlertState((s) => (s ? { ...s, showAllTypes: !checked } : s))
+												}
+											/>
+											Only types related to bound variables ({typeChoices.related.length} of{" "}
+											{typeChoices.total})
+										</Label>
 									)}
-								</R4pmIsland>
+									<R4pmIsland>
+										{alertState?.variant === "object" ? (
+											<ObjectTypeChooser
+												counts={typeChoices?.counts ?? {}}
+												value={new Set(alertState.value)}
+												onChange={(next) =>
+													setAlertState((s) =>
+														s ? { ...s, value: [...next], connections: undefined } : s,
+													)
+												}
+												mode="multi"
+												searchable
+												showCutoff={false}
+											/>
+										) : (
+											<ActivityChooser
+												counts={typeChoices?.counts ?? {}}
+												value={new Set(alertState.value)}
+												onChange={(next) =>
+													setAlertState((s) =>
+														s ? { ...s, value: [...next], connections: undefined } : s,
+													)
+												}
+												mode="multi"
+												searchable
+												showCutoff={false}
+											/>
+										)}
+									</R4pmIsland>
+								</div>
 							</div>
+							{candidates.length > 0 && (
+								<ConnectionChooser
+									variant={alertState.variant}
+									variable={alertState.key}
+									candidates={candidates}
+									connections={connections}
+									onChange={setConnections}
+								/>
+							)}
 						</AlertDialogHeader>
 						<AlertDialogFooter>
 							{" "}
@@ -343,35 +485,102 @@ export default function NewVariableChooser({
 								</Button>
 							)}
 							<AlertDialogCancel>Cancel</AlertDialogCancel>
-							<AlertDialogAction
-								disabled={alertState.value.length === 0}
-								onClick={() => {
-									const newBox = { ...box };
-									if (alertState.mode === "edit") {
-										if (alertState.variant === "object") {
-											// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-											delete newBox.newObjectVars[alertState.editKey];
-										} else {
-											// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-											delete newBox.newEventVars[alertState.editKey];
-										}
-									}
-									if (alertState.variant === "object") {
-										newBox.newObjectVars[alertState.key] = alertState.value;
-									} else {
-										newBox.newEventVars[alertState.key] = alertState.value;
-									}
-									updateBox(newBox);
-									setAlertState(undefined);
-								}}
-							>
-								{alertState.mode === "add" ? "Add" : "Save"}
-							</AlertDialogAction>
+							{candidates.length > 0 ? (
+								<>
+									<Button variant="outline" onClick={() => addVariable(false)}>
+										Add without connecting
+									</Button>
+									<Button
+										disabled={connectionFilters.length === 0}
+										onClick={() => addVariable(true)}
+									>
+										Add and connect
+									</Button>
+								</>
+							) : (
+								<AlertDialogAction
+									disabled={alertState.value.length === 0}
+									onClick={() => addVariable(false)}
+								>
+									{alertState.mode === "add" ? "Add" : "Save"}
+								</AlertDialogAction>
+							)}
 						</AlertDialogFooter>
 					</AlertDialogContent>
 				)}
 			</AlertDialog>
 		</div>
+	);
+}
+
+/** Which E2O/O2O filters to add with the new variable, shown the way the node will show them. */
+function ConnectionChooser({
+	variant,
+	variable,
+	candidates,
+	connections,
+	onChange,
+}: {
+	variant: "object" | "event";
+	variable: number;
+	candidates: ConnectionCandidate[];
+	connections: { key: string; qualifier: string | null }[];
+	onChange: (connections: { key: string; qualifier: string | null }[]) => unknown;
+}) {
+	const selected = new Map(connections.map((c) => [c.key, c.qualifier]));
+	const toggle = (key: string, on: boolean) =>
+		onChange(
+			on
+				? [...connections, { key, qualifier: selected.get(key) ?? null }]
+				: connections.filter((c) => c.key !== key),
+		);
+	// Picking a qualifier for an unticked connection ticks it.
+	const setQualifier = (key: string, qualifier: string | null) =>
+		onChange(
+			selected.has(key)
+				? connections.map((c) => (c.key === key ? { key, qualifier } : c))
+				: [...connections, { key, qualifier }],
+		);
+	return (
+		<fieldset className="mt-4 rounded-lg border border-slate-200 px-3 pt-1 pb-2 text-left">
+			<legend className="flex items-center gap-1 px-1.5 text-sm font-semibold text-slate-900">
+				Connect{" "}
+				{variant === "object" ? <ObVarName obVar={variable} /> : <EvVarName eventVar={variable} />}{" "}
+				to
+			</legend>
+			<div className="flex max-h-56 flex-col gap-1 overflow-auto">
+				{candidates.map((c) => {
+					const on = selected.has(c.key);
+					const qualifier = selected.get(c.key) ?? null;
+					const id = `connect-${c.key}`;
+					return (
+						<div
+							key={c.key}
+							className={clsx(
+								"flex items-center gap-3 rounded-md px-2 py-1",
+								on && "bg-slate-100 ring-1 ring-inset ring-slate-300",
+							)}
+						>
+							<Checkbox id={id} checked={on} onCheckedChange={(v) => toggle(c.key, v === true)} />
+							<label htmlFor={id} className="min-w-0 cursor-pointer">
+								<FilterOrConstraintDisplay value={{ ...c.filter, qualifier }} />
+							</label>
+							<span className="flex-1" />
+							<div className="w-44 [&>button]:h-8">
+								<QualifierSelector
+									value={qualifier}
+									onChange={(q) => setQualifier(c.key, q)}
+									getSuggestions={c.suggestQualifiers}
+								/>
+							</div>
+							<span className="w-28 shrink-0 text-right text-xs tabular-nums text-slate-600">
+								{c.support.toLocaleString()} relations
+							</span>
+						</div>
+					);
+				})}
+			</div>
+		</fieldset>
 	);
 }
 

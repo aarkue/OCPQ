@@ -4243,6 +4243,7 @@ version = "0.0.3"
 dependencies = [
  "app-bindings",
  "backend-shared",
+ "gtk",
  "log",
  "ocpq-core",
  "ocpq-native",
@@ -4294,7 +4295,7 @@ dependencies = [
 
 [[package]]
 name = "ocpq_cli"
-version = "0.11.2"
+version = "0.13.0"
 dependencies = [
  "chrono",
  "clap",

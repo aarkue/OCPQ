@@ -17,11 +17,12 @@ import type {
 	PathEnumerateOptions as BindingPathEnumerateOptions,
 	PathSchemaDetailOptions as BindingPathSchemaDetailOptions,
 	PathSchemaOptions as BindingPathSchemaOptions,
+	ElementRelations,
+	ElementSearchHit,
 	EvaluateBoxTreeResultHandle,
 	SlimLinkedOCELHandle,
 } from "./bindings/generated";
 import { createHttpBackend } from "./bindings/http-backend";
-import type { OCDeclareDiscoveryOptions } from "./routes/oc-declare/flow/OCDeclareDiscoveryButton";
 import type { OCDeclareArc } from "./routes/oc-declare/types/OCDeclareArc";
 import type {
 	DiscoverConstraintsRequest,
@@ -96,6 +97,8 @@ export type BackendProvider = {
 	"ocel/check-constraints-box": (
 		tree: BindingBoxTree,
 		measurePerformance?: boolean,
+		/** Keeps this result apart from other slots' results, e.g., one slot per query. */
+		slot?: string,
 	) => Promise<EvaluateBoxTreeSummary>;
 	"ocel/eval-results/page": (req: EvalPageRequest) => Promise<EvalPageResponse>;
 	"ocel/export": (format: "XML" | "JSON" | "SQLITE") => Promise<Blob | undefined>;
@@ -109,10 +112,14 @@ export type BackendProvider = {
 	"ocel/export-bindings": (
 		nodeIndex: number,
 		options: TableExportOptions,
+		evalVersion?: number,
 	) => Promise<Blob | undefined>;
 	"ocel/graph": (options: OCELGraphOptions) => Promise<{
 		nodes: (OCELEvent | OCELObject)[];
 		links: { source: string; target: string; qualifier: string }[];
+		truncated: boolean;
+		/** Nodes whose relations are all in the graph. */
+		expanded: string[];
 	}>;
 	"ocel/path-schemas/type-graph": () => Promise<PathTypeGraph>;
 	"ocel/path-schemas/enumerate": (options: PathEnumerateOptions) => Promise<PathSchemaInfo[]>;
@@ -126,6 +133,12 @@ export type BackendProvider = {
 	"ocel/get-event": (
 		specifier: { id: string } | { index: number },
 	) => Promise<{ index: number; event: OCELEvent }>;
+	"ocel/search-elements": (query: string, limit: number) => Promise<ElementSearchHit[]>;
+	"ocel/element-relations": (
+		type: "event" | "object",
+		id: string,
+		limit: number,
+	) => Promise<ElementRelations | null>;
 	"hpc/login": (connectionConfig: ConnectionConfig) => Promise<void>;
 	"hpc/start": (jobOptions: OCPQJobOptions) => Promise<string>;
 	"hpc/job-status": (jobID: string) => Promise<JobStatus>;
@@ -144,7 +157,9 @@ export type BackendProvider = {
 	"check-for-updates"?: () => Promise<UpdateInfo | null>;
 	restart?: () => Promise<void>;
 	"get-version"?: () => Promise<string>;
-	"ocel/discover-oc-declare": (options: OCDeclareDiscoveryOptions) => Promise<OCDeclareArc[]>;
+	"ocel/discover-oc-declare": (
+		options: BindingOCDeclareDiscoveryOptions,
+	) => Promise<OCDeclareArc[]>;
 	"ocel/evaluate-oc-declare-arcs": (arcs: OCDeclareArc[]) => Promise<number[]>;
 	/** Lossless projection of arcs onto a subset of activities (folds removed activities' constraints
 	 *  into the survivors). */
@@ -214,6 +229,8 @@ export const ErrorBackendContext: BackendProvider = {
 	"ocel/path-schemas/schema-detail": warnForNoBackendProvider,
 	"ocel/get-event": warnForNoBackendProvider,
 	"ocel/get-object": warnForNoBackendProvider,
+	"ocel/search-elements": warnForNoBackendProvider,
+	"ocel/element-relations": warnForNoBackendProvider,
 	"hpc/login": warnForNoBackendProvider,
 	"hpc/start": warnForNoBackendProvider,
 	"hpc/job-status": warnForNoBackendProvider,
@@ -246,9 +263,9 @@ const OCEL_KIND = "SlimLinkedOCEL";
 /** Where an extraction run builds its log, so a failed run cannot destroy the loaded one. */
 const EXTRACTION_SCRATCH_ID = "extraction-scratch";
 
-/** Registry handle of the latest evaluation, keyed like the log: the UI holds exactly one. */
+/** Registry handle of an evaluation without a slot, and the prefix of slotted ones. Each slot holds
+ *  its latest evaluation, so results of different queries stay pageable side by side. */
 const EVAL_ID = "eval";
-const EVAL = EVAL_ID as EvaluateBoxTreeResultHandle;
 
 const EXPORT_FORMAT = { XML: "xml", JSON: "json", SQLITE: "sqlite" } as const;
 
@@ -272,6 +289,9 @@ function twin<T>(value: unknown): T {
 /** Implement the UI-facing provider on top of one transport. */
 export function createBackendProvider(backend: BackendContext): BackendProvider {
 	const call = backend.callBinding;
+	const evalHandleByVersion = new Map<number, string>();
+	const evalHandleFor = (version: number | undefined) =>
+		(version !== undefined ? evalHandleByVersion.get(version) : undefined) ?? EVAL_ID;
 
 	/** Check via `listObjects()` rather than try/catch around the read: a caught transport error
 	 *  would be indistinguishable from "no log loaded" and falsely report the backend as offline. */
@@ -309,23 +329,30 @@ export function createBackendProvider(backend: BackendContext): BackendProvider 
 		"ocel/unload": () => backend.unloadObject(OCEL_ID),
 		"ocel/upload": (file) => loadFile(file, ocelUploadFormat(file.name)),
 		"ocel/upload-from-xes": (file) => loadFile(file, file.name.endsWith(".gz") ? "xes.gz" : "xes"),
-		"ocel/check-constraints-box": async (tree, measurePerformance) => {
+		"ocel/check-constraints-box": async (tree, measurePerformance, slot) => {
+			const handleId = slot === undefined ? EVAL_ID : `${EVAL_ID}-${slot}`;
 			const evaluation = await call("app_bindings::query::check_constraints_box", {
 				ocel: OCEL,
 				tree: twin(tree),
 				measure_performance: measurePerformance,
-				output_id: EVAL_ID,
+				output_id: handleId,
 			});
-			return twin(
+			const summary = twin<EvaluateBoxTreeSummary>(
 				await call("app_bindings::query::eval_summary", { ocel: OCEL, eval: evaluation }),
 			);
+			// The backend overwrote this handle and answers reads of its older versions as stale.
+			for (const [version, handle] of evalHandleByVersion) {
+				if (handle === handleId) evalHandleByVersion.delete(version);
+			}
+			evalHandleByVersion.set(summary.evalVersion, handleId);
+			return summary;
 		},
 		"ocel/eval-results/page": async (req) => {
 			try {
 				return twin(
 					await call("app_bindings::query::eval_results_page", {
 						ocel: OCEL,
-						eval: EVAL,
+						eval: evalHandleFor(req.evalVersion) as EvaluateBoxTreeResultHandle,
 						request: twin<BindingEvalPageRequest>(req),
 					}),
 				);
@@ -358,8 +385,13 @@ export function createBackendProvider(backend: BackendContext): BackendProvider 
 					options: twin<BindingAutoDiscoverRequest>(options),
 				}),
 			),
-		"ocel/export-bindings": async (nodeIndex, options) => {
-			const bytes = await backend.exportBindingsTable(OCEL_ID, EVAL_ID, nodeIndex, options);
+		"ocel/export-bindings": async (nodeIndex, options, evalVersion) => {
+			const bytes = await backend.exportBindingsTable(
+				OCEL_ID,
+				evalHandleFor(evalVersion),
+				nodeIndex,
+				options,
+			);
 			return new Blob([bytes as BlobPart], { type: TABLE_MIME[options.format] });
 		},
 		"ocel/graph": async (options) => {
@@ -415,6 +447,17 @@ export function createBackendProvider(backend: BackendContext): BackendProvider 
 			}
 			return twin(res);
 		},
+		"ocel/search-elements": async (query, limit) =>
+			twin(await call("app_bindings::ocel::ocel_search_elements", { ocel: OCEL, query, limit })),
+		"ocel/element-relations": async (type, id, limit) =>
+			twin(
+				await call("app_bindings::ocel::ocel_element_relations", {
+					ocel: OCEL,
+					is_object: type === "object",
+					id,
+					limit,
+				}),
+			),
 		"hpc/login": async (connectionConfig) => {
 			if (backend.hpcLogin === undefined) throw new Error("HPC is not available on this backend");
 			await backend.hpcLogin(connectionConfig);
