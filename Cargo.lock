@@ -2636,6 +2636,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "graphlay"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46b97373f53dfbb42a82b9d2a42d32dfc2c4ae3d13f589a61b88e6338381fc77"
+dependencies = [
+ "libm",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+]
+
+[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3598,8 +3611,8 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
 name = "macros_process_mining"
-version = "0.6.0"
-source = "git+https://github.com/aarkue/rust4pm.git?branch=main#0a1738cbe4852f241901592656c697e7e0540036"
+version = "0.6.2"
+source = "git+https://github.com/aarkue/rust4pm.git?branch=feat/inductive-miner#84570b805414b4ef81d420b9a82d4e6c43994e8f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4989,8 +5002,8 @@ dependencies = [
 
 [[package]]
 name = "process_mining"
-version = "0.6.0"
-source = "git+https://github.com/aarkue/rust4pm.git?branch=main#0a1738cbe4852f241901592656c697e7e0540036"
+version = "0.6.2"
+source = "git+https://github.com/aarkue/rust4pm.git?branch=feat/inductive-miner#84570b805414b4ef81d420b9a82d4e6c43994e8f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -4998,6 +5011,7 @@ dependencies = [
  "csv",
  "dbcon",
  "flate2",
+ "graphlay",
  "hashbrown 0.17.1",
  "inventory",
  "itertools 0.14.0",

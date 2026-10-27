@@ -1,5 +1,4 @@
-import type { GraphRequest, Layout } from "@r4pm/components";
-import { wasmViz } from "@r4pm/components/viz/wasm";
+import type { GraphRequest, Layout, VizTransport } from "@r4pm/components";
 import type { Edge, Node } from "@xyflow/react";
 import type { EventTypeLinkData, EventTypeNodeData, GateNodeData } from "./types";
 
@@ -14,6 +13,7 @@ const handleOrder = (e: Edge) =>
 /** Moves `nodes` into a top-down tree, each box or gate centred over its children. The editor
  *  allows no second parent and no loop, so a query is a tree or a forest of them. */
 export async function applyLayoutToNodes(
+	viz: VizTransport,
 	nodes: Node<EventTypeNodeData | GateNodeData>[],
 	edges: Edge<EventTypeLinkData>[],
 ) {
@@ -35,7 +35,7 @@ export async function applyLayoutToNodes(
 					: [{ source, target }];
 			}),
 	};
-	const layout = (await wasmViz.call("layout_tree", {
+	const layout = (await viz.call("layout_tree", {
 		request: {
 			graph,
 			options: { row_gap: ROW_GAP, sibling_gap: SIBLING_GAP, subtree_gap: SIBLING_GAP },

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { MenuEntry } from "@/inspector/inspect-menu";
 import type { EdgeLook, TypeGraphFocus } from "@/inspector/query-scope";
+import { scrollAncestor, wheelGesture } from "@/lib/wheel-gesture";
 import type { OCELTypeStats } from "@/types/generated/OCELTypeStats";
 import type { OCELInfo } from "@/types/ocel";
 import { buildTypeGraph, parseTypeKey } from "./type-graph";
@@ -114,12 +115,17 @@ export function OcelTypeGraphView({
 		const box = boxRef.current;
 		if (box === null) return;
 		let hideHint: ReturnType<typeof setTimeout> | undefined;
+		const gesture = wheelGesture();
 		const onWheel = (ev: WheelEvent) => {
-			if (ev.ctrlKey || ev.metaKey) {
+			if (gesture(ev) === "zoom") {
 				ev.preventDefault();
 				return;
 			}
 			ev.stopPropagation();
+			if (ev.ctrlKey || ev.metaKey) {
+				ev.preventDefault();
+				scrollAncestor(box, ev);
+			}
 			setZoomHint(true);
 			clearTimeout(hideHint);
 			hideHint = setTimeout(() => setZoomHint(false), 1200);

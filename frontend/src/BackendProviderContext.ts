@@ -1,3 +1,4 @@
+import type { VizTransport } from "@r4pm/components";
 import type {
 	Blueprint as ExtractionBlueprint,
 	ExtractionCatalog,
@@ -80,6 +81,8 @@ export type ExtractionConnections = Record<string, string>;
 export type ExecuteExtractionResponse = { report: ExtractionReport };
 
 export type BackendProvider = {
+	/** rust4pm's visualization (layout and SVG export) on this backend, for `ViewerConfig.viz`. */
+	viz: VizTransport;
 	"ocel/info": () => Promise<OCELInfo | undefined>;
 	"ocel/stats": () => Promise<OCELTypeStats | undefined>;
 	"ocel/attribute-stats": (
@@ -210,6 +213,7 @@ export async function warnForNoBackendProvider<T>(): Promise<T> {
 }
 
 export const ErrorBackendContext: BackendProvider = {
+	viz: { call: warnForNoBackendProvider },
 	"ocel/info": warnForNoBackendProvider,
 	"ocel/stats": warnForNoBackendProvider,
 	"ocel/attribute-stats": warnForNoBackendProvider,
@@ -309,7 +313,11 @@ export function createBackendProvider(backend: BackendContext): BackendProvider 
 		return await info();
 	};
 
+	// The generated binding ids leave out rust4pm's visualization bindings, which the backend
+	// registers all the same.
+	const callAny = call as unknown as (id: string, args: unknown) => Promise<unknown>;
 	const provider: BackendProvider = {
+		viz: { call: (fn, args) => callAny(`process_mining::visualization::bindings::${fn}`, args) },
 		"ocel/info": () => ifLoaded(info),
 		"ocel/stats": () =>
 			ifLoaded(async () =>

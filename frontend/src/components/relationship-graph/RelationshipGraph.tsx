@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useBackend } from "@/hooks";
 import { MOD_KEY } from "@/lib/platform";
+import { scrollAncestor, wheelGesture } from "@/lib/wheel-gesture";
 import Spinner from "../Spinner";
 import { TypeDot } from "../TypeDot";
 import {
@@ -350,9 +351,14 @@ export function RelationshipGraph({
 		const box = containerRef.current;
 		if (box === null) return;
 		let hideHint: ReturnType<typeof setTimeout> | undefined;
+		const gesture = wheelGesture();
 		const onWheel = (ev: WheelEvent) => {
 			if (!(ev.target instanceof HTMLCanvasElement)) return;
-			if (variant === "card" && !ev.ctrlKey && !ev.metaKey) {
+			if (variant === "card" && gesture(ev) === "scroll") {
+				if (ev.ctrlKey || ev.metaKey) {
+					ev.preventDefault();
+					scrollAncestor(box, ev);
+				}
 				setZoomHint(true);
 				clearTimeout(hideHint);
 				hideHint = setTimeout(() => setZoomHint(false), 1200);

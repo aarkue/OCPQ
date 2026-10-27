@@ -512,7 +512,7 @@ export default function AutoDiscoveryButton({
 									description: "Automatically Discovered",
 								});
 								const [ns, es] = bindingBoxTreeToNodes(newConstraint, 0, 0, 0, v4());
-								await applyLayoutToNodes(ns, es);
+								await applyLayoutToNodes(backend.viz, ns, es);
 								prevDataRef.current[index] = {
 									flowJson: {
 										nodes: ns,

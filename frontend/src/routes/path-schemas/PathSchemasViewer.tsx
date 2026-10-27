@@ -367,7 +367,7 @@ export default function PathSchemasViewer() {
 
 	async function openSelectionAsQuery() {
 		try {
-			await openSchemasAsCombinedQuery(selectedSchemaInfos, temporal, boundedSeconds);
+			await openSchemasAsCombinedQuery(backend.viz, selectedSchemaInfos, temporal, boundedSeconds);
 			navigate("/constraints");
 		} catch {
 			toast.error("Failed to create query");

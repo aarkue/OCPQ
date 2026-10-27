@@ -359,7 +359,7 @@ export default function VisualEditor(props: VisualEditorProps) {
 				nodes.find((n) => n.id === e.target) !== undefined,
 		);
 		const { x: beforeX, y: beforeY } = nodes.length > 0 ? nodes[0].position : { x: 0, y: 0 };
-		await applyLayoutToNodes(nodes, edges);
+		await applyLayoutToNodes(backend.viz, nodes, edges);
 		if (!isSelectionEmpty) {
 			const { x: afterX, y: afterY } = nodes.length > 0 ? nodes[0].position : { x: 0, y: 0 };
 			const diffX = beforeX - afterX;

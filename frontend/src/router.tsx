@@ -1,10 +1,10 @@
 import { type ViewerConfig, ViewerConfigProvider } from "@r4pm/components";
-import { wasmViz } from "@r4pm/components/viz/wasm";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { Toaster } from "react-hot-toast";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import App from "./App.tsx";
 import ErrorPage from "./ErrorPage.tsx";
+import { useBackend } from "./hooks";
 import DataExtractionBlueprintEditor from "./routes/data-extraction/DataExtractionBlueprintEditor.tsx";
 import DataExtractionRoot from "./routes/data-extraction/DataExtractionRoot.tsx";
 import OcelElementViewer from "./routes/OcelElementViewer.tsx";
@@ -55,13 +55,15 @@ const router = createBrowserRouter([
 	},
 ]);
 
-// The web and desktop entries both mount this provider. Without `viz`, the graphs of
-// @r4pm/components get no layout, and OC-DECLARE stacks its activities in a column.
-const viewerConfig: ViewerConfig = { viz: wasmViz };
-
-export const MainRouterProvider = () => (
-	<ViewerConfigProvider value={viewerConfig}>
-		<Toaster position="top-right" />
-		<RouterProvider router={router} />
-	</ViewerConfigProvider>
-);
+// The web and desktop entries both mount this provider. rust4pm lays out and exports the graphs of
+// @r4pm/components natively in the backend.
+export const MainRouterProvider = () => {
+	const backend = useBackend();
+	const viewerConfig = useMemo<ViewerConfig>(() => ({ viz: backend.viz }), [backend]);
+	return (
+		<ViewerConfigProvider value={viewerConfig}>
+			<Toaster position="top-right" />
+			<RouterProvider router={router} />
+		</ViewerConfigProvider>
+	);
+};

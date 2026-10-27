@@ -24,9 +24,10 @@ default-members = [
 ]
 
 [workspace.dependencies]
-process_mining = { git = "https://github.com/aarkue/rust4pm.git", branch = "main", features = [
+process_mining = { git = "https://github.com/aarkue/rust4pm.git", branch = "feat/inductive-miner", features = [
     "bindings",
     "extraction-blueprint",
+    "visualization",
 ] }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -190,7 +190,7 @@ export default function DetailsPanel({
 
 	async function openAsQuery() {
 		try {
-			await openSchemaAsQuery(schemaInfo, temporal, boundedSeconds);
+			await openSchemaAsQuery(backend.viz, schemaInfo, temporal, boundedSeconds);
 			navigate("/constraints");
 		} catch {
 			toast.error("Failed to create query");

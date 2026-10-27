@@ -1,3 +1,4 @@
+import type { VizTransport } from "@r4pm/components";
 import { v4 } from "uuid";
 import {
 	parseLocalStorageValue,
@@ -16,9 +17,14 @@ import { schemasToBindingBoxTree, schemaToBindingBoxTree } from "./pathSchemaQue
 
 export { schemasToBindingBoxTree, schemaToBindingBoxTree };
 
-async function saveQuery(tree: BindingBoxTree, name: string, description: string): Promise<number> {
+async function saveQuery(
+	viz: VizTransport,
+	tree: BindingBoxTree,
+	name: string,
+	description: string,
+): Promise<number> {
 	const [nodes, edges] = bindingBoxTreeToNodes(tree, 0, 0, 0, v4());
-	await applyLayoutToNodes(nodes, edges);
+	await applyLayoutToNodes(viz, nodes, edges);
 
 	const meta = parseLocalStorageValue<ConstraintInfo[]>(
 		localStorage.getItem(QUERY_LOCALSTORAGE_SAVE_KEY_CONSTRAINTS_META) ?? "[]",
@@ -40,12 +46,14 @@ async function saveQuery(tree: BindingBoxTree, name: string, description: string
 /** Build the query, append it to the constraints editor's storage, and return its index.
  *  Navigate to /constraints afterwards to open it. */
 export async function openSchemaAsQuery(
+	viz: VizTransport,
 	info: PathSchemaInfo,
 	temporal: TemporalMode,
 	boundedSeconds: number,
 ): Promise<number> {
 	const tree = schemaToBindingBoxTree(info, temporal, boundedSeconds);
 	return saveQuery(
+		viz,
 		tree,
 		`Path: ${info.source.name} -> ${info.target.name}`,
 		"Generated from a path schema",
@@ -56,11 +64,12 @@ export async function openSchemaAsQuery(
  *  its index. Navigate to /constraints afterwards to open it. Throws if the schemas don't
  *  share source and target types (see `schemasToBindingBoxTree`). */
 export async function openSchemasAsCombinedQuery(
+	viz: VizTransport,
 	infos: PathSchemaInfo[],
 	temporal: TemporalMode,
 	boundedSeconds: number,
 ): Promise<number> {
 	const tree = schemasToBindingBoxTree(infos, temporal, boundedSeconds);
 	const name = `Paths (${infos.length}): ${infos[0].source.name} -> ${infos[0].target.name}`;
-	return saveQuery(tree, name, `Generated from ${infos.length} selected path schemas`);
+	return saveQuery(viz, tree, name, `Generated from ${infos.length} selected path schemas`);
 }
